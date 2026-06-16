@@ -131,42 +131,59 @@ export function ScanScreen({ navigation }: Props) {
 
       {/* Overlay UI */}
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
-        {/* Top bar */}
+        {/* Header */}
         <View style={styles.topBar}>
-          <Text variant="titleMedium" style={styles.topTitle}>Scan Food</Text>
-          <TouchableOpacity
-            onPress={() => setCameraType(cameraType === 'back' ? 'front' : 'back')}
-            style={styles.flipButton}
-          >
-            <Ionicons name="camera-reverse" size={24} color="#fff" />
+          <TouchableOpacity style={styles.glassBtn}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.titleBadge}>
+            <Text style={styles.titleBadgeText}>AI Scanner</Text>
+          </View>
+          <TouchableOpacity style={styles.glassBtn}>
+            <Ionicons name="help-circle-outline" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
         {/* Viewfinder frame */}
-        <View style={styles.viewfinder}>
-          <View style={[styles.corner, styles.cornerTL]} />
-          <View style={[styles.corner, styles.cornerTR]} />
-          <View style={[styles.corner, styles.cornerBL]} />
-          <View style={[styles.corner, styles.cornerBR]} />
-          <Text variant="bodySmall" style={styles.hint}>Point camera at your food</Text>
+        <View style={styles.viewfinderWrap}>
+          <View style={styles.viewfinder}>
+            <View style={[styles.corner, styles.cornerTL]} />
+            <View style={[styles.corner, styles.cornerTR]} />
+            <View style={[styles.corner, styles.cornerBL]} />
+            <View style={[styles.corner, styles.cornerBR]} />
+          </View>
+          <View style={styles.hintWrap}>
+            <Text style={styles.hint}>Point at your food</Text>
+          </View>
         </View>
 
         {/* Bottom controls */}
         <View style={styles.bottomBar}>
           <TouchableOpacity onPress={handlePickFromLibrary} style={styles.sideButton} disabled={isAnalyzing}>
-            <Ionicons name="images-outline" size={26} color="#fff" />
-            <Text variant="labelSmall" style={styles.sideButtonLabel}>Gallery</Text>
+            <View style={styles.glassBtn}>
+              <Ionicons name="images-outline" size={26} color="#fff" />
+            </View>
+            <Text style={styles.sideLabel}>Gallery</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleCapture} style={styles.captureButton} disabled={isAnalyzing}>
             {isAnalyzing ? (
-              <ActivityIndicator animating color="#01696f" size="small" />
+              <ActivityIndicator animating color="#004f54" size="small" />
             ) : (
-              <View style={styles.captureButtonInner} />
+              <View style={styles.captureInner} />
             )}
           </TouchableOpacity>
 
-          <View style={styles.sideButton} />
+          <TouchableOpacity
+            onPress={() => setCameraType(cameraType === 'back' ? 'front' : 'back')}
+            style={styles.sideButton}
+            disabled={isAnalyzing}
+          >
+            <View style={styles.glassBtn}>
+              <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
+            </View>
+            <Text style={styles.sideLabel}>Flip</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 
@@ -177,57 +194,84 @@ export function ScanScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  permissionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 16 },
-  permissionTitle: { color: '#01696f', fontWeight: '700' },
-  permissionText: { color: '#546e7a', textAlign: 'center' },
-  permissionButton: { borderRadius: 12, backgroundColor: '#01696f' },
+  permissionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 16, backgroundColor: '#f7fafa' },
+  permissionTitle: { color: '#004f54', fontWeight: '700' },
+  permissionText: { color: '#3f4949', textAlign: 'center' },
+  permissionButton: { borderRadius: 50, backgroundColor: '#004f54' },
   overlay: { flex: 1, justifyContent: 'space-between' },
+
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  topTitle: { color: '#fff', fontWeight: '700' },
-  flipButton: { padding: 8 },
-  viewfinder: {
-    flex: 1,
-    margin: 40,
-    justifyContent: 'flex-end',
+  glassBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  corner: { position: 'absolute', width: 24, height: 24, borderColor: '#fff', borderWidth: 3 },
-  cornerTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0 },
-  cornerTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0 },
-  cornerBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0 },
-  cornerBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0 },
-  hint: { color: 'rgba(255,255,255,0.7)', marginBottom: 16 },
+  titleBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  titleBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  viewfinderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  viewfinder: {
+    width: 280,
+    height: 280,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.85)',
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderColor: '#fff',
+    borderWidth: 4,
+  },
+  cornerTL: { top: -2, left: -2, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 40 },
+  cornerTR: { top: -2, right: -2, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 40 },
+  cornerBL: { bottom: -2, left: -2, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 40 },
+  cornerBR: { bottom: -2, right: -2, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 40 },
+  hintWrap: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 50,
+  },
+  hint: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
   bottomBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: 40,
-    paddingVertical: 24,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sideButton: { width: 50, alignItems: 'center', gap: 4 },
-  sideButtonLabel: { color: '#fff' },
-  captureButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#fff',
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
-    justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 32,
+    paddingHorizontal: 24,
   },
-  captureButtonInner: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#fff',
+  sideButton: { alignItems: 'center', gap: 6 },
+  sideLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' },
+  captureButton: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 4,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff' },
 });

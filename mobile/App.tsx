@@ -1,24 +1,36 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
+import { MD3LightTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { theme } from './src/navigation/theme';
+import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 
-export default function App() {
+/** Inner component so it can consume ThemeContext for PaperProvider. */
+function AppContent() {
   const { setSession, fetchProfile } = useAuthStore();
+  const { theme } = useAppTheme();
+
+  const paperTheme = {
+    ...MD3LightTheme,
+    colors: {
+      ...MD3LightTheme.colors,
+      primary: theme.paper.primary,
+      primaryContainer: theme.paper.primaryContainer,
+      background: theme.paper.background,
+      surface: theme.paper.surface,
+    },
+  };
 
   useEffect(() => {
-    // Restore existing session on launch
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchProfile();
     });
 
-    // Listen for auth state changes (sign-in, sign-out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) fetchProfile();
@@ -28,13 +40,21 @@ export default function App() {
   }, []);
 
   return (
+    <PaperProvider theme={paperTheme}>
+      <NavigationContainer>
+        <RootNavigator />
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </PaperProvider>
+  );
+}
+
+export default function App() {
+  return (
     <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <NavigationContainer>
-          <RootNavigator />
-          <StatusBar style="auto" />
-        </NavigationContainer>
-      </PaperProvider>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

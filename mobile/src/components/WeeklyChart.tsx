@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LineChart } from 'react-native-chart-kit';
 import { supabase } from '../services/supabase';
+import { useAppTheme } from '../context/ThemeContext';
 
 interface Props {
   userId: string;
@@ -14,6 +15,7 @@ const { width } = Dimensions.get('window');
 export function WeeklyChart({ userId, calorieGoal }: Props) {
   const [data, setData] = useState<number[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
+  const { theme } = useAppTheme();
 
   useEffect(() => {
     if (!userId) return;
@@ -50,12 +52,12 @@ export function WeeklyChart({ userId, calorieGoal }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text variant="titleSmall" style={styles.title}>7-Day Trend</Text>
+      <Text variant="titleSmall" style={[styles.title, { color: theme.onSurface }]}>7-Day Trend</Text>
       <LineChart
         data={{
           labels,
           datasets: [
-            { data, color: () => '#01696f', strokeWidth: 2 },
+            { data, color: () => theme.primary, strokeWidth: 2 },
             {
               data: Array(7).fill(calorieGoal),
               color: () => '#ef9a9a',
@@ -73,9 +75,9 @@ export function WeeklyChart({ userId, calorieGoal }: Props) {
           backgroundGradientFrom: '#fff',
           backgroundGradientTo: '#fff',
           decimalPlaces: 0,
-          color: (opacity = 1) => `rgba(1, 105, 111, ${opacity})`,
+          color: (opacity = 1) => theme.primary + Math.round(opacity * 255).toString(16).padStart(2, '0'),
           labelColor: () => '#90a4ae',
-          propsForDots: { r: '4', strokeWidth: '2', stroke: '#01696f' },
+          propsForDots: { r: '4', strokeWidth: '2', stroke: theme.primary },
         }}
         bezier
         style={styles.chart}
@@ -96,6 +98,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  title: { color: '#37474f', fontWeight: '700', marginBottom: 12 },
+  title: { fontWeight: '700', marginBottom: 12 },
   chart: { marginLeft: -16, borderRadius: 12 },
 });

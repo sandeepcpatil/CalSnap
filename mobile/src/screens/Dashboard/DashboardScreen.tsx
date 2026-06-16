@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore, FoodLog } from '../../store/foodLogStore';
 import { CalorieRing } from '../../components/CalorieRing';
@@ -16,6 +17,7 @@ import { MacroBar } from '../../components/MacroBar';
 import { MealSection } from '../../components/MealSection';
 import { WeeklyChart } from '../../components/WeeklyChart';
 import { DateSelector } from '../../components/DateSelector';
+import { useAppTheme } from '../../context/ThemeContext';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -27,6 +29,7 @@ function getGreeting() {
 export function DashboardScreen() {
   const { profile, session } = useAuthStore();
   const { todayLogs, selectedDate, isLoading, setSelectedDate, fetchLogsForDate } = useFoodLogStore();
+  const { theme } = useAppTheme();
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
@@ -55,35 +58,44 @@ export function DashboardScreen() {
     todayLogs.filter((l) => l.meal_type === type);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor="#01696f" />}
-      >
-        {/* Header */}
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      {/* Header */}
+      <SafeAreaView style={[styles.headerSafe, { backgroundColor: theme.background }]} edges={['top']}>
         <View style={styles.header}>
-          <View>
-            <Text variant="bodyMedium" style={styles.greeting}>{getGreeting()},</Text>
-            <Text variant="headlineSmall" style={styles.userName}>{profile?.name ?? 'there'} 👋</Text>
-          </View>
-          {profile?.avatar_url ? (
-            <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarInitial}>
-                {(profile?.name ?? 'U')[0].toUpperCase()}
-              </Text>
+          <View style={styles.headerLeft}>
+            {profile?.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                style={[styles.avatar, { borderColor: theme.primaryLight }]}
+              />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: theme.primaryUltraLight, borderColor: theme.primaryLight }]}>
+                <Text style={[styles.avatarInitial, { color: theme.primary }]}>
+                  {(profile?.name ?? 'U')[0].toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View>
+              <Text style={[styles.greeting, { color: theme.onSurfaceVariant }]}>{getGreeting()},</Text>
+              <Text style={[styles.userName, { color: theme.primary }]}>{profile?.name ?? 'there'}</Text>
             </View>
-          )}
+          </View>
+          <TouchableOpacity style={[styles.bellBtn, { backgroundColor: theme.surfaceTrack }]}>
+            <Ionicons name="notifications-outline" size={22} color={theme.onSurfaceVariant} />
+          </TouchableOpacity>
         </View>
+      </SafeAreaView>
 
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor={theme.primary} />}
+      >
         {/* Date selector */}
         <DateSelector
           selectedDate={selectedDate}
-          onDateChange={(date) => {
-            setSelectedDate(date);
-          }}
+          onDateChange={(date) => setSelectedDate(date)}
         />
 
         {/* Calorie Ring */}
@@ -91,12 +103,14 @@ export function DashboardScreen() {
 
         {/* Macro bars */}
         <View style={styles.macrosCard}>
-          <MacroBar label="Protein" current={totals.protein} goal={proteinGoal} color="#4caf50" unit="g" />
-          <MacroBar label="Carbs" current={totals.carbs} goal={Math.round(calorieGoal * 0.5 / 4)} color="#ff9800" unit="g" />
-          <MacroBar label="Fat" current={totals.fat} goal={Math.round(calorieGoal * 0.3 / 9)} color="#ffc107" unit="g" />
+          <Text style={styles.macrosTitle}>Today's Macros</Text>
+          <MacroBar label="Protein" current={totals.protein} goal={proteinGoal} color={theme.protein} unit="g" />
+          <MacroBar label="Carbs" current={totals.carbs} goal={Math.round(calorieGoal * 0.5 / 4)} color={theme.carbs} unit="g" />
+          <MacroBar label="Fat" current={totals.fat} goal={Math.round(calorieGoal * 0.3 / 9)} color={theme.fat} unit="g" />
         </View>
 
         {/* Meal sections */}
+        <Text style={styles.sectionHeader}>Meals</Text>
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
           <MealSection key={meal} mealType={meal} logs={byMealType(meal)} />
         ))}
@@ -104,35 +118,71 @@ export function DashboardScreen() {
         {/* 7-day trend chart */}
         <WeeklyChart userId={session?.user.id ?? ''} calorieGoal={calorieGoal} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
-  scroll: { paddingBottom: 32, gap: 16 },
+  root: { flex: 1 },
+
+  // Header
+  headerSafe: {},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  greeting: { color: '#90a4ae' },
-  userName: { color: '#212121', fontWeight: '700' },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarPlaceholder: { backgroundColor: '#01696f', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  greeting: { fontSize: 13, fontWeight: '500' },
+  userName: { fontSize: 20, fontWeight: '800' },
+  avatar: { width: 42, height: 42, borderRadius: 21, borderWidth: 2 },
+  avatarInitial: { fontSize: 16, fontWeight: '700' },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Scroll
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 36, gap: 14 },
+
+  // Macros card
   macrosCard: {
-    marginHorizontal: 20,
+    marginHorizontal: 16,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 18,
     gap: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  macrosTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#90a4ae',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#90a4ae',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingHorizontal: 20,
+    marginTop: 4,
   },
 });
+
+

@@ -2,22 +2,29 @@ import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
-  Image,
   Alert,
-  Dimensions,
+  TouchableOpacity,
+  ImageBackground,
 } from 'react-native';
-import { Text, Button, ActivityIndicator } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../../services/supabase';
+import { useAppTheme } from '../../context/ThemeContext';
+
+const FOOD_IMAGE = require('../../../assets/a_vibrant_and_appetizing_high_quality_photo_of_a_healthy_mediterranean_salad.png');
 
 WebBrowser.maybeCompleteAuthSession();
 
-const { width } = Dimensions.get('window');
+const FEATURE_ICONS = ['⚡', '📊', '🔥'] as const;
+const FEATURE_LABELS = ['AI Analysis', 'Macros', 'Daily Streak'] as const;
 
 export function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
+  const { theme } = useAppTheme();
+  const a = theme.auth; // shorthand
 
   const handleGoogleSignIn = async () => {
     try {
@@ -39,7 +46,6 @@ export function AuthScreen() {
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
         if (result.type === 'success' && result.url) {
-          // Extract session from the redirect URL
           const url = new URL(result.url);
           const fragment = new URLSearchParams(url.hash.slice(1));
           const accessToken = fragment.get('access_token');
@@ -58,109 +64,176 @@ export function AuthScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.hero}>
-        {/* Logo placeholder — replace with assets/icon.png */}
-        <View style={styles.logoContainer}>
+    // overflow: 'hidden' clips the absolute-fill hero to the screen bounds (web fix)
+    <View style={[styles.root, { backgroundColor: a.rootBg, overflow: 'hidden' }]}>
+
+      {/* ── Hero background ────────────────────────────────────────────── */}
+      {a.heroType === 'image' ? (
+        <ImageBackground
+          source={FOOD_IMAGE}
+          style={styles.heroBg}
+          resizeMode="cover"
+        >
+          <LinearGradient
+            colors={a.overlayGradient as [string, string, ...string[]]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 0.72 }}
+          />
+        </ImageBackground>
+      ) : (
+        <LinearGradient
+          colors={a.heroGradient as [string, string, ...string[]]}
+          style={styles.heroBg}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 0.7, y: 0.78 }}
+        />
+      )}
+
+      {/* ── Top: logo + tagline ─────────────────────────────────────────── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={[styles.logoWrap, { backgroundColor: a.logoBg, borderColor: a.logoBorder }]}>
           <Text style={styles.logoEmoji}>🥗</Text>
         </View>
-
-        <Text variant="displaySmall" style={styles.appName}>CalSnap</Text>
-        <Text variant="titleMedium" style={styles.tagline}>
-          Snap your food. Know your nutrition.
+        <Text style={[styles.tagline, { color: a.taglineColor }]}>Snap. Track. Thrive.</Text>
+        <Text style={[styles.subtitle, { color: a.subtitleColor }]}>
+          Your nutrition journey, simplified by AI.
         </Text>
-      </View>
+      </SafeAreaView>
 
-      <View style={styles.features}>
-        {['📷  Instant AI food recognition', '📊  Track macros effortlessly', '🎯  Personalised calorie goals'].map((f) => (
-          <Text key={f} variant="bodyMedium" style={styles.featureItem}>{f}</Text>
-        ))}
-      </View>
+      {/* ── Bottom: glass action panel ──────────────────────────────────── */}
+      <SafeAreaView style={styles.panelSafe} edges={['bottom']}>
+        <View style={[styles.glassPanel, { backgroundColor: a.glassBg, borderColor: a.glassBorder }]}>
 
-      <View style={styles.footer}>
-        {isLoading ? (
-          <ActivityIndicator animating size="large" color="#01696f" />
-        ) : (
-          <Button
-            mode="contained"
+          {/* Google CTA */}
+          <TouchableOpacity
             onPress={handleGoogleSignIn}
-            style={styles.googleButton}
-            contentStyle={styles.googleButtonContent}
-            labelStyle={styles.googleButtonLabel}
-            icon="google"
+            style={[styles.googleBtn, { backgroundColor: a.ctaButton, shadowColor: a.ctaButtonShadow }]}
+            activeOpacity={0.88}
+            disabled={isLoading}
           >
-            Continue with Google
-          </Button>
-        )}
+            {isLoading ? (
+              <ActivityIndicator animating color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.googleG}>G</Text>
+                <Text style={styles.googleLabel}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        <Text variant="bodySmall" style={styles.legal}>
-          By continuing, you agree to our Terms of Service and Privacy Policy.
-        </Text>
-      </View>
-    </SafeAreaView>
+          <Text style={[styles.terms, { color: theme.onSurfaceVariant }]}>
+            By continuing, you agree to our{' '}
+            <Text style={[styles.termsLink, { color: a.termsLinkColor }]}>Terms</Text> and{' '}
+            <Text style={[styles.termsLink, { color: a.termsLinkColor }]}>Privacy Policy</Text>.
+          </Text>
+
+          {/* Feature chips */}
+          <View style={styles.features}>
+            {FEATURE_ICONS.map((icon, i) => (
+              <View
+                key={FEATURE_LABELS[i]}
+                style={[styles.chip, { borderColor: a.chipBorder }]}
+              >
+                <View style={[styles.chipIconWrap, { backgroundColor: a.chipBgs[i] }]}>
+                  <Text style={styles.chipIcon}>{icon}</Text>
+                </View>
+                <Text style={[styles.chipLabel, { color: theme.onSurface }]}>
+                  {FEATURE_LABELS[i]}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fffe',
-    paddingHorizontal: 24,
+  root: { flex: 1, justifyContent: 'space-between' },
+
+  // Fills screen behind everything
+  heroBg: {
+    ...StyleSheet.absoluteFillObject,
   },
+
   hero: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    paddingHorizontal: 28,
+    paddingBottom: 24,
   },
-  logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
-    backgroundColor: '#e0f2f1',
+  logoWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 20,
   },
-  logoEmoji: {
-    fontSize: 54,
-  },
-  appName: {
-    color: '#01696f',
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
+  logoEmoji: { fontSize: 48 },
   tagline: {
-    color: '#546e7a',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
-  features: {
-    gap: 12,
-    marginBottom: 40,
-  },
-  featureItem: {
-    color: '#37474f',
-    fontSize: 15,
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 8,
+    maxWidth: 260,
     lineHeight: 22,
   },
-  footer: {
-    paddingBottom: 24,
-    gap: 16,
+
+  panelSafe: { paddingHorizontal: 16, paddingBottom: 4 },
+  glassPanel: {
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    gap: 12,
   },
-  googleButton: {
+
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    borderRadius: 50,
+    paddingVertical: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  googleG: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  googleLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  terms: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  termsLink: { fontWeight: '700', textDecorationLine: 'underline' },
+
+  features: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  chip: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.55)',
     borderRadius: 12,
-    backgroundColor: '#01696f',
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    gap: 6,
   },
-  googleButtonContent: {
-    height: 52,
+  chipIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  googleButtonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  legal: {
-    color: '#9e9e9e',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  chipIcon: { fontSize: 18 },
+  chipLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
 });

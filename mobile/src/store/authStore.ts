@@ -57,6 +57,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
 
     if (!error && data) {
+      // If the DB row has no avatar, fall back to Google's metadata
+      if (!data.avatar_url) {
+        const meta = session.user.user_metadata;
+        const googleAvatar =
+          meta?.avatar_url || meta?.picture || null;
+        if (googleAvatar) {
+          data.avatar_url = googleAvatar;
+          // Persist it so next fetch doesn't need the fallback
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: googleAvatar })
+            .eq('id', session.user.id);
+        }
+      }
       set({ profile: data as Profile });
     }
   },
@@ -78,7 +92,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
+    console.log('[authStore] signOut called');
+    try {
+      await supabase.auth.signOut();
+      console.log('[authStore] supabase.auth.signOut() succeeded');
+    } catch (e) {
+      console.warn('[authStore] signOut network error (ignored):', e);
+    }
     set({ session: null, user: null, profile: null });
+    console.log('[authStore] local state cleared');
   },
 }));

@@ -29,12 +29,15 @@ interface User {
   is_subscribed: boolean;
 }
 
-function KpiCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function KpiCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: string }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
-      <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
-      {sub && <p className="text-sm text-gray-400 mt-1">{sub}</p>}
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden relative">
+      {accent && (
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: accent }} />
+      )}
+      <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2 mt-1">{label}</p>
+      <p className="text-3xl font-black text-gray-900 dark:text-white leading-none">{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-2 font-medium">{sub}</p>}
     </div>
   );
 }
@@ -181,15 +184,16 @@ export function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {/* KPI cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <KpiCard label="Total Users" value={stats?.totalUsers.toLocaleString() ?? '—'} />
-          <KpiCard label="Active Today" value={stats?.activeToday ?? '—'} />
-          <KpiCard label="Active This Week" value={stats?.activeThisWeek ?? '—'} />
-          <KpiCard label="Active This Month" value={stats?.activeThisMonth ?? '—'} />
-          <KpiCard label="Pro Subscribers" value={stats?.totalProSubscribers ?? '—'} />
+          <KpiCard label="Total Users" value={stats?.totalUsers.toLocaleString() ?? '—'} accent="linear-gradient(90deg,#01696f,#029aa3)" />
+          <KpiCard label="Active Today" value={stats?.activeToday ?? '—'} accent="#4caf50" />
+          <KpiCard label="Active This Week" value={stats?.activeThisWeek ?? '—'} accent="#ff9800" />
+          <KpiCard label="Active This Month" value={stats?.activeThisMonth ?? '—'} accent="#5c6bc0" />
+          <KpiCard label="Pro Subscribers" value={stats?.totalProSubscribers ?? '—'} accent="#ab47bc" />
           <KpiCard
             label="Monthly Revenue"
             value={`₹${(stats?.monthlyRevenuePaise ?? 0).toLocaleString('en-IN')}`}
             sub="estimated"
+            accent="linear-gradient(90deg,#f59e0b,#ef5350)"
           />
         </div>
 

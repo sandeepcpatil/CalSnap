@@ -19,9 +19,6 @@ module.exports = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: IS_DEV ? 'com.calsnap.app.dev' : 'com.calsnap.app',
-    config: {
-      googleServicesFile: './GoogleService-Info.plist',
-    },
     infoPlist: {
       NSCameraUsageDescription: 'CalSnap needs camera access to scan your food.',
       NSPhotoLibraryUsageDescription: 'CalSnap needs photo library access to analyze food photos.',
@@ -30,10 +27,10 @@ module.exports = {
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#01696f',
+      backgroundColor: '#ab3500',
     },
     package: IS_DEV ? 'com.calsnap.app.dev' : 'com.calsnap.app',
-    googleServicesFile: './google-services.json',
+    versionCode: 1,
     permissions: [
       'CAMERA',
       'READ_EXTERNAL_STORAGE',
@@ -64,7 +61,7 @@ module.exports = {
     backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL,
     razorpayKeyId: process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
     eas: {
-      projectId: 'your-eas-project-id',
+      projectId: '8c518e8d-9244-4a5c-a504-98d7c97e1d9b',
     },
   },
 };

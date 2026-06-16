@@ -7,6 +7,7 @@ import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { HistoryScreen } from '../screens/History/HistoryScreen';
 import { ProfileScreen } from '../screens/Profile/ProfileScreen';
 import { ScanNavigator } from './ScanNavigator';
+import { useAppTheme } from '../context/ThemeContext';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -17,14 +18,14 @@ export type MainTabParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-function ScanTabButton({ onPress }: { onPress: () => void }) {
+function ScanTabButton({ onPress, color }: { onPress: () => void; color: string }) {
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onPress();
   };
 
   return (
-    <TouchableOpacity onPress={handlePress} style={styles.scanButton} activeOpacity={0.85}>
+    <TouchableOpacity onPress={handlePress} style={[styles.scanButton, { backgroundColor: color, shadowColor: color }]} activeOpacity={0.85}>
       <View style={styles.scanButtonInner}>
         <Ionicons name="camera" size={28} color="#ffffff" />
       </View>
@@ -33,12 +34,13 @@ function ScanTabButton({ onPress }: { onPress: () => void }) {
 }
 
 export function MainTabNavigator() {
+  const { theme } = useAppTheme();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#01696f',
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: '#9e9e9e',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}
@@ -59,7 +61,7 @@ export function MainTabNavigator() {
         options={{
           tabBarLabel: '',
           tabBarButton: (props) => (
-            <ScanTabButton onPress={props.onPress as () => void} />
+            <ScanTabButton onPress={props.onPress as () => void} color={theme.primary} />
           ),
         }}
       />
@@ -103,8 +105,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#01696f',
-    shadowColor: '#01696f',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,

@@ -49,8 +49,8 @@ export function PaywallModal({ visible, onDismiss }: Props) {
     try {
       const order = await createSubscriptionOrder(selectedPlan, session.access_token);
 
-      // Dynamic import to avoid bundling issues in Expo Go
-      const RazorpayCheckout = (await import('react-native-razorpay')).default;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const RazorpayCheckout = require('react-native-razorpay').default;
 
       const options = {
         description: `CalSnap Pro - ${selectedPlan}`,

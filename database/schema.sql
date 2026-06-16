@@ -135,7 +135,8 @@ BEGIN
     NEW.email,
     NEW.raw_user_meta_data->>'avatar_url'
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    SET avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url);
   RETURN NEW;
 END;
 $$;

@@ -5,8 +5,9 @@ import {
   ScrollView,
   Image,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
-import { Text, Button, Chip } from 'react-native-paper';
+import { Text, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,7 +17,7 @@ import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
-import { MacroBar } from '../../components/MacroBar';
+import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -25,22 +26,60 @@ type Props = {
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 const MEAL_LABELS: Record<string, string> = {
-  breakfast: '🌅 Breakfast',
-  lunch: '☀️ Lunch',
-  dinner: '🌙 Dinner',
-  snack: '🍎 Snack',
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
 };
 
-const CONFIDENCE_COLORS: Record<string, string> = {
-  high: '#4caf50',
-  medium: '#ff9800',
-  low: '#ef5350',
-};
+function NutrientCard({ label, value, color, barColor }: { label: string; value: number; color: string; barColor?: string }) {
+  const { theme } = useAppTheme();
+  return (
+    <View style={[macroStyles.card, { borderColor: theme.cardBorder }]}>
+      <View style={macroStyles.cardTop}>
+        <Text style={[macroStyles.cardLabel, { color: theme.onSurfaceVariant }]}>{label}</Text>
+        <View style={[macroStyles.dot, { backgroundColor: barColor ?? color }]} />
+      </View>
+      <View style={macroStyles.valueRow}>
+        <Text style={[macroStyles.cardValue, { color }]}>{Math.round(value)}</Text>
+        <Text style={[macroStyles.cardUnit, { color: theme.onSurfaceVariant }]}>g</Text>
+      </View>
+      <View style={[macroStyles.bar, { backgroundColor: theme.surfaceTrack }]}>
+        <View style={[macroStyles.barFill, { backgroundColor: barColor ?? color }]} />
+      </View>
+    </View>
+  );
+}
+
+const macroStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    justifyContent: 'space-between',
+    minHeight: 110,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardLabel: { fontSize: 12, fontWeight: '700' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  cardValue: { fontSize: 24, fontWeight: '700', lineHeight: 30 },
+  cardUnit: { fontSize: 13, fontWeight: '500' },
+  bar: { height: 5, borderRadius: 3, overflow: 'hidden' },
+  barFill: { height: '100%', width: '45%', borderRadius: 3 },
+});
 
 export function ScanResultScreen({ navigation, route }: Props) {
   const { imageUri, imageStorageUrl, result } = route.params;
   const { session, fetchProfile } = useAuthStore();
   const { addLog } = useFoodLogStore();
+  const { theme } = useAppTheme();
   const [selectedMeal, setSelectedMeal] = useState<typeof MEAL_TYPES[number]>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -70,12 +109,14 @@ export function ScanResultScreen({ navigation, route }: Props) {
       if (error) throw error;
 
       // Increment scan_count
-      await supabase.rpc('increment_scan_count', { user_id: session.user.id }).catch(() => {
+      try {
+        await supabase.rpc('increment_scan_count', { user_id: session.user.id });
+      } catch {
         // Fallback: direct update
         supabase.from('profiles')
           .update({ scan_count: (useAuthStore.getState().profile?.scan_count ?? 0) + 1 })
           .eq('id', session.user.id);
-      });
+      }
 
       addLog(data);
       await fetchProfile();
@@ -90,59 +131,58 @@ export function ScanResultScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Food image */}
-        <Image source={{ uri: imageUri }} style={styles.foodImage} />
+        {/* Hero image with AI badge */}
+        <View style={styles.heroWrap}>
+          <Image source={{ uri: imageUri }} style={styles.foodImage} />
+          <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'E6' }]}>
+            <Text style={styles.aiBadgeText}>✓ {result.confidence.toUpperCase()} MATCH</Text>
+          </View>
+        </View>
 
         {/* Result card */}
-        <View style={styles.card}>
-          {/* Confidence badge */}
-          <View style={styles.badgeRow}>
-            <View style={[styles.confidenceBadge, { backgroundColor: CONFIDENCE_COLORS[result.confidence] + '20' }]}>
-              <Text variant="labelSmall" style={[styles.confidenceText, { color: CONFIDENCE_COLORS[result.confidence] }]}>
-                {result.confidence.toUpperCase()} CONFIDENCE
-              </Text>
+        <View style={[styles.card, { shadowColor: theme.primary }]}>
+
+          {/* Name + calories row */}
+          <View style={styles.nameRow}>
+            <Text style={[styles.foodName, { color: theme.onSurface }]}>{result.food_name}</Text>
+            <View style={styles.calBlock}>
+              <Text style={[styles.calories, { color: theme.primary }]}>{result.calories}</Text>
+              <Text style={[styles.kcalUnit, { color: theme.onSurfaceVariant }]}>kcal</Text>
             </View>
           </View>
 
-          {/* Food name & calories */}
-          <Text variant="headlineMedium" style={styles.foodName}>{result.food_name}</Text>
-          <Text variant="displaySmall" style={styles.calories}>
-            {result.calories} <Text variant="titleLarge" style={styles.kcalUnit}>kcal</Text>
-          </Text>
-
-          {/* Macro bars */}
-          <View style={styles.macros}>
-            <MacroBar label="Protein" current={result.protein_g} goal={Math.max(result.protein_g, 1)} color="#4caf50" unit="g" />
-            <MacroBar label="Carbs" current={result.carbs_g} goal={Math.max(result.carbs_g, 1)} color="#ff9800" unit="g" />
-            <MacroBar label="Fat" current={result.fat_g} goal={Math.max(result.fat_g, 1)} color="#ffc107" unit="g" />
-            <MacroBar label="Fiber" current={result.fiber_g} goal={Math.max(result.fiber_g, 1)} color="#29b6f6" unit="g" />
-          </View>
-
-          {/* Notes */}
-          {result.notes && (
-            <View style={styles.notes}>
-              <Text variant="labelMedium" style={styles.notesLabel}>AI Notes</Text>
-              <Text variant="bodySmall" style={styles.notesText}>{result.notes}</Text>
-            </View>
-          )}
-
-          {/* Meal type selector */}
-          <Text variant="labelLarge" style={styles.mealLabel}>Add to meal</Text>
+          {/* Meal type chips */}
           <View style={styles.mealChips}>
             {MEAL_TYPES.map((meal) => (
-              <Chip
+              <TouchableOpacity
                 key={meal}
-                selected={selectedMeal === meal}
                 onPress={() => setSelectedMeal(meal)}
-                selectedColor="#01696f"
-                style={[styles.mealChip, selectedMeal === meal && styles.mealChipSelected]}
-                compact
+                style={[
+                  styles.mealChip,
+                  { borderColor: theme.outlineVariant },
+                  selectedMeal === meal && { backgroundColor: theme.primary, borderColor: theme.primary },
+                ]}
+                activeOpacity={0.7}
               >
-                {MEAL_LABELS[meal]}
-              </Chip>
+                <Text style={[
+                  styles.mealChipLabel,
+                  { color: theme.onSurfaceVariant },
+                  selectedMeal === meal && { color: '#fff' },
+                ]}>
+                  {MEAL_LABELS[meal]}
+                </Text>
+              </TouchableOpacity>
             ))}
+          </View>
+
+          {/* 2×2 Macro grid */}
+          <View style={styles.macroGrid}>
+            <NutrientCard label="Protein" value={result.protein_g} color={theme.protein} />
+            <NutrientCard label="Carbs" value={result.carbs_g} color={theme.carbsText} barColor={theme.carbs} />
+            <NutrientCard label="Fat" value={result.fat_g} color={theme.fat} />
+            <NutrientCard label="Fiber" value={result.fiber_g} color={theme.onSurfaceVariant} />
           </View>
         </View>
       </ScrollView>
@@ -152,8 +192,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}
-          style={styles.retakeButton}
+          style={[styles.retakeButton, { borderColor: theme.primary }]}
           contentStyle={styles.buttonContent}
+          textColor={theme.primary}
         >
           Retake
         </Button>
@@ -164,8 +205,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
           disabled={isSaving}
           style={styles.saveButton}
           contentStyle={styles.buttonContent}
+          buttonColor={theme.primary}
         >
-          Save
+          Log This Meal
         </Button>
       </View>
     </SafeAreaView>
@@ -173,35 +215,48 @@ export function ScanResultScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
+  container: { flex: 1 },
   scroll: { paddingBottom: 120 },
-  foodImage: { width: '100%', height: 280, resizeMode: 'cover' },
+  heroWrap: { position: 'relative' },
+  foodImage: { width: '100%', aspectRatio: 1, resizeMode: 'cover' },
+  aiBadge: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  aiBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   card: {
     margin: 16,
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: 16,
     elevation: 3,
   },
-  badgeRow: { flexDirection: 'row' },
-  confidenceBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  confidenceText: { fontWeight: '700', letterSpacing: 0.5 },
-  foodName: { color: '#212121', fontWeight: '700', lineHeight: 32 },
-  calories: { color: '#01696f', fontWeight: '800' },
-  kcalUnit: { color: '#90a4ae', fontWeight: '400' },
-  macros: { gap: 10 },
-  notes: { backgroundColor: '#f5f5f5', borderRadius: 10, padding: 12, gap: 4 },
-  notesLabel: { color: '#546e7a', fontWeight: '700' },
-  notesText: { color: '#78909c' },
-  mealLabel: { color: '#37474f', fontWeight: '600' },
-  mealChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  mealChip: { backgroundColor: '#f5f5f5' },
-  mealChipSelected: { backgroundColor: '#e0f2f1' },
+  nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  foodName: { flex: 1, fontSize: 22, fontWeight: '800', lineHeight: 28 },
+  calBlock: { alignItems: 'flex-end' },
+  calories: { fontSize: 40, fontWeight: '800', lineHeight: 44, letterSpacing: -1 },
+  kcalUnit: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  mealChips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  mealChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 50,
+    borderWidth: 1,
+  },
+  mealChipLabel: { fontSize: 13, fontWeight: '700' },
+  macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  mealLabel: { fontWeight: '600' },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -215,7 +270,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
-  retakeButton: { flex: 1, borderColor: '#01696f' },
-  saveButton: { flex: 2, borderRadius: 12, backgroundColor: '#01696f' },
+  retakeButton: { flex: 1 },
+  saveButton: { flex: 2, borderRadius: 12 },
   buttonContent: { height: 52 },
 });

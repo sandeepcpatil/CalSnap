@@ -2,14 +2,17 @@
   "name": "calsnap-mobile",
   "version": "1.0.0",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start",
-    "android": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start --android",
-    "ios": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start --web"
   },
   "dependencies": {
-    "@expo/metro-runtime": "^56.0.15",
+    "@expo/metro-runtime": "~3.2.3",
     "@expo/vector-icons": "^14.0.2",
     "@opentelemetry/api": "^1.9.1",
     "@react-native-async-storage/async-storage": "1.23.1",
@@ -19,21 +22,28 @@
     "@react-navigation/stack": "^6.4.1",
     "@supabase/supabase-js": "^2.45.0",
     "expo": "~51.0.28",
+    "expo-asset": "~10.0.10",
     "expo-auth-session": "~5.5.2",
     "expo-camera": "~15.0.16",
     "expo-constants": "~16.0.2",
     "expo-crypto": "~13.0.2",
+    "expo-file-system": "~17.0.1",
+    "expo-font": "~12.0.10",
     "expo-haptics": "~13.0.1",
     "expo-image-manipulator": "~12.0.5",
-    "expo-image-picker": "~15.0.7",
+    "expo-image-picker": "~15.1.0",
+    "expo-linear-gradient": "~13.0.2",
+    "expo-modules-core": "~1.12.26",
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
+    "expo-system-ui": "~3.0.7",
     "expo-web-browser": "~13.0.3",
     "react": "18.2.0",
     "react-native": "0.74.5",
-    "react-native-calendars": "^1.1305.0",
     "react-native-chart-kit": "^6.12.0",
+    "react-native-gesture-handler": "~2.16.1",
     "react-native-paper": "^5.12.5",
+    "react-native-reanimated": "~3.10.1",
     "react-native-safe-area-context": "4.10.5",
     "react-native-screens": "3.31.1",
     "react-native-skeleton-placeholder": "^5.2.4",
@@ -46,6 +56,6 @@
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
     "cross-env": "^10.1.0",
-    "typescript": "^5.3.3"
+    "typescript": "~5.3.3"
   }
 }
