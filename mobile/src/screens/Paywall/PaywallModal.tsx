@@ -6,6 +6,8 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { createSubscriptionOrder } from '../../services/api';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { useAppTheme } from '../../context/ThemeContext';
+import { AppTheme } from '../../theme/themes';
 
 interface Props {
   visible: boolean;
@@ -41,8 +43,11 @@ const PLANS = [
 export function PaywallModal({ visible, onDismiss }: Props) {
   const { session, fetchProfile } = useAuthStore();
   const { scansUsedToday, scansRemaining } = useSubscriptionGate();
+  const { theme } = useAppTheme();
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
   const [isLoading, setIsLoading] = useState(false);
+
+  const styles = makeStyles(theme);
 
   const handleSubscribe = async () => {
     if (!session?.access_token) return;
@@ -63,7 +68,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
         prefill: {
           email: session.user.email ?? '',
         },
-        theme: { color: '#01696f' },
+        theme: { color: theme.primary },
       };
 
       await RazorpayCheckout.open(options);
@@ -88,7 +93,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
         <View style={styles.sheet}>
           {/* Close button */}
           <View style={styles.closeRow}>
-            <Button mode="text" onPress={onDismiss} textColor="#90a4ae" compact>✕</Button>
+            <Button mode="text" onPress={onDismiss} textColor={theme.onSurfaceVariant} compact>✕</Button>
           </View>
 
           {/* Header */}
@@ -106,7 +111,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           <View style={styles.features}>
             {FEATURES.map((f) => (
               <View key={f} style={styles.featureRow}>
-                <Ionicons name="checkmark-circle" size={20} color="#01696f" />
+                <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
                 <Text variant="bodyMedium" style={styles.featureText}>{f}</Text>
               </View>
             ))}
@@ -155,7 +160,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             disabled={isLoading}
             style={styles.ctaButton}
             contentStyle={styles.ctaContent}
-            buttonColor="#01696f"
+            buttonColor={theme.primary}
           >
             Continue with {selectedPlan === 'monthly' ? 'Monthly' : 'Annual'}
           </Button>
@@ -169,56 +174,58 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  closeRow: { alignItems: 'flex-end', paddingTop: 12 },
-  header: { alignItems: 'center', gap: 6 },
-  headerEmoji: { fontSize: 40 },
-  title: { color: '#212121', fontWeight: '700', textAlign: 'center' },
-  subtitle: { color: '#78909c', textAlign: 'center' },
-  features: { gap: 10 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  featureText: { color: '#37474f' },
-  plans: { flexDirection: 'row', gap: 12 },
-  planCard: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    padding: 14,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  planCardSelected: { borderColor: '#01696f', backgroundColor: '#e0f2f1' },
-  planBadge: {
-    position: 'absolute',
-    top: -10,
-    backgroundColor: '#01696f',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  planBadgeText: { color: '#fff', fontWeight: '700' },
-  planContent: { alignItems: 'center', gap: 2 },
-  planLabel: { color: '#546e7a', fontWeight: '600' },
-  planLabelSelected: { color: '#01696f' },
-  planPrice: { color: '#212121', fontWeight: '800' },
-  planPriceSelected: { color: '#01696f' },
-  planPeriod: { color: '#90a4ae', fontWeight: '400' },
-  planSavings: { color: '#4caf50', fontWeight: '700' },
-  ctaButton: { borderRadius: 14 },
-  ctaContent: { height: 52 },
-  legal: { color: '#bdbdbd', textAlign: 'center' },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 24,
+      paddingBottom: 40,
+      gap: 16,
+    },
+    closeRow: { alignItems: 'flex-end', paddingTop: 12 },
+    header: { alignItems: 'center', gap: 6 },
+    headerEmoji: { fontSize: 40 },
+    title: { color: theme.onSurface, fontWeight: '700', textAlign: 'center' },
+    subtitle: { color: theme.onSurfaceVariant, textAlign: 'center' },
+    features: { gap: 10 },
+    featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    featureText: { color: theme.onSurface },
+    plans: { flexDirection: 'row', gap: 12 },
+    planCard: {
+      flex: 1,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: theme.outlineVariant,
+      padding: 14,
+      alignItems: 'center',
+      position: 'relative',
+    },
+    planCardSelected: { borderColor: theme.primary, backgroundColor: theme.primaryUltraLight },
+    planBadge: {
+      position: 'absolute',
+      top: -10,
+      backgroundColor: theme.primary,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 10,
+    },
+    planBadgeText: { color: theme.surface, fontWeight: '700' },
+    planContent: { alignItems: 'center', gap: 2 },
+    planLabel: { color: theme.onSurfaceVariant, fontWeight: '600' },
+    planLabelSelected: { color: theme.primary },
+    planPrice: { color: theme.onSurface, fontWeight: '800' },
+    planPriceSelected: { color: theme.primary },
+    planPeriod: { color: theme.onSurfaceVariant, fontWeight: '400' },
+    planSavings: { color: '#4caf50', fontWeight: '700' },
+    ctaButton: { borderRadius: 14 },
+    ctaContent: { height: 52 },
+    legal: { color: theme.onSurfaceVariant, textAlign: 'center' },
+  });
+}

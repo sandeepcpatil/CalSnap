@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    // Target Node 18+ — can use native async/await, Object.entries, etc.
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+
+    // Output
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "sourceMap": true,
+
+    // Strictness — catch real bugs, not just style issues
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Interop
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // Path aliases — @shared/* maps to the monorepo shared folder.
+    // NOTE: All @shared imports MUST use `import type` — interfaces are
+    // erased at compile time, so no runtime module resolver is needed.
+    // baseUrl intentionally omitted — paths resolves relative to tsconfig.json in TS 5+
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
