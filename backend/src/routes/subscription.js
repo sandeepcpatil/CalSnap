@@ -12,9 +12,10 @@ const razorpay = new Razorpay({
 });
 
 // Plan definitions (amounts in paise: 1 INR = 100 paise)
+// Monthly: ₹149, Annual: ₹999
 const PLANS = {
-  monthly: { amount: 15000, period: 'monthly', interval: 1 },
-  annual: { amount: 120000, period: 'yearly', interval: 1 },
+  monthly: { amount: 14900, period: 'monthly', interval: 1 },
+  annual: { amount: 99900, period: 'yearly', interval: 1 },
 };
 
 /**

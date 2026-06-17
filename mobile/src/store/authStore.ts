@@ -16,7 +16,10 @@ export interface Profile {
   daily_calorie_goal: number | null;
   daily_protein_goal: number | null;
   scan_count: number;
+  daily_scan_count: number;
+  daily_scan_reset_at: string;
   is_subscribed: boolean;
+  subscription_tier: 'free' | 'monthly' | 'annual';
   subscription_end_date: string | null;
   onboarding_complete: boolean;
 }

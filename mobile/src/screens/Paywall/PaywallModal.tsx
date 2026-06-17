@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { createSubscriptionOrder } from '../../services/api';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 
 interface Props {
   visible: boolean;
@@ -22,7 +23,7 @@ const PLANS = [
   {
     id: 'monthly' as const,
     label: 'Monthly',
-    price: '₹150',
+    price: '₹149',
     period: '/month',
     savings: null,
     badge: null,
@@ -30,15 +31,16 @@ const PLANS = [
   {
     id: 'annual' as const,
     label: 'Annual',
-    price: '₹1,200',
+    price: '₹999',
     period: '/year',
-    savings: 'Save ₹600/year',
+    savings: 'Save ₹789 (44% off)',
     badge: '🔥 Best Value',
   },
 ];
 
 export function PaywallModal({ visible, onDismiss }: Props) {
   const { session, fetchProfile } = useAuthStore();
+  const { scansUsedToday, scansRemaining } = useSubscriptionGate();
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -94,7 +96,9 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             <Text style={styles.headerEmoji}>⭐</Text>
             <Text variant="headlineSmall" style={styles.title}>Upgrade to CalSnap Pro</Text>
             <Text variant="bodyMedium" style={styles.subtitle}>
-              You've used your 5 free scans
+              {scansRemaining === 0
+                ? `You've used all ${scansUsedToday} free scans today`
+                : `${scansRemaining} free scan${scansRemaining !== 1 ? 's' : ''} left today`}
             </Text>
           </View>
 

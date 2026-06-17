@@ -20,7 +20,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   daily_calorie_goal    INTEGER,
   daily_protein_goal    INTEGER,
   scan_count            INTEGER DEFAULT 0 NOT NULL,
+  daily_scan_count      INTEGER DEFAULT 0 NOT NULL,
+  daily_scan_reset_at   DATE DEFAULT CURRENT_DATE NOT NULL,
   is_subscribed         BOOLEAN DEFAULT false NOT NULL,
+  subscription_tier     TEXT CHECK (subscription_tier IN ('free', 'monthly', 'annual')) DEFAULT 'free' NOT NULL,
   subscription_end_date TIMESTAMPTZ,
   razorpay_customer_id  TEXT,
   onboarding_complete   BOOLEAN DEFAULT false NOT NULL,
@@ -147,7 +150,88 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 -- ---------------------------------------------------------------
--- 7. Storage bucket setup instructions (run in Supabase Dashboard)
+-- 7. scan_cache — avoid re-calling AI for identical images
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scan_cache (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  image_hash    TEXT UNIQUE NOT NULL,  -- SHA-256 of the image bytes
+  food_name     TEXT NOT NULL,
+  calories      INTEGER NOT NULL,
+  protein_g     DECIMAL NOT NULL DEFAULT 0,
+  carbs_g       DECIMAL NOT NULL DEFAULT 0,
+  fat_g         DECIMAL NOT NULL DEFAULT 0,
+  fiber_g       DECIMAL NOT NULL DEFAULT 0,
+  ai_response   JSONB NOT NULL,
+  hit_count     INTEGER DEFAULT 1 NOT NULL,
+  created_at    TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  last_hit_at   TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_cache_hash ON scan_cache (image_hash);
+
+-- scan_cache is read by anyone authenticated (no user-scoped data here)
+ALTER TABLE scan_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "scan_cache_read_authenticated"
+  ON scan_cache FOR SELECT
+  USING (auth.role() = 'authenticated');
+-- Only service role can insert/update (backend uses service key)
+
+-- ---------------------------------------------------------------
+-- 8. RLS policy: gate food_log history for free users
+--    Free users can only see logs from the last 3 days
+-- ---------------------------------------------------------------
+DROP POLICY IF EXISTS "food_logs_select_own" ON food_logs;
+CREATE POLICY "food_logs_select_own"
+  ON food_logs FOR SELECT
+  USING (
+    auth.uid() = user_id
+    AND (
+      -- Subscribed users see all history
+      EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND is_subscribed = true
+        AND (subscription_end_date IS NULL OR subscription_end_date > NOW())
+      )
+      OR
+      -- Free users only see last 3 days
+      logged_at >= NOW() - INTERVAL '3 days'
+    )
+  );
+
+-- ---------------------------------------------------------------
+-- 9. Function: reset daily scan count (call via pg_cron or on-demand)
+-- ---------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.reset_daily_scan_counts()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE profiles
+  SET daily_scan_count = 0,
+      daily_scan_reset_at = CURRENT_DATE
+  WHERE daily_scan_reset_at < CURRENT_DATE;
+END;
+$$;
+
+-- ---------------------------------------------------------------
+-- 10. Function: increment_scan_count (updated to handle daily reset)
+-- ---------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.increment_scan_count(user_id UUID)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE profiles
+  SET
+    scan_count = scan_count + 1,
+    daily_scan_count = CASE
+      WHEN daily_scan_reset_at < CURRENT_DATE THEN 1
+      ELSE daily_scan_count + 1
+    END,
+    daily_scan_reset_at = CURRENT_DATE
+  WHERE id = user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------
+-- 11. Storage bucket setup instructions (run in Supabase Dashboard)
 -- ---------------------------------------------------------------
 -- In Supabase Storage, create a bucket named "food-images":
 --   - Private bucket (not public)

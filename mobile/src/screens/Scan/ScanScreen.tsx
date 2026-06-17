@@ -19,22 +19,21 @@ import { supabase } from '../../services/supabase';
 import { analyzeFood } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 
 type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
 
 export function ScanScreen({ navigation }: Props) {
-  const { session, profile } = useAuthStore();
+  const { session } = useAuthStore();
+  const { canScan, scansRemaining, isSubscribed, paywallVisible, showPaywall, dismissPaywall, consumeScan } = useSubscriptionGate();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
-  const isOverFreeLimit = (profile?.scan_count ?? 0) >= 5 && !profile?.is_subscribed;
-
   const handleCapture = async () => {
-    if (isOverFreeLimit) {
-      setShowPaywall(true);
+    if (!canScan) {
+      showPaywall();
       return;
     }
 
@@ -46,8 +45,8 @@ export function ScanScreen({ navigation }: Props) {
   };
 
   const handlePickFromLibrary = async () => {
-    if (isOverFreeLimit) {
-      setShowPaywall(true);
+    if (!canScan) {
+      showPaywall();
       return;
     }
 
@@ -102,7 +101,7 @@ export function ScanScreen({ navigation }: Props) {
       });
     } catch (err: any) {
       if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
-        setShowPaywall(true);
+        showPaywall();
       } else {
         Alert.alert('Analysis failed', err.message ?? 'Please try again with a clearer photo.');
       }
@@ -144,7 +143,14 @@ export function ScanScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Viewfinder frame */}
+        {/* Scan counter badge for free users */}
+          {!isSubscribed && (
+            <TouchableOpacity onPress={showPaywall} style={styles.scanCountBadge}>
+              <Text style={styles.scanCountText}>{scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Viewfinder frame */}
         <View style={styles.viewfinderWrap}>
           <View style={styles.viewfinder}>
             <View style={[styles.corner, styles.cornerTL]} />
@@ -187,7 +193,7 @@ export function ScanScreen({ navigation }: Props) {
         </View>
       </SafeAreaView>
 
-      <PaywallModal visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
+      <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
     </View>
   );
 }
@@ -199,6 +205,15 @@ const styles = StyleSheet.create({
   permissionText: { color: '#3f4949', textAlign: 'center' },
   permissionButton: { borderRadius: 50, backgroundColor: '#004f54' },
   overlay: { flex: 1, justifyContent: 'space-between' },
+  scanCountBadge: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  scanCountText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
   topBar: {
     flexDirection: 'row',
