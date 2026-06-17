@@ -1,27 +1,41 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme, type Theme as NavTheme } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
-import { MD3LightTheme } from 'react-native-paper';
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
+import { useTheme } from './src/hooks/useTheme';
+import './src/store/themeStore';
 
-/** Inner component so it can consume ThemeContext for PaperProvider. */
 function AppContent() {
   const { setSession, fetchProfile } = useAuthStore();
-  const { theme } = useAppTheme();
+  const { theme, isDark } = useTheme();
+
+  // ── React Navigation theme ────────────────────────────────────────────────
+  const navTheme: NavTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+      primary:    theme.primary,
+      background: theme.navBackground,
+      card:       theme.navCard,
+      text:       theme.navText,
+      border:     theme.navBorder,
+      notification: theme.primary,
+    },
+  };
 
   const paperTheme = {
-    ...MD3LightTheme,
+    ...(isDark ? MD3DarkTheme : MD3LightTheme),
     colors: {
-      ...MD3LightTheme.colors,
-      primary: theme.paper.primary,
-      primaryContainer: theme.paper.primaryContainer,
-      background: theme.paper.background,
-      surface: theme.paper.surface,
+      ...(isDark ? MD3DarkTheme.colors : MD3LightTheme.colors),
+      primary:          theme.primary,
+      primaryContainer: theme.primaryTint,
+      background:       theme.bg,
+      surface:          theme.surface,
     },
   };
 
@@ -41,9 +55,9 @@ function AppContent() {
 
   return (
     <PaperProvider theme={paperTheme}>
-      <NavigationContainer>
+      <NavigationContainer theme={navTheme}>
         <RootNavigator />
-        <StatusBar style="auto" />
+        <StatusBar style={theme.statusBar} />
       </NavigationContainer>
     </PaperProvider>
   );
@@ -52,9 +66,7 @@ function AppContent() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AppContent />
-      </ThemeProvider>
+      <AppContent />
     </SafeAreaProvider>
   );
 }

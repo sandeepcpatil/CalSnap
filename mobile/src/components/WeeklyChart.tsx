@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LineChart } from 'react-native-chart-kit';
 import { supabase } from '../services/supabase';
-import { useAppTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface Props {
   userId: string;
@@ -15,7 +15,7 @@ const { width } = Dimensions.get('window');
 export function WeeklyChart({ userId, calorieGoal }: Props) {
   const [data, setData] = useState<number[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
 
   useEffect(() => {
     if (!userId) return;
@@ -51,8 +51,8 @@ export function WeeklyChart({ userId, calorieGoal }: Props) {
   if (data.length === 0) return null;
 
   return (
-    <View style={styles.container}>
-      <Text variant="titleSmall" style={[styles.title, { color: theme.onSurface }]}>7-Day Trend</Text>
+    <View style={[styles.container, { backgroundColor: theme.cardBg }]}>
+      <Text variant="titleSmall" style={[styles.title, { color: theme.textPrimary }]}>7-Day Trend</Text>
       <LineChart
         data={{
           labels,
@@ -71,12 +71,12 @@ export function WeeklyChart({ userId, calorieGoal }: Props) {
         height={180}
         yAxisSuffix=" kcal"
         chartConfig={{
-          backgroundColor: '#fff',
-          backgroundGradientFrom: '#fff',
-          backgroundGradientTo: '#fff',
+          backgroundColor: theme.cardBg,
+          backgroundGradientFrom: theme.cardBg,
+          backgroundGradientTo:   theme.cardBg,
           decimalPlaces: 0,
           color: (opacity = 1) => theme.primary + Math.round(opacity * 255).toString(16).padStart(2, '0'),
-          labelColor: () => '#90a4ae',
+          labelColor: () => theme.textMuted,
           propsForDots: { r: '4', strokeWidth: '2', stroke: theme.primary },
         }}
         bezier
@@ -89,7 +89,6 @@ export function WeeklyChart({ userId, calorieGoal }: Props) {
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 20,
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',

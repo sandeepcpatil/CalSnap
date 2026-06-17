@@ -17,7 +17,7 @@ import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
-import { useAppTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../hooks/useTheme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -32,20 +32,30 @@ const MEAL_LABELS: Record<string, string> = {
   snack: 'Snack',
 };
 
+// maxValues used to normalise the bar fill width to a realistic upper bound
+const MACRO_MAX: Record<string, number> = {
+  Protein: 80,
+  Carbs: 120,
+  Fat: 60,
+  Fiber: 20,
+};
+
 function NutrientCard({ label, value, color, barColor }: { label: string; value: number; color: string; barColor?: string }) {
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
+  const max = MACRO_MAX[label] ?? 100;
+  const fillPct = Math.min(value / max, 1);
   return (
-    <View style={[macroStyles.card, { borderColor: theme.cardBorder }]}>
+    <View style={[macroStyles.card, { borderColor: theme.borderColor, backgroundColor: theme.surface }]}>
       <View style={macroStyles.cardTop}>
-        <Text style={[macroStyles.cardLabel, { color: theme.onSurfaceVariant }]}>{label}</Text>
+        <Text style={[macroStyles.cardLabel, { color: theme.textSecondary }]}>{label}</Text>
         <View style={[macroStyles.dot, { backgroundColor: barColor ?? color }]} />
       </View>
       <View style={macroStyles.valueRow}>
         <Text style={[macroStyles.cardValue, { color }]}>{Math.round(value)}</Text>
-        <Text style={[macroStyles.cardUnit, { color: theme.onSurfaceVariant }]}>g</Text>
+        <Text style={[macroStyles.cardUnit, { color: theme.textSecondary }]}>g</Text>
       </View>
-      <View style={[macroStyles.bar, { backgroundColor: theme.surfaceTrack }]}>
-        <View style={[macroStyles.barFill, { backgroundColor: barColor ?? color }]} />
+      <View style={[macroStyles.bar, { backgroundColor: theme.surface2 }]}>
+        <View style={[macroStyles.barFill, { backgroundColor: barColor ?? color, width: `${Math.round(fillPct * 100)}%` }]} />
       </View>
     </View>
   );
@@ -72,14 +82,14 @@ const macroStyles = StyleSheet.create({
   cardValue: { fontSize: 24, fontWeight: '700', lineHeight: 30 },
   cardUnit: { fontSize: 13, fontWeight: '500' },
   bar: { height: 5, borderRadius: 3, overflow: 'hidden' },
-  barFill: { height: '100%', width: '45%', borderRadius: 3 },
+  barFill: { height: '100%', borderRadius: 3 },
 });
 
 export function ScanResultScreen({ navigation, route }: Props) {
   const { imageUri, imageStorageUrl, result } = route.params;
   const { session, fetchProfile } = useAuthStore();
   const { addLog } = useFoodLogStore();
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   const [selectedMeal, setSelectedMeal] = useState<typeof MEAL_TYPES[number]>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -131,7 +141,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero image with AI badge */}
         <View style={styles.heroWrap}>
@@ -142,14 +152,14 @@ export function ScanResultScreen({ navigation, route }: Props) {
         </View>
 
         {/* Result card */}
-        <View style={[styles.card, { shadowColor: theme.primary }]}>
+        <View style={[styles.card, { backgroundColor: theme.surface, shadowColor: theme.primary }]}>
 
           {/* Name + calories row */}
           <View style={styles.nameRow}>
-            <Text style={[styles.foodName, { color: theme.onSurface }]}>{result.food_name}</Text>
+            <Text style={[styles.foodName, { color: theme.textPrimary }]}>{result.food_name}</Text>
             <View style={styles.calBlock}>
               <Text style={[styles.calories, { color: theme.primary }]}>{result.calories}</Text>
-              <Text style={[styles.kcalUnit, { color: theme.onSurfaceVariant }]}>kcal</Text>
+              <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>kcal</Text>
             </View>
           </View>
 
@@ -161,14 +171,14 @@ export function ScanResultScreen({ navigation, route }: Props) {
                 onPress={() => setSelectedMeal(meal)}
                 style={[
                   styles.mealChip,
-                  { borderColor: theme.outlineVariant },
+                  { borderColor: theme.borderColor },
                   selectedMeal === meal && { backgroundColor: theme.primary, borderColor: theme.primary },
                 ]}
                 activeOpacity={0.7}
               >
                 <Text style={[
                   styles.mealChipLabel,
-                  { color: theme.onSurfaceVariant },
+                  { color: theme.textSecondary },
                   selectedMeal === meal && { color: '#fff' },
                 ]}>
                   {MEAL_LABELS[meal]}
@@ -180,15 +190,15 @@ export function ScanResultScreen({ navigation, route }: Props) {
           {/* 2×2 Macro grid */}
           <View style={styles.macroGrid}>
             <NutrientCard label="Protein" value={result.protein_g} color={theme.protein} />
-            <NutrientCard label="Carbs" value={result.carbs_g} color={theme.carbsText} barColor={theme.carbs} />
+            <NutrientCard label="Carbs" value={result.carbs_g} color={theme.carbs} barColor={theme.carbs} />
             <NutrientCard label="Fat" value={result.fat_g} color={theme.fat} />
-            <NutrientCard label="Fiber" value={result.fiber_g} color={theme.onSurfaceVariant} />
+            <NutrientCard label="Fiber" value={result.fiber_g} color={theme.textSecondary} />
           </View>
         </View>
       </ScrollView>
 
       {/* Action buttons */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.borderColor }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}
@@ -233,7 +243,6 @@ const styles = StyleSheet.create({
   aiBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   card: {
     margin: 16,
-    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
     gap: 14,
@@ -266,9 +275,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     paddingBottom: 32,
-    backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
   },
   retakeButton: { flex: 1 },
   saveButton: { flex: 2, borderRadius: 12 },

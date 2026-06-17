@@ -17,7 +17,7 @@ import { MacroBar } from '../../components/MacroBar';
 import { MealSection } from '../../components/MealSection';
 import { WeeklyChart } from '../../components/WeeklyChart';
 import { DateSelector } from '../../components/DateSelector';
-import { useAppTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../hooks/useTheme';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -29,7 +29,7 @@ function getGreeting() {
 export function DashboardScreen() {
   const { profile, session } = useAuthStore();
   const { todayLogs, selectedDate, isLoading, setSelectedDate, fetchLogsForDate } = useFoodLogStore();
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
@@ -58,9 +58,9 @@ export function DashboardScreen() {
     todayLogs.filter((l) => l.meal_type === type);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View style={[styles.root, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <SafeAreaView style={[styles.headerSafe, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.headerSafe, { backgroundColor: theme.bg }]} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             {profile?.avatar_url ? (
@@ -69,19 +69,19 @@ export function DashboardScreen() {
                 style={[styles.avatar, { borderColor: theme.primaryLight }]}
               />
             ) : (
-              <View style={[styles.avatar, { backgroundColor: theme.primaryUltraLight, borderColor: theme.primaryLight }]}>
+              <View style={[styles.avatar, { backgroundColor: theme.primaryTint, borderColor: theme.primaryLight }]}>
                 <Text style={[styles.avatarInitial, { color: theme.primary }]}>
                   {(profile?.name ?? 'U')[0].toUpperCase()}
                 </Text>
               </View>
             )}
             <View>
-              <Text style={[styles.greeting, { color: theme.onSurfaceVariant }]}>{getGreeting()},</Text>
+              <Text style={[styles.greeting, { color: theme.textSecondary }]}>{getGreeting()},</Text>
               <Text style={[styles.userName, { color: theme.primary }]}>{profile?.name ?? 'there'}</Text>
             </View>
           </View>
-          <TouchableOpacity style={[styles.bellBtn, { backgroundColor: theme.surfaceTrack }]}>
-            <Ionicons name="notifications-outline" size={22} color={theme.onSurfaceVariant} />
+          <TouchableOpacity style={[styles.bellBtn, { backgroundColor: theme.surface2 }]}>
+            <Ionicons name="notifications-outline" size={22} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -102,15 +102,18 @@ export function DashboardScreen() {
         <CalorieRing consumed={totals.calories} goal={calorieGoal} />
 
         {/* Macro bars */}
-        <View style={styles.macrosCard}>
-          <Text style={styles.macrosTitle}>Today's Macros</Text>
+        <View style={[styles.macrosCard, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.macrosTitle, { color: theme.textSecondary }]}>Today's Macros</Text>
           <MacroBar label="Protein" current={totals.protein} goal={proteinGoal} color={theme.protein} unit="g" />
           <MacroBar label="Carbs" current={totals.carbs} goal={Math.round(calorieGoal * 0.5 / 4)} color={theme.carbs} unit="g" />
           <MacroBar label="Fat" current={totals.fat} goal={Math.round(calorieGoal * 0.3 / 9)} color={theme.fat} unit="g" />
         </View>
 
         {/* Meal sections */}
-        <Text style={styles.sectionHeader}>Meals</Text>
+        <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginTop: 4 }]}>
+          <View style={[styles.sectionAccentBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionHeader, { color: theme.textPrimary }]}>Meals</Text>
+        </View>
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
           <MealSection key={meal} mealType={meal} logs={byMealType(meal)} />
         ))}
@@ -155,7 +158,6 @@ const styles = StyleSheet.create({
   // Macros card
   macrosCard: {
     marginHorizontal: 16,
-    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 18,
     gap: 14,
@@ -168,20 +170,17 @@ const styles = StyleSheet.create({
   macrosTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#90a4ae',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 2,
   },
 
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionAccentBar: { width: 3, height: 16, borderRadius: 2 },
   sectionHeader: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#90a4ae',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: 20,
-    marginTop: 4,
+    letterSpacing: 0,
   },
 });
 

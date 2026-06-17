@@ -6,8 +6,8 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { createSubscriptionOrder } from '../../services/api';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
-import { useAppTheme } from '../../context/ThemeContext';
-import { AppTheme } from '../../theme/themes';
+import { useTheme } from '../../hooks/useTheme';
+import type { ColorTheme } from '../../theme/colors';
 
 interface Props {
   visible: boolean;
@@ -43,7 +43,7 @@ const PLANS = [
 export function PaywallModal({ visible, onDismiss }: Props) {
   const { session, fetchProfile } = useAuthStore();
   const { scansUsedToday, scansRemaining } = useSubscriptionGate();
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -93,7 +93,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
         <View style={styles.sheet}>
           {/* Close button */}
           <View style={styles.closeRow}>
-            <Button mode="text" onPress={onDismiss} textColor={theme.onSurfaceVariant} compact>✕</Button>
+            <Button mode="text" onPress={onDismiss} textColor={theme.textSecondary} compact>✕</Button>
           </View>
 
           {/* Header */}
@@ -174,7 +174,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   );
 }
 
-function makeStyles(theme: AppTheme) {
+function makeStyles(theme: ColorTheme) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -192,22 +192,22 @@ function makeStyles(theme: AppTheme) {
     closeRow: { alignItems: 'flex-end', paddingTop: 12 },
     header: { alignItems: 'center', gap: 6 },
     headerEmoji: { fontSize: 40 },
-    title: { color: theme.onSurface, fontWeight: '700', textAlign: 'center' },
-    subtitle: { color: theme.onSurfaceVariant, textAlign: 'center' },
+    title: { color: theme.textPrimary, fontWeight: '700', textAlign: 'center' },
+    subtitle: { color: theme.textSecondary, textAlign: 'center' },
     features: { gap: 10 },
     featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    featureText: { color: theme.onSurface },
+    featureText: { color: theme.textPrimary },
     plans: { flexDirection: 'row', gap: 12 },
     planCard: {
       flex: 1,
       borderRadius: 16,
       borderWidth: 2,
-      borderColor: theme.outlineVariant,
+      borderColor: theme.borderColor,
       padding: 14,
       alignItems: 'center',
       position: 'relative',
     },
-    planCardSelected: { borderColor: theme.primary, backgroundColor: theme.primaryUltraLight },
+    planCardSelected: { borderColor: theme.primary, backgroundColor: theme.primaryTint },
     planBadge: {
       position: 'absolute',
       top: -10,
@@ -218,14 +218,14 @@ function makeStyles(theme: AppTheme) {
     },
     planBadgeText: { color: theme.surface, fontWeight: '700' },
     planContent: { alignItems: 'center', gap: 2 },
-    planLabel: { color: theme.onSurfaceVariant, fontWeight: '600' },
+    planLabel: { color: theme.textSecondary, fontWeight: '600' },
     planLabelSelected: { color: theme.primary },
-    planPrice: { color: theme.onSurface, fontWeight: '800' },
+    planPrice: { color: theme.textPrimary, fontWeight: '800' },
     planPriceSelected: { color: theme.primary },
-    planPeriod: { color: theme.onSurfaceVariant, fontWeight: '400' },
+    planPeriod: { color: theme.textSecondary, fontWeight: '400' },
     planSavings: { color: '#4caf50', fontWeight: '700' },
     ctaButton: { borderRadius: 14 },
     ctaContent: { height: 52 },
-    legal: { color: theme.onSurfaceVariant, textAlign: 'center' },
+    legal: { color: theme.textSecondary, textAlign: 'center' },
   });
 }

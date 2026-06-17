@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
-  ImageBackground,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,9 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../../services/supabase';
-import { useAppTheme } from '../../context/ThemeContext';
-
-const FOOD_IMAGE = require('../../../assets/a_vibrant_and_appetizing_high_quality_photo_of_a_healthy_mediterranean_salad.png');
+import { useTheme } from '../../hooks/useTheme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -23,8 +20,8 @@ const FEATURE_LABELS = ['AI Analysis', 'Macros', 'Daily Streak'] as const;
 
 export function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
-  const { theme } = useAppTheme();
-  const a = theme.auth; // shorthand
+  const { theme } = useTheme();
+  const a = theme.auth;
 
   const handleGoogleSignIn = async () => {
     try {
@@ -65,38 +62,23 @@ export function AuthScreen() {
 
   return (
     // overflow: 'hidden' clips the absolute-fill hero to the screen bounds (web fix)
-    <View style={[styles.root, { backgroundColor: a.rootBg, overflow: 'hidden' }]}>
+    <View style={[styles.root, { backgroundColor: theme.bg, overflow: 'hidden' }]}>
 
       {/* ── Hero background ────────────────────────────────────────────── */}
-      {a.heroType === 'image' ? (
-        <ImageBackground
-          source={FOOD_IMAGE}
-          style={styles.heroBg}
-          resizeMode="cover"
-        >
-          <LinearGradient
-            colors={a.overlayGradient as [string, string, ...string[]]}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 0.72 }}
-          />
-        </ImageBackground>
-      ) : (
-        <LinearGradient
-          colors={a.heroGradient as [string, string, ...string[]]}
-          style={styles.heroBg}
-          start={{ x: 0.3, y: 0 }}
-          end={{ x: 0.7, y: 0.78 }}
-        />
-      )}
+      <LinearGradient
+        colors={[...a.heroGradient] as [string, string, ...string[]]}
+        style={styles.heroBg}
+        start={{ x: 0.3, y: 0 }}
+        end={{ x: 0.7, y: 0.78 }}
+      />
 
       {/* ── Top: logo + tagline ─────────────────────────────────────────── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
-        <View style={[styles.logoWrap, { backgroundColor: a.logoBg, borderColor: a.logoBorder }]}>
+        <View style={[styles.logoWrap, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.35)' }]}>
           <Text style={styles.logoEmoji}>🥗</Text>
         </View>
-        <Text style={[styles.tagline, { color: a.taglineColor }]}>Snap. Track. Thrive.</Text>
-        <Text style={[styles.subtitle, { color: a.subtitleColor }]}>
+        <Text style={[styles.tagline, { color: '#ffffff' }]}>Snap. Track. Thrive.</Text>
+        <Text style={[styles.subtitle, { color: 'rgba(255,255,255,0.82)' }]}>
           Your nutrition journey, simplified by AI.
         </Text>
       </SafeAreaView>
@@ -108,7 +90,7 @@ export function AuthScreen() {
           {/* Google CTA */}
           <TouchableOpacity
             onPress={handleGoogleSignIn}
-            style={[styles.googleBtn, { backgroundColor: a.ctaButton, shadowColor: a.ctaButtonShadow }]}
+            style={[styles.googleBtn, { backgroundColor: theme.primary, shadowColor: theme.shadow }]}
             activeOpacity={0.88}
             disabled={isLoading}
           >
@@ -122,10 +104,10 @@ export function AuthScreen() {
             )}
           </TouchableOpacity>
 
-          <Text style={[styles.terms, { color: theme.onSurfaceVariant }]}>
+          <Text style={[styles.terms, { color: theme.textSecondary }]}>
             By continuing, you agree to our{' '}
-            <Text style={[styles.termsLink, { color: a.termsLinkColor }]}>Terms</Text> and{' '}
-            <Text style={[styles.termsLink, { color: a.termsLinkColor }]}>Privacy Policy</Text>.
+            <Text style={[styles.termsLink, { color: theme.primary }]}>Terms</Text> and{' '}
+            <Text style={[styles.termsLink, { color: theme.primary }]}>Privacy Policy</Text>.
           </Text>
 
           {/* Feature chips */}
@@ -138,7 +120,7 @@ export function AuthScreen() {
                 <View style={[styles.chipIconWrap, { backgroundColor: a.chipBgs[i] }]}>
                   <Text style={styles.chipIcon}>{icon}</Text>
                 </View>
-                <Text style={[styles.chipLabel, { color: theme.onSurface }]}>
+                <Text style={[styles.chipLabel, { color: theme.textPrimary }]}>
                   {FEATURE_LABELS[i]}
                 </Text>
               </View>

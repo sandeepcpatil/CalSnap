@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { FoodLog } from '../store/foodLogStore';
-import { useAppTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface Props {
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -20,11 +20,11 @@ const MEAL_LABELS: Record<string, string> = {
 export function MealSection({ mealType, logs }: Props) {
   const [expanded, setExpanded] = useState(true);
   const totalCals = logs.reduce((s, l) => s + (l.calories || 0), 0);
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   const accentColor = theme.meal[mealType];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.borderColor }]}>
       {/* Glass card header */}
       <TouchableOpacity
         onPress={() => setExpanded((v) => !v)}
@@ -33,7 +33,7 @@ export function MealSection({ mealType, logs }: Props) {
       >
         <View style={styles.titleRow}>
           <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-          <Text style={styles.title}>{MEAL_LABELS[mealType]}</Text>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>{MEAL_LABELS[mealType]}</Text>
         </View>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -56,25 +56,25 @@ export function MealSection({ mealType, logs }: Props) {
 }
 
 function FoodLogCard({ log, accentColor }: { log: FoodLog; accentColor: string }) {
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   return (
-    <View style={[styles.card, { borderTopColor: theme.surfaceTrack }]}>
+    <View style={[styles.card, { borderTopColor: theme.surface2 }]}>
       {log.image_url ? (
         <Image source={{ uri: log.image_url }} style={styles.thumbnail} />
       ) : (
-        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.surfaceTrack }]}>
+        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.surface2 }]}>
           <Text style={styles.placeholderEmoji}>🍽️</Text>
         </View>
       )}
       <View style={styles.cardInfo}>
         <View style={styles.cardTop}>
-          <Text style={[styles.foodName, { color: theme.onSurface }]} numberOfLines={1}>{log.food_name}</Text>
-          <Text style={[styles.kcal, { color: theme.onSurfaceVariant }]}>{log.calories} kcal</Text>
+          <Text style={[styles.foodName, { color: theme.textPrimary }]} numberOfLines={1}>{log.food_name}</Text>
+          <Text style={[styles.kcal, { color: theme.textSecondary }]}>{log.calories} kcal</Text>
         </View>
         <View style={styles.macroPills}>
-          <Text style={[styles.pill, { backgroundColor: theme.protein + '1A', color: theme.proteinText }]}>P: {Math.round(log.protein_g)}g</Text>
-          <Text style={[styles.pill, { backgroundColor: theme.carbs + '1A', color: theme.carbsText }]}>C: {Math.round(log.carbs_g)}g</Text>
-          <Text style={[styles.pill, { backgroundColor: theme.fat + '1A', color: theme.fatText }]}>F: {Math.round(log.fat_g)}g</Text>
+          <Text style={[styles.pill, { backgroundColor: theme.proteinTint, color: theme.protein }]}>P: {Math.round(log.protein_g)}g</Text>
+          <Text style={[styles.pill, { backgroundColor: theme.carbsTint, color: theme.carbs }]}>C: {Math.round(log.carbs_g)}g</Text>
+          <Text style={[styles.pill, { backgroundColor: theme.fatTint, color: theme.fat }]}>F: {Math.round(log.fat_g)}g</Text>
         </View>
       </View>
     </View>
@@ -84,11 +84,9 @@ function FoodLogCard({ log, accentColor }: { log: FoodLog; accentColor: string }
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E0E5E5',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -102,7 +100,7 @@ const styles = StyleSheet.create({
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   accentBar: { width: 5, height: 28, borderRadius: 50 },
-  title: { fontSize: 18, fontWeight: '700', color: '#181c1d' },
+  title: { fontSize: 18, fontWeight: '700' },
   entries: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4, gap: 10 },
   empty: { color: '#bec8c9', fontSize: 13, textAlign: 'center', paddingVertical: 12 },
   card: {

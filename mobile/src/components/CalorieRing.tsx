@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { formatCalories } from '../utils/nutrition';
-import { useAppTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface Props {
   consumed: number;
@@ -20,7 +20,7 @@ export function CalorieRing({ consumed, goal }: Props) {
   const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
   const remaining = Math.max(goal - consumed, 0);
   const isOver = consumed > goal;
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   const { ring } = theme;
 
   return (
@@ -59,19 +59,19 @@ export function CalorieRing({ consumed, goal }: Props) {
         </Svg>
 
         <View style={styles.center}>
-          <Text style={[styles.consumed, isOver && styles.consumedOver]}>
+          <Text style={[styles.consumed, { color: isOver ? theme.error : theme.textPrimary }]}>
             {formatCalories(consumed)}
           </Text>
-          <Text style={[styles.goalLabel, { color: theme.onSurfaceVariant }]}>
+          <Text style={[styles.goalLabel, { color: theme.textSecondary }]}>
             / {formatCalories(goal)} kcal
           </Text>
         </View>
       </View>
 
       {/* Energy badge */}
-      <View style={[styles.badge, { backgroundColor: isOver ? 'rgba(186,26,26,0.1)' : ring.badgeBg }]}>
+      <View style={[styles.badge, { backgroundColor: isOver ? theme.errorTint : ring.badgeBg }]}>
         <Text style={styles.badgeIcon}>⚡</Text>
-        <Text style={[styles.badgeText, { color: isOver ? '#ba1a1a' : ring.badgeText }]}>
+        <Text style={[styles.badgeText, { color: isOver ? theme.error : ring.badgeText }]}>
           {isOver
             ? `${formatCalories(consumed - goal)} kcal over`
             : `${formatCalories(remaining)} kcal left`}
@@ -86,8 +86,8 @@ const styles = StyleSheet.create({
   ringWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
   svg: { position: 'absolute' },
   center: { alignItems: 'center', gap: 2 },
-  consumed: { fontSize: 48, fontWeight: '800', color: '#181c1d', letterSpacing: -1, lineHeight: 56 },
-  consumedOver: { color: '#ba1a1a' },
+  consumed: { fontSize: 48, fontWeight: '800', letterSpacing: -1, lineHeight: 56 },
+  consumedOver: {},
   goalLabel: { fontSize: 14, fontWeight: '700' },
   badge: {
     flexDirection: 'row',

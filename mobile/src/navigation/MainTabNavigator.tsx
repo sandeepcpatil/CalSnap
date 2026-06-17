@@ -7,7 +7,7 @@ import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { HistoryScreen } from '../screens/History/HistoryScreen';
 import { ProfileScreen } from '../screens/Profile/ProfileScreen';
 import { ScanNavigator } from './ScanNavigator';
-import { useAppTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -34,14 +34,18 @@ function ScanTabButton({ onPress, color }: { onPress: () => void; color: string 
 }
 
 export function MainTabNavigator() {
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: '#9e9e9e',
+        tabBarStyle: {
+          ...styles.tabBar,
+          backgroundColor: theme.tabBarBg,
+          borderTopColor: theme.tabBarBorder,
+        },
+        tabBarActiveTintColor:   theme.tabBarActive,
+        tabBarInactiveTintColor: theme.tabBarInactive,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}
     >
@@ -95,8 +99,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#ffffff',
   },
   scanButton: {
     top: -20,

@@ -7,7 +7,7 @@ import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { MealSection } from '../../components/MealSection';
-import { useAppTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../hooks/useTheme';
 
 type MarkedDates = Record<string, { dotColor: string }>;
 
@@ -130,7 +130,7 @@ const calStyles = StyleSheet.create({
 export function HistoryScreen() {
   const { session, profile } = useAuthStore();
   const { todayLogs, fetchLogsForDate } = useFoodLogStore();
-  const { theme } = useAppTheme();
+  const { theme } = useTheme();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
@@ -217,7 +217,7 @@ export function HistoryScreen() {
   const isToday = selectedDate === new Date().toISOString().slice(0, 10);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text variant="headlineSmall" style={[styles.pageTitle, { color: theme.primary }]}>History 📅</Text>
 
@@ -245,12 +245,12 @@ export function HistoryScreen() {
             onSelectDate={(d) => { setSelectedDate(d); setCurrentMonth(d.slice(0, 7)); }}
             onChangeMonth={(ym) => setCurrentMonth(ym)}
             primaryColor={theme.primary}
-            onSurface={theme.onSurface}
+            onSurface={theme.textPrimary}
           />
         </View>
 
         {/* Day title */}
-        <Text variant="titleMedium" style={[styles.dayTitle, { color: theme.onSurface }]}>
+        <Text variant="titleMedium" style={[styles.dayTitle, { color: theme.textPrimary }]}>
           {isToday ? 'Today' : selectedDate}
         </Text>
 
@@ -261,17 +261,17 @@ export function HistoryScreen() {
           ))
         ) : (
           <View style={styles.emptyWrap}>
-            <View style={[styles.emptyIconCircle, { backgroundColor: theme.primaryUltraLight }]}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: theme.primaryTint }]}>
               <Text style={styles.emptyEmoji}>🥗</Text>
             </View>
-            <Text style={[styles.emptyTitle, { color: theme.onSurface }]}>No meals logged</Text>
-            <Text style={[styles.emptySubtitle, { color: theme.onSurfaceVariant }]}>
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No meals logged</Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
               {isToday
                 ? 'Tap the camera button to scan your first meal today!'
                 : 'Nothing was logged on this day.'}
             </Text>
             {isToday && (
-              <View style={[styles.emptyHint, { backgroundColor: theme.primaryUltraLight, borderColor: theme.primaryLight }]}>
+              <View style={[styles.emptyHint, { backgroundColor: theme.primaryTint, borderColor: theme.primaryLight }]}>
                 <Ionicons name="camera-outline" size={16} color={theme.primary} />
                 <Text style={[styles.emptyHintText, { color: theme.primary }]}>Use the Scan tab to log food</Text>
               </View>

@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Alert, Platform } from 'react-native';
 import { Text, Button, TextInput, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { calculateGoals } from '../../utils/nutrition';
 import { PaywallModal } from '../Paywall/PaywallModal';
-import { useAppTheme } from '../../context/ThemeContext';
-import { THEME_LIST } from '../../theme/themes';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeToggle } from '../../components/ThemeToggle';
 
 const APP_VERSION = '1.0.0';
 
 export function ProfileScreen() {
   const { profile, updateProfile, signOut } = useAuthStore();
-  const { theme, themeId, setTheme } = useAppTheme();
+  const { theme } = useTheme();
   const [editWeight, setEditWeight] = useState(String(profile?.weight_kg ?? ''));
   const [editHeight, setEditHeight] = useState(String(profile?.height_cm ?? ''));
   const [isSaving, setIsSaving] = useState(false);
@@ -73,7 +73,7 @@ export function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Avatar + user info */}
         <View style={styles.userCard}>
@@ -84,7 +84,7 @@ export function ProfileScreen() {
               <Text style={styles.avatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
             </View>
           )}
-          <Text variant="headlineSmall" style={[styles.userName, { color: theme.onSurface }]}>{profile?.name ?? '—'}</Text>
+          <Text variant="headlineSmall" style={[styles.userName, { color: theme.textPrimary }]}>{profile?.name ?? '—'}</Text>
           <Text variant="bodyMedium" style={styles.userEmail}>{profile?.email ?? '—'}</Text>
 
           {/* Subscription badge */}
@@ -105,11 +105,11 @@ export function ProfileScreen() {
         <View style={styles.section}>
           <Text variant="titleSmall" style={styles.sectionTitle}>Your Goals</Text>
           <View style={styles.goalsRow}>
-            <View style={[styles.goalCard, { borderColor: theme.primaryUltraLight }]}>
+            <View style={[styles.goalCard, { borderColor: theme.primaryTint }]}>
               <Text variant="headlineSmall" style={[styles.goalValue, { color: theme.primary }]}>{profile?.daily_calorie_goal ?? '—'}</Text>
               <Text variant="labelSmall" style={styles.goalLabel}>kcal / day</Text>
             </View>
-            <View style={[styles.goalCard, { borderColor: theme.primaryUltraLight }]}>
+            <View style={[styles.goalCard, { borderColor: theme.primaryTint }]}>
               <Text variant="headlineSmall" style={[styles.goalValue, { color: theme.primary }]}>{profile?.daily_protein_goal ?? '—'}g</Text>
               <Text variant="labelSmall" style={styles.goalLabel}>protein / day</Text>
             </View>
@@ -181,34 +181,10 @@ export function ProfileScreen() {
 
         <Divider style={styles.divider} />
 
-        {/* ── Theme switcher ── */}
+        {/* ── Appearance ── */}
         <View style={styles.section}>
-          <Text variant="titleSmall" style={styles.sectionTitle}>App Theme</Text>
-          <View style={styles.themeRow}>
-            {THEME_LIST.map((t) => {
-              const isActive = t.id === themeId;
-              return (
-                <TouchableOpacity
-                  key={t.id}
-                  onPress={() => setTheme(t.id)}
-                  style={[
-                    styles.themeChip,
-                    {
-                      backgroundColor: isActive ? theme.primary : theme.surfaceTrack,
-                      borderColor: isActive ? theme.primary : theme.outlineVariant,
-                    },
-                  ]}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.themeEmoji}>{t.emoji}</Text>
-                  <Text style={[styles.themeName, { color: isActive ? '#fff' : theme.onSurface }]}>
-                    {t.name}
-                  </Text>
-                  {isActive && <Text style={styles.themeCheck}>✓</Text>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Text variant="titleSmall" style={styles.sectionTitle}>Display Mode</Text>
+          <ThemeToggle />
         </View>
 
         <Divider style={styles.divider} />
