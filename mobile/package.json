@@ -24,6 +24,7 @@
     "expo": "~51.0.28",
     "expo-asset": "~10.0.10",
     "expo-auth-session": "~5.5.2",
+    "expo-build-properties": "^56.0.19",
     "expo-camera": "~15.0.16",
     "expo-constants": "~16.0.2",
     "expo-crypto": "~13.0.2",

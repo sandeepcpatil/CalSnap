@@ -18,7 +18,7 @@ module.exports = {
   assetBundlePatterns: ['**/*'],
   ios: {
     supportsTablet: false,
-    bundleIdentifier: IS_DEV ? 'com.calsnap.app.dev' : 'com.calsnap.app',
+    bundleIdentifier: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
     infoPlist: {
       NSCameraUsageDescription: 'CalSnap needs camera access to scan your food.',
       NSPhotoLibraryUsageDescription: 'CalSnap needs photo library access to analyze food photos.',
@@ -29,8 +29,8 @@ module.exports = {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ab3500',
     },
-    package: IS_DEV ? 'com.calsnap.app.dev' : 'com.calsnap.app',
-    versionCode: 1,
+    package: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
+    versionCode: 5,
     permissions: [
       'CAMERA',
       'READ_EXTERNAL_STORAGE',
@@ -41,6 +41,14 @@ module.exports = {
     favicon: './assets/favicon.png',
   },
   plugins: [
+    [
+      'expo-build-properties',
+      {
+        android: {
+          targetSdkVersion: 35,
+        },
+      },
+    ],
     'expo-secure-store',
     [
       'expo-camera',
