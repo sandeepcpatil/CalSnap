@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
 import type {
   AdminStats,
   AdminUsersResponse,
@@ -9,7 +9,7 @@ import { authMiddleware } from '../middleware/auth';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
 import { supabase } from '../lib/supabase';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // All admin routes require auth + admin role check
 router.use(authMiddleware, adminAuthMiddleware);

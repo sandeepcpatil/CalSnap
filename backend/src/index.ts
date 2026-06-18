@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, {
+  type Application,
   type Request,
   type Response,
   type NextFunction,
@@ -13,7 +14,7 @@ import analyzeRouter from './routes/analyze';
 import subscriptionRouter from './routes/subscription';
 import adminRouter from './routes/admin';
 
-const app = express();
+const app: Application = express();
 const PORT = Number(process.env.PORT) || 4000;
 
 // ─── Security middleware ───────────────────────────────────────────────────────

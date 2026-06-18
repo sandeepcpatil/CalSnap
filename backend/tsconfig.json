@@ -28,7 +28,7 @@
     // erased at compile time, so no runtime module resolver is needed.
     // baseUrl intentionally omitted — paths resolves relative to tsconfig.json in TS 5+
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/types": ["./src/types/shared"]
     }
   },
   "include": ["src/**/*"],

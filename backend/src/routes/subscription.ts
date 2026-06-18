@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import type {
@@ -9,7 +9,7 @@ import type {
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ─── Razorpay Setup ───────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ router.post(
         return;
       }
 
-      const planConfig = PLANS[plan];
+      const planConfig = PLANS[plan as 'monthly' | 'annual'];
 
       const razorpayPlan = await razorpay.plans.create({
         period: planConfig.period,

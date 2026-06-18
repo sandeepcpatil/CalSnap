@@ -1,11 +1,11 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { CalorieBreakdown, FoodScanResult, ScanLimitError } from '@shared/types';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ─── Gemini Setup ─────────────────────────────────────────────────────────────
 
