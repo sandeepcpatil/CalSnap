@@ -31,11 +31,9 @@ module.exports = {
       backgroundColor: '#ab3500',
     },
     package: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
-    versionCode: 5,
+    versionCode: 6,
     permissions: [
       'CAMERA',
-      'READ_EXTERNAL_STORAGE',
-      'WRITE_EXTERNAL_STORAGE',
     ],
   },
   web: {
