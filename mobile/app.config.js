@@ -5,6 +5,7 @@ module.exports = {
   slug: 'calsnap',
   version: '1.0.0',
   orientation: 'portrait',
+  scheme: 'calsnap',
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic',
   splash: {
