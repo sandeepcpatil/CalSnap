@@ -8,6 +8,7 @@ interface AuthCtx {
   isAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -27,8 +28,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) checkAdmin(session.user.id);
-      else { setIsAdmin(false); setLoading(false); }
+      if (session) {
+        setLoading(true);
+        checkAdmin(session.user.id);
+      } else { setIsAdmin(false); setLoading(false); }
     });
 
     return () => subscription.unsubscribe();
@@ -49,13 +52,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return error?.message ?? null;
   };
 
+  const signInWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setIsAdmin(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user: session?.user ?? null, session, isAdmin, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user: session?.user ?? null, session, isAdmin, loading, signIn, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
