@@ -6,9 +6,9 @@ import type { ColorMode } from '../theme/colors';
 
 // --- Types -------------------------------------------------------------------
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark';
 
-// Only plain serialisable state here — NO getters, NO derived properties.
+// Only plain serialisable state here ï¿½ NO getters, NO derived properties.
 // Zustand's set() merges via Object.assign, which calls and flattens getters,
 // turning them into frozen values after the first update. Computed values
 // (activeMode, theme) are derived in useTheme() on every render instead.
@@ -32,15 +32,14 @@ function getSystemScheme(): ColorMode {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      mode: 'system' as ThemeMode,
+      mode: 'light' as ThemeMode,
       systemScheme: getSystemScheme(),
 
       setTheme: (mode) => set({ mode }),
 
       toggleTheme: () => {
-        const { mode, systemScheme } = get();
-        const active: ColorMode = mode === 'system' ? systemScheme : mode;
-        set({ mode: active === 'dark' ? 'light' : 'dark' });
+        const { mode } = get();
+        set({ mode: mode === 'dark' ? 'light' : 'dark' });
       },
 
       _setSystemScheme: (scheme) => set({ systemScheme: scheme }),

@@ -126,9 +126,10 @@ export function ProfileScreen() {
               onChangeText={(v) => setEditWeight(v.replace(/[^0-9.]/g, ''))}
               mode="outlined"
               keyboardType="decimal-pad"
-              outlineColor="#b0bec5"
+              outlineColor={theme.borderColor}
               activeOutlineColor={theme.primary}
-              style={styles.statsInput}
+              textColor={theme.textPrimary}
+              style={[styles.statsInput, { backgroundColor: theme.surface }]}
             />
             <TextInput
               label="Height (cm)"
@@ -136,9 +137,10 @@ export function ProfileScreen() {
               onChangeText={(v) => setEditHeight(v.replace(/[^0-9.]/g, ''))}
               mode="outlined"
               keyboardType="decimal-pad"
-              outlineColor="#b0bec5"
+              outlineColor={theme.borderColor}
               activeOutlineColor={theme.primary}
-              style={styles.statsInput}
+              textColor={theme.textPrimary}
+              style={[styles.statsInput, { backgroundColor: theme.surface }]}
             />
             <Button
               mode="contained"
@@ -174,7 +176,7 @@ export function ProfileScreen() {
               buttonColor={theme.primary}
               icon="star"
             >
-              Upgrade to Pro — ₹150/month
+              Upgrade to Pro — ₹149/month
             </Button>
           )}
         </View>
@@ -245,7 +247,7 @@ const styles = StyleSheet.create({
   goalValue: { fontWeight: '800' },
   goalLabel: { color: '#90a4ae' },
   statsForm: { gap: 12 },
-  statsInput: { backgroundColor: '#fff' },
+  statsInput: {},
   saveButton: { borderRadius: 12 },
   divider: { marginHorizontal: 20, marginVertical: 4 },
   subCard: { backgroundColor: '#e8f5e9', borderRadius: 12, padding: 14 },

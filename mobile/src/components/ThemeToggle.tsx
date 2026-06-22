@@ -19,9 +19,8 @@ interface SegmentConfig {
 }
 
 const SEGMENTS: SegmentConfig[] = [
-  { mode: 'light',  icon: 'sunny-outline',   label: 'Light'  },
-  { mode: 'system', icon: 'phone-portrait-outline', label: 'Auto'  },
-  { mode: 'dark',   icon: 'moon-outline',    label: 'Dark'   },
+  { mode: 'light', icon: 'sunny-outline',  label: 'Light' },
+  { mode: 'dark',  icon: 'moon-outline',   label: 'Dark'  },
 ];
 
 interface Props {
@@ -54,15 +53,14 @@ export function ThemeToggle({ style }: Props) {
     }).start();
   }, [activeIndex]);
 
-  const SEGMENT_WIDTH = 88; // px per segment
+  const SEGMENT_WIDTH = 120; // px per segment
   const PILL_INSET   = 3;   // gap between pill and track edge
 
   const pillTranslateX = slideAnim.interpolate({
-    inputRange:  [0, 1, 2],
+    inputRange:  [0, 1],
     outputRange: [
       PILL_INSET,
       SEGMENT_WIDTH + PILL_INSET,
-      SEGMENT_WIDTH * 2 + PILL_INSET,
     ],
   });
 
@@ -73,7 +71,7 @@ export function ThemeToggle({ style }: Props) {
         {
           backgroundColor: theme.surface2,
           borderColor: theme.borderColor,
-          width: SEGMENT_WIDTH * 3 + PILL_INSET * 2,
+          width: SEGMENT_WIDTH * 2 + PILL_INSET * 2,
         },
         style,
       ]}

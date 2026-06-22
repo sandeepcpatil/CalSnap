@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Modal, Alert } from 'react-native';
+import { View, StyleSheet, Modal, Alert, TouchableOpacity } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -120,8 +120,10 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           {/* Plan cards */}
           <View style={styles.plans}>
             {PLANS.map((plan) => (
-              <View
+              <TouchableOpacity
                 key={plan.id}
+                activeOpacity={0.8}
+                onPress={() => setSelectedPlan(plan.id)}
                 style={[styles.planCard, selectedPlan === plan.id && styles.planCardSelected]}
               >
                 {plan.badge && (
@@ -129,26 +131,19 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                     <Text variant="labelSmall" style={styles.planBadgeText}>{plan.badge}</Text>
                   </View>
                 )}
-                <Button
-                  mode="text"
-                  onPress={() => setSelectedPlan(plan.id)}
-                  style={{ padding: 0 }}
-                  contentStyle={{ flexDirection: 'column', height: 'auto', padding: 0 }}
-                >
-                  <View style={styles.planContent}>
-                    <Text variant="titleMedium" style={[styles.planLabel, selectedPlan === plan.id && styles.planLabelSelected]}>
-                      {plan.label}
-                    </Text>
-                    <Text variant="headlineMedium" style={[styles.planPrice, selectedPlan === plan.id && styles.planPriceSelected]}>
-                      {plan.price}
-                      <Text variant="bodySmall" style={styles.planPeriod}>{plan.period}</Text>
-                    </Text>
-                    {plan.savings && (
-                      <Text variant="labelSmall" style={styles.planSavings}>{plan.savings}</Text>
-                    )}
-                  </View>
-                </Button>
-              </View>
+                <View style={styles.planContent}>
+                  <Text variant="titleMedium" style={[styles.planLabel, selectedPlan === plan.id && styles.planLabelSelected]}>
+                    {plan.label}
+                  </Text>
+                  <Text variant="headlineMedium" style={[styles.planPrice, selectedPlan === plan.id && styles.planPriceSelected]}>
+                    {plan.price}
+                    <Text variant="bodySmall" style={styles.planPeriod}>{plan.period}</Text>
+                  </Text>
+                  {plan.savings && (
+                    <Text variant="labelSmall" style={styles.planSavings}>{plan.savings}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
 
