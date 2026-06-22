@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -75,12 +76,20 @@ export function ScanScreen({ navigation }: Props) {
 
       // Upload to Supabase Storage
       const fileName = `${session!.user.id}/${Date.now()}.jpg`;
-      const response = await fetch(compressed.uri);
-      const blob = await response.blob();
+
+      // Read as base64 — fetch(file://) fails on Android production builds
+      const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('food-images')
-        .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+        .upload(fileName, bytes, { contentType: 'image/jpeg', upsert: false });
 
       if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
