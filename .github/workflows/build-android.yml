@@ -39,6 +39,15 @@ jobs:
         working-directory: mobile
         run: npm ci
 
+      - name: Set versionCode from git commit count
+        id: version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          # Offset by 10 to stay above the manually uploaded builds (versionCode 1-7)
+          VERSION_CODE=$((COUNT + 10))
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "Building with versionCode: $VERSION_CODE"
+
       - name: Build Android AAB (local)
         working-directory: mobile
         run: eas build --platform android --profile production --local --non-interactive --output ./calsnap.aab
@@ -48,6 +57,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
+          EXPO_PUBLIC_VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4

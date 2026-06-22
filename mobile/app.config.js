@@ -31,7 +31,7 @@ module.exports = {
       backgroundColor: '#ab3500',
     },
     package: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
-    versionCode: 7,
+    versionCode: process.env.EXPO_PUBLIC_VERSION_CODE ? parseInt(process.env.EXPO_PUBLIC_VERSION_CODE, 10) : 7,
     permissions: [
       'CAMERA',
     ],
