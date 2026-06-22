@@ -13,7 +13,7 @@ const genAIKey = process.env.GEMINI_API_KEY;
 if (!genAIKey) throw new Error('GEMINI_API_KEY must be set in environment');
 
 const genai = new GoogleGenerativeAI(genAIKey);
-const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-001' });
 
 const FREE_DAILY_SCAN_LIMIT = 3;
 
