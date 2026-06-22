@@ -1,10 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   Alert,
   TouchableOpacity,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +25,166 @@ import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 
 type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
+
+// ─── Analyzing overlay ───────────────────────────────────────────────────────
+
+const STEPS = [
+  { emoji: '📤', text: 'Uploading photo' },
+  { emoji: '🔍', text: 'AI is analyzing' },
+  { emoji: '🥗', text: 'Identifying ingredients' },
+  { emoji: '📊', text: 'Calculating nutrition' },
+];
+
+function AnalyzingOverlay() {
+  const [stepIndex, setStepIndex] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const ringAnim = useRef(new Animated.Value(0)).current;
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    // Icon pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.12, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Expanding ring
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringAnim, { toValue: 1, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.delay(200),
+        Animated.timing(ringAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Bouncing dots
+    const animateDot = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 350, useNativeDriver: true }),
+        ])
+      ).start();
+    animateDot(dot1, 0);
+    animateDot(dot2, 180);
+    animateDot(dot3, 360);
+
+    // Cycle steps with fade
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+      setStepIndex(prev => (prev + 1) % STEPS.length);
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const ringScale = ringAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
+  const ringOpacity = ringAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.5, 0.2, 0] });
+
+  return (
+    <View style={analyzeStyles.container}>
+      <View style={analyzeStyles.card}>
+        {/* Pulsing icon with expanding ring */}
+        <View style={analyzeStyles.iconWrapper}>
+          <Animated.View style={[analyzeStyles.ring, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
+          <Animated.View style={[analyzeStyles.iconCircle, { transform: [{ scale: pulseAnim }] }]}>
+            <Text style={analyzeStyles.emoji}>{STEPS[stepIndex].emoji}</Text>
+          </Animated.View>
+        </View>
+
+        {/* Cycling status */}
+        <Animated.Text style={[analyzeStyles.stepText, { opacity: fadeAnim }]}>
+          {STEPS[stepIndex].text}
+        </Animated.Text>
+
+        {/* Bouncing dots */}
+        <View style={analyzeStyles.dotsRow}>
+          {[dot1, dot2, dot3].map((dot, i) => (
+            <Animated.View key={i} style={[analyzeStyles.dot, { opacity: dot }]} />
+          ))}
+        </View>
+
+        <Text style={analyzeStyles.subText}>This takes a few seconds</Text>
+      </View>
+    </View>
+  );
+}
+
+const analyzeStyles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: 40,
+    paddingHorizontal: 48,
+    alignItems: 'center',
+    gap: 18,
+    minWidth: 260,
+  },
+  iconWrapper: {
+    width: 90,
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ring: {
+    position: 'absolute',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
+    borderColor: '#4dd0d8',
+  },
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(77,208,216,0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(77,208,216,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emoji: { fontSize: 32 },
+  stepText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  dotsRow: { flexDirection: 'row', gap: 8 },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4dd0d8',
+  },
+  subText: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function ScanScreen({ navigation }: Props) {
   const { session } = useAuthStore();
@@ -137,6 +299,9 @@ export function ScanScreen({ navigation }: Props) {
     <View style={styles.container}>
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraType} />
 
+      {/* Full-screen analyzing overlay */}
+      {isAnalyzing && <AnalyzingOverlay />}
+
       {/* Overlay UI */}
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
         {/* Header */}
@@ -182,11 +347,7 @@ export function ScanScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleCapture} style={styles.captureButton} disabled={isAnalyzing}>
-            {isAnalyzing ? (
-              <ActivityIndicator animating color="#004f54" size="small" />
-            ) : (
-              <View style={styles.captureInner} />
-            )}
+            <View style={[styles.captureInner, isAnalyzing && { opacity: 0.4 }]} />
           </TouchableOpacity>
 
           <TouchableOpacity

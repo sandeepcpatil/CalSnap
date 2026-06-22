@@ -132,13 +132,13 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                   </View>
                 )}
                 <View style={styles.planContent}>
-                  <Text variant="titleMedium" style={[styles.planLabel, selectedPlan === plan.id && styles.planLabelSelected]}>
+                  <Text variant="labelLarge" style={[styles.planLabel, selectedPlan === plan.id && styles.planLabelSelected]}>
                     {plan.label}
                   </Text>
-                  <Text variant="headlineMedium" style={[styles.planPrice, selectedPlan === plan.id && styles.planPriceSelected]}>
+                  <Text style={[styles.planPrice, selectedPlan === plan.id && styles.planPriceSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                     {plan.price}
-                    <Text variant="bodySmall" style={styles.planPeriod}>{plan.period}</Text>
                   </Text>
+                  <Text style={[styles.planPeriod, selectedPlan === plan.id && { color: theme.primary }]}>{plan.period}</Text>
                   {plan.savings && (
                     <Text variant="labelSmall" style={styles.planSavings}>{plan.savings}</Text>
                   )}
@@ -198,7 +198,8 @@ function makeStyles(theme: ColorTheme) {
       borderRadius: 16,
       borderWidth: 2,
       borderColor: theme.borderColor,
-      padding: 14,
+      paddingVertical: 18,
+      paddingHorizontal: 8,
       alignItems: 'center',
       position: 'relative',
     },
@@ -212,12 +213,12 @@ function makeStyles(theme: ColorTheme) {
       borderRadius: 10,
     },
     planBadgeText: { color: theme.surface, fontWeight: '700' },
-    planContent: { alignItems: 'center', gap: 2 },
-    planLabel: { color: theme.textSecondary, fontWeight: '600' },
+    planContent: { alignItems: 'center', gap: 4, width: '100%' },
+    planLabel: { color: theme.textSecondary, fontWeight: '600', textAlign: 'center' },
     planLabelSelected: { color: theme.primary },
-    planPrice: { color: theme.textPrimary, fontWeight: '800' },
+    planPrice: { color: theme.textPrimary, fontWeight: '800', fontSize: 26, textAlign: 'center', width: '100%' },
     planPriceSelected: { color: theme.primary },
-    planPeriod: { color: theme.textSecondary, fontWeight: '400' },
+    planPeriod: { color: theme.textSecondary, fontWeight: '500', fontSize: 13, textAlign: 'center' },
     planSavings: { color: '#4caf50', fontWeight: '700' },
     ctaButton: { borderRadius: 14 },
     ctaContent: { height: 52 },
