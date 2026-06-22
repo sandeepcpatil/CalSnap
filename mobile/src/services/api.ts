@@ -43,10 +43,10 @@ export interface FoodAnalysisResult {
   notes: string;
 }
 
-export async function analyzeFood(imageUrl: string, token: string): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
+export async function analyzeFood(imageUrl: string, token: string, description?: string): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
   return apiFetch('/api/analyze-food', {
     method: 'POST',
-    body: JSON.stringify({ imageUrl }),
+    body: JSON.stringify({ imageUrl, description }),
   }, token);
 }
 

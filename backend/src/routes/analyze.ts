@@ -83,9 +83,13 @@ function hashImageUrl(url: string): string {
  * - API errors (rate limit, quota) → rethrows for the route to handle
  * - "Could not identify" JSON error → returns fallback breakdown
  */
-export async function analyzeFoodPhoto(imageBase64: string, mimeType: string): Promise<CalorieBreakdown> {
+export async function analyzeFoodPhoto(imageBase64: string, mimeType: string, description?: string): Promise<CalorieBreakdown> {
+  const userHint = description?.trim()
+    ? `\n\nUser-provided description (treat as ground truth for hidden/stacked ingredients): "${description.trim()}"`
+    : '';
+
   const geminiResult = await model.generateContent([
-    SYSTEM_PROMPT,
+    SYSTEM_PROMPT + userHint,
     { inlineData: { data: imageBase64, mimeType } },
   ]);
 
@@ -167,7 +171,7 @@ interface CacheRow {
 
 /**
  * POST /api/analyze-food
- * Body: { imageUrl: string }
+ * Body: { imageUrl: string, description?: string }
  *
  * Security: scan-count gate is always enforced server-side — never trust the client.
  */
@@ -176,12 +180,14 @@ router.post(
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { imageUrl } = req.body as { imageUrl?: unknown };
+      const { imageUrl, description } = req.body as { imageUrl?: unknown; description?: unknown };
 
       if (!imageUrl || typeof imageUrl !== 'string') {
         res.status(400).json({ error: 'imageUrl is required and must be a string' });
         return;
       }
+
+      const userDescription = typeof description === 'string' ? description.slice(0, 300) : undefined;
 
       // Validate URL scheme — only allow Supabase storage URLs (SSRF prevention)
       const supabaseHost = new URL(process.env.SUPABASE_URL!).hostname;
@@ -257,7 +263,7 @@ router.post(
 
       // ── Gemini Vision call ────────────────────────────────────────────────
       const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
-      const result = await analyzeFoodPhoto(base64, mimeType);
+      const result = await analyzeFoodPhoto(base64, mimeType, userDescription);
 
       console.log(`[Gemini] hash=${imageHash} user=${req.user!.id} food=${result.food_name}`);
 

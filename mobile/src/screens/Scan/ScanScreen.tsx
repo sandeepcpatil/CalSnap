@@ -7,6 +7,9 @@ import {
   Modal,
   Animated,
   Easing,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -192,43 +195,39 @@ export function ScanScreen({ navigation }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
+  const [showDescModal, setShowDescModal] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const handleCapture = async () => {
-    if (!canScan) {
-      showPaywall();
-      return;
-    }
-
+    if (!canScan) { showPaywall(); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    await processPhoto(async () => {
-      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
-      return photo?.uri ?? null;
-    });
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
+    if (photo?.uri) {
+      setPendingUri(photo.uri);
+      setDescription('');
+      setShowDescModal(true);
+    }
   };
 
   const handlePickFromLibrary = async () => {
-    if (!canScan) {
-      showPaywall();
-      return;
-    }
-
+    if (!canScan) { showPaywall(); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
     });
-
     if (!result.canceled && result.assets[0]) {
-      await processPhoto(async () => result.assets[0].uri);
+      setPendingUri(result.assets[0].uri);
+      setDescription('');
+      setShowDescModal(true);
     }
   };
 
-  const processPhoto = async (getUri: () => Promise<string | null>) => {
+  const processPhoto = async (rawUri: string, userDescription: string) => {
+    setShowDescModal(false);
     setIsAnalyzing(true);
     try {
-      const rawUri = await getUri();
-      if (!rawUri) return;
-
       // Compress to max 1024px before uploading
       const compressed = await ImageManipulator.manipulateAsync(
         rawUri,
@@ -263,7 +262,7 @@ export function ScanScreen({ navigation }: Props) {
       if (signedError || !signedData?.signedUrl) throw new Error('Could not get signed URL');
 
       // Call backend (server enforces scan count gate)
-      const { result } = await analyzeFood(signedData.signedUrl, session!.access_token);
+      const { result } = await analyzeFood(signedData.signedUrl, session!.access_token, userDescription || undefined);
 
       navigation.navigate('ScanResult', {
         imageUri: compressed.uri,
@@ -364,6 +363,43 @@ export function ScanScreen({ navigation }: Props) {
       </SafeAreaView>
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
+
+      {/* Description modal — shown after photo is taken, before analysis */}
+      <Modal visible={showDescModal} transparent animationType="slide" onRequestClose={() => setShowDescModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={descStyles.backdrop}>
+          <View style={descStyles.sheet}>
+            <Text style={descStyles.title}>Anything to add?</Text>
+            <Text style={descStyles.subtitle}>
+              Help AI understand hidden ingredients (e.g. "peanut butter between two slices of bread")
+            </Text>
+            <TextInput
+              style={descStyles.input}
+              placeholder="e.g. 2 rotis with dal, extra ghee on top…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              maxLength={300}
+              autoFocus
+            />
+            <View style={descStyles.row}>
+              <TouchableOpacity
+                style={descStyles.skipBtn}
+                onPress={() => processPhoto(pendingUri!, '')}
+              >
+                <Text style={descStyles.skipText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={descStyles.analyzeBtn}
+                onPress={() => processPhoto(pendingUri!, description)}
+              >
+                <Ionicons name="sparkles" size={16} color="#fff" />
+                <Text style={descStyles.analyzeText}>Analyze</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -459,4 +495,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff' },
+});
+
+const descStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#0d2b2d',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 14,
+    borderTopWidth: 1,
+    borderColor: 'rgba(77,208,216,0.2)',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(77,208,216,0.3)',
+    color: '#fff',
+    fontSize: 15,
+    padding: 14,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  skipBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+  },
+  skipText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  analyzeBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: '#4dd0d8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  analyzeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
 });
