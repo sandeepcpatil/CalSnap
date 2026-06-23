@@ -83,14 +83,16 @@ jobs:
       - name: Build AAB with Gradle
         working-directory: mobile/android
         run: |
+          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee ../../build.log
+          ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-build.log
         env:
           JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
       - name: Upload AAB artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: calsnap-android-v${{ github.run_number }}
@@ -102,5 +104,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log-v${{ github.run_number }}
-          path: mobile/build.log
+          path: /tmp/gradle-build.log
           retention-days: 3
