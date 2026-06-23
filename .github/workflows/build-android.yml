@@ -10,7 +10,12 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
 
     steps:
       - name: Checkout
@@ -31,6 +36,34 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Install Android SDK command-line tools + platforms
+        run: |
+          sudo mkdir -p $ANDROID_HOME/cmdline-tools
+          sudo chown -R $USER $ANDROID_HOME
+
+          # Download latest command-line tools
+          curl -sSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
+            -o cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d /tmp/cmdline-tools-extract
+
+          # sdkmanager expects tools at cmdline-tools/latest/
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest
+          mv /tmp/cmdline-tools-extract/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
+          rm cmdline-tools.zip
+
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+          # Accept all licenses and install required SDK components
+          yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses >/dev/null 2>&1 || true
+          sdkmanager --sdk_root=$ANDROID_HOME \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "build-tools;34.0.0"
+
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
       - name: Setup Expo & EAS CLI
         uses: expo/expo-github-action@v8
         with:
@@ -45,26 +78,37 @@ jobs:
         id: version
         run: |
           COUNT=$(git rev-list --count HEAD)
-          # Offset by 10 to stay above the manually uploaded builds (versionCode 1-7)
           VERSION_CODE=$((COUNT + 10))
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "Building with versionCode: $VERSION_CODE"
 
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
       - name: Build Android AAB (local)
         working-directory: mobile
-        run: eas build --platform android --profile production --local --non-interactive --output ./calsnap.aab
+        run: |
+          set -o pipefail
+          eas build --platform android --profile production --local \
+            --non-interactive --output ./calsnap.aab 2>&1 | tee eas-build.log
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
-          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
           EXPO_PUBLIC_VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
+
+      - name: Gradle stacktrace diagnostics (on failure)
+        if: failure()
+        working-directory: mobile
+        run: |
+          echo "=== EAS build log tail ==="
+          tail -100 eas-build.log || true
+          echo "=== Running Gradle directly for stacktrace ==="
+          if [ -f android/gradlew ]; then
+            cd android
+            chmod +x ./gradlew
+            ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -200 || true
+          else
+            echo "android/gradlew not found — EAS prebuild may have failed"
+          fi
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -72,3 +116,11 @@ jobs:
           name: calsnap-android-v${{ github.run_number }}
           path: mobile/calsnap.aab
           retention-days: 7
+
+      - name: Upload EAS build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-build-log-v${{ github.run_number }}
+          path: mobile/eas-build.log
+          retention-days: 3
