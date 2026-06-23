@@ -360,3 +360,254 @@ calsnap/
 7. **App Store / Play Store:** Configure `app.config.js` with proper bundle ID (`com.yourname.calsnap`), permissions for camera and photo library, and Google Sign-In configuration.
 
 Build the complete application with all features. Start with the database schema and backend API, then the mobile app screens, and finally the admin panel.
+
+---
+
+# PRODUCT ROADMAP
+*Based on competitive analysis vs HealthifyMe, MyFitnessPal, Cal AI and 7 others. Prioritized for Indian market.*
+
+---
+
+## ? SHIPPED (Already Built)
+
+- [x] Google OAuth sign-in
+- [x] Multi-step onboarding (name, body stats, activity, goal, calorie target)
+- [x] AI photo scan ? calorie + macro breakdown (Gemini 2.5 Flash)
+- [x] Optional food description hint for AI (solves hidden ingredient problem)
+- [x] Animated analyzing overlay during scan (cycling steps + pulsing ring)
+- [x] Dashboard with calorie ring, macro bars, meal sections
+- [x] Food log history screen
+- [x] Free tier scan gate (3 scans/day) enforced server-side
+- [x] Paywall modal with monthly (?149) and annual (?999) plans
+- [x] Razorpay subscription integration
+- [x] Supabase storage for food photos
+- [x] Admin panel with Google OAuth (Vercel deployed)
+- [x] Backend on Railway (Express + TypeScript)
+- [x] GitHub Actions Android build with auto-incrementing versionCode
+- [x] Scan result caching to avoid duplicate AI calls
+
+---
+
+## P1 — MUST BUILD (High impact, directly drives retention)
+
+### P1-1: Katori / Roti Portion Unit System
+**Why:** Every competitor uses grams. Indians cook and eat by katori, roti, piece, glass. This is the #1 logging friction.
+**What to build:**
+- Add portion unit selector on ScanResultScreen: grams / katori / piece / bowl / glass / roti / cup
+- Map units to gram equivalents (1 katori = 150g, 1 medium roti = 40g, 1 glass = 200ml)
+- Store preferred unit per user in profiles table
+- Show results in user's preferred unit
+- Onboarding step: photo of their actual katori to calibrate size (small/medium/large)
+**Files:** mobile/src/screens/Scan/ScanResultScreen.tsx, database/schema.sql, ackend/src/routes/analyze.ts
+**Effort:** Medium (3–4 days)
+**Retention impact:** Very High
+
+---
+
+### P1-2: Thali Mode — Scan Once, Log Everything
+**Why:** A thali has 8–12 items. Every app requires individual scanning. This is uniquely Indian and uniquely unsolved.
+**What to build:**
+- "Thali mode" toggle on ScanScreen (icon: thali plate)
+- Single photo ? AI identifies ALL visible items as a list
+- Shows editable breakdown: each item with name + calories, user can remove or adjust
+- One "Save all" tap logs everything
+- Update Gemini prompt to return array of items when thali mode is active
+**Gemini prompt addition:** "If the image contains multiple distinct food items on a plate/thali, return an array of items instead of a single object: [{ food_name, calories, ... }, ...]"
+**Files:** mobile/src/screens/Scan/ScanScreen.tsx, mobile/src/screens/Scan/ScanResultScreen.tsx, ackend/src/routes/analyze.ts
+**Effort:** Medium (3–5 days)
+**Retention impact:** High
+
+---
+
+### P1-3: Forgiveness Mode — Weekly Flex Days
+**Why:** Daily streak systems cause 80% of users to quit after missing one day. Weekly balance is nutritionally sound and psychologically forgiving.
+**What to build:**
+- Show weekly calorie view alongside daily view on Dashboard
+- 2 "Flex Days" per week — going up to 20% over daily goal does not count as "over"
+- Streak logic: calculated on weekly average, not daily compliance
+- Dashboard copy change: "You're 340 kcal under this week — Sunday biryani is earned ??"
+- Settings: let user toggle between daily and weekly view as default
+**Files:** mobile/src/screens/Dashboard/DashboardScreen.tsx, mobile/src/store/foodLogStore.ts, mobile/src/utils/nutrition.ts
+**Effort:** Low–Medium (2–3 days)
+**Retention impact:** Very High
+
+---
+
+### P1-4: Diet Identity System (Vegetarian / Jain / Eggetarian / etc.)
+**Why:** Indian food culture requires this. A Jain user must never see onion/garlic dishes. A vegetarian should not see chicken suggestions.
+**What to build:**
+- Add diet_type field to profiles: egetarian | eggetarian | non_vegetarian | vegan | jain
+- Add as step in onboarding (big tap icons, not a dropdown)
+- Filter AI suggestions and food database results by diet type
+- Pass diet_type in backend request so Gemini can be aware: "User is Jain — do not suggest or include onion, garlic, or meat"
+- Show diet badge on profile screen
+**Files:** mobile/src/screens/Onboarding/, database/schema.sql, ackend/src/routes/analyze.ts
+**Effort:** Low (1–2 days)
+**Retention impact:** High (trust + personalization)
+
+---
+
+### P1-5: Indian Food Quick-Add Database (Top 200 items)
+**Why:** AI scanning is great but users also eat the same things repeatedly. A quick-add database of the 200 most common Indian foods removes the need to photograph home-cooked staples.
+**What to build:**
+- Curated list of 200 Indian foods with accurate nutrition (idli, dosa, roti, rice, dal, sabzi, etc.)
+- Searchable quick-add on Dashboard (tap "+" ? search ? select ? done in 3 taps)
+- Include portion-aware entries: "Roti (1 medium)", "Idli (1 piece)", "Rice (1 katori)"
+- Include regional tags: South Indian / North Indian / Bengali / Gujarati
+- Store as JSON in app (no network call needed) + sync to backend for logging
+**Files:** New file mobile/src/data/indianFoods.ts, mobile/src/screens/Dashboard/DashboardScreen.tsx
+**Effort:** Medium (3–4 days data curation + 1 day UI)
+**Retention impact:** High
+
+---
+
+## P2 — SHOULD BUILD (Medium effort, meaningful differentiation)
+
+### P2-1: Chai Quick-Add
+**Why:** 3 chais/day × 80 calories = 240 invisible calories nobody logs. This is a memorable, shareable feature specific to India.
+**What to build:**
+- One-tap "Chai" floating button on Dashboard
+- Bottom sheet: milk level (little / normal / full) + sugar (0 / 1 / 2 spoons) + size (small / large)
+- Calculates calories: base 35 kcal + milk (15/30/45) + sugar (16/32 per spoon)
+- Saves as habit — remembers your preferences after first use
+- Optional: "Tea" / "Coffee" / "Chai" variants
+**Effort:** Low (1 day)
+**Retention impact:** Medium (but extremely memorable and shareable)
+
+---
+
+### P2-2: Homemade Recipe Builder with Ghee Awareness
+**Why:** "Dal tadka" without tracking the tadka (ghee + spices) misses 80–120 calories. Recipe builders exist in other apps but none ask about cooking fat.
+**What to build:**
+- Recipe screen: add ingredients from quick-add database or manual entry
+- Explicit "Cooking fat" step: ghee / oil / butter / none + quantity in teaspoons
+- Save recipe with custom name ("Maa's Rajma") ? becomes one-tap log item
+- Servings calculator: made 4 portions, log 1
+- Recipes section on Dashboard below meal log
+**Files:** New screen mobile/src/screens/Recipes/, database/schema.sql (add recipes table)
+**Effort:** Medium (4–5 days)
+**Retention impact:** High (family recipes = habitual logging)
+
+---
+
+### P2-3: Meal Timing Awareness
+**Why:** Indian working professionals eat late. App reminders at 6pm for dinner are useless. Breakfast reminders at 7am don't account for IF users.
+**What to build:**
+- Onboarding: "When do you usually eat?" — tap time slots per meal
+- Smart notification at user's actual meal times (not generic 8am/12pm/7pm)
+- IF mode: hide breakfast slot, show eating window timer on dashboard
+- Dashboard auto-selects correct meal type based on current time + user's schedule
+**Files:** mobile/src/screens/Onboarding/, mobile/src/screens/Dashboard/DashboardScreen.tsx
+**Effort:** Low–Medium (2 days)
+**Retention impact:** Medium
+
+---
+
+### P2-4: Weekly Progress View
+**Why:** Daily calorie view shows failure when users go over. Weekly view shows the real picture and is more forgiving and accurate nutritionally.
+**What to build:**
+- Weekly tab on Dashboard (alongside Today)
+- 7-bar chart showing daily intake vs goal, colored by under/over/flex
+- Weekly totals: avg calories, avg protein, best day, flex days used
+- "This week vs last week" comparison card
+**Files:** mobile/src/screens/Dashboard/DashboardScreen.tsx, mobile/src/components/WeeklyChart.tsx
+**Effort:** Low (1–2 days, WeeklyChart component exists)
+**Retention impact:** High
+
+---
+
+### P2-5: Scan Reveal Animation Polish
+**Why:** The post-scan result reveal is the signature moment of the app. Currently shows a static result. Making it feel like a reward drives sharing and word of mouth.
+**What to build:**
+- Numbers count up from 0 over 0.8 seconds when result appears
+- Food name fades in first, then calories, then macros in sequence
+- Subtle haptic pulse on each number reveal
+- Optional: share button that screenshots the result card formatted for Instagram Stories
+**Files:** mobile/src/screens/Scan/ScanResultScreen.tsx
+**Effort:** Low (1 day)
+**Retention impact:** Medium (high virality potential)
+
+---
+
+### P2-6: Restaurant Chain Presets
+**Why:** Indian users eat from the same chains repeatedly. Saravana Bhavan, MTR, Haldiram's, McDonald's India, Domino's India, Subway India menus should be one tap.
+**What to build:**
+- Restaurant tab in quick-add: search by chain name
+- Curated menus for top 15 Indian chains with accurate nutrition
+- "Ordered from Swiggy/Zomato?" — planned future integration
+**Files:** New data file mobile/src/data/restaurants.ts
+**Effort:** Medium (3 days data + 1 day UI)
+**Retention impact:** Medium
+
+---
+
+### P2-7: Onboarding Redesign (Competitive Differentiation)
+**Why:** Current onboarding collects data before showing value. The wow moment is buried. Per competitive analysis, the first scan should happen within 60 seconds.
+**What to build:**
+- Screen 1: Full-screen hero with thali?calories animation. CTA: "Try it now — no account needed"
+- Screen 2: Instant camera ? first scan ? result (before account creation)
+- Screen 3: Diet identity (Vegetarian / Eggetarian / Non-veg / Vegan / Jain) — big tap icons
+- Screen 4: Meal pattern (3 meals / 4 meals / IF / skip lunch)
+- Screen 5: One honest question — "What's your goal?" (not weight-shaming framing)
+- Screen 6: The Flex Days promise — "We know you'll miss a day. That's fine."
+- Screen 7: Name + optional weight + notification time
+- Move paywall to Day 3 (when free scans run out), not onboarding
+**Files:** mobile/src/screens/Onboarding/, mobile/src/navigation/OnboardingNavigator.tsx
+**Effort:** High (5–7 days full redesign)
+**Retention impact:** Very High (30-day retention most sensitive to onboarding)
+
+---
+
+## P3 — NICE TO HAVE (Build after P1+P2 are done)
+
+### P3-1: Barcode Scanner for Packaged Foods
+- Scan packaged food barcode ? auto-fill nutrition from Open Food Facts API
+- Useful for urban users buying packaged snacks, protein bars, biscuits
+- **Effort:** Medium | **Impact:** Medium
+
+### P3-2: Festival / Occasion Mode
+- Diwali / Eid / Onam / Christmas presets with common items
+- "Festival Day" toggle — relaxed calorie goals, no streak penalty
+- **Effort:** Low | **Impact:** Medium (memorable, seasonal)
+
+### P3-3: Micronutrient Awareness (Lite)
+- Show iron, calcium, B12 only (most common Indian dietary gaps)
+- Simple traffic light (good/low/very low) not a full Cronometer-style breakdown
+- Especially relevant for vegetarians (B12, iron) and women (iron, calcium)
+- **Effort:** Medium | **Impact:** Medium
+
+### P3-4: Share Meal Card
+- Post-save: shareable card with food photo + calories formatted for Instagram / WhatsApp
+- Auto-generates: "Just logged my lunch — 620 kcal ?? Tracked with CalSnap"
+- **Effort:** Low | **Impact:** Medium (organic growth)
+
+### P3-5: Apple Health / Google Fit Sync
+- Export daily calorie + macro data to platform health apps
+- Required for credibility with fitness-focused users
+- **Effort:** Medium | **Impact:** Medium
+
+---
+
+## ? ANTI-FEATURES — Deliberately NOT building
+
+These are features all competitors have that add complexity without retention value for Indian users:
+
+| Feature | Why skip |
+|---|---|
+| Step counter / activity tracking | Indians don't use wearables at scale. "Eat back calories" model is nutritionally wrong |
+| Water intake tracker | Set up day 1, ignored day 3. Zero retention impact |
+| Body measurements (waist, hips) | High friction, low frequency, makes casual users feel like clinical subjects |
+| Social feed / public food posts | Food shaming risk, privacy concerns, only 2% of users engage |
+| Barcode scanner (V1) | 70% of Indian meals are home-cooked. Solves 30% of meals. P3 only |
+| Net calories (in minus out) | Exercise calorie data is inaccurate. Creates "earned a samosa" mental model |
+| Meal plan library | Nobody follows prescribed plans after week 1. Marketing feature, not retention feature |
+| Vitamin / supplement logging | Cronometer's territory. Your user is not tracking B12 capsules |
+
+---
+
+## POSITIONING STATEMENT (Use this everywhere)
+
+> "For the Indian professional who knows MyFitnessPal is useless for their diet but won't pay ?3,000/month for HealthifyMe, CalSnap is the AI calorie tracker that costs less than one Swiggy delivery per month and actually knows the difference between a masala dosa and a plain dosa."
+
+---
+*Last updated: 2026-06-23*
