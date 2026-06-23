@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Modal, Alert, TouchableOpacity } from 'react-native';
-import { Text, Button } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { useAuthStore } from '../../store/authStore';
-import { supabase } from '../../services/supabase';
-import { createSubscriptionOrder } from '../../services/api';
-import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
-import { useTheme } from '../../hooks/useTheme';
-import type { ColorTheme } from '../../theme/colors';
+import React, { useState } from "react";
+import { View, StyleSheet, Modal, Alert, TouchableOpacity } from "react-native";
+import { Text, Button } from "react-native-paper";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useAuthStore } from "../../store/authStore";
+import { supabase } from "../../services/supabase";
+import { createSubscriptionOrder } from "../../services/api";
+import { useSubscriptionGate } from "../../hooks/useSubscriptionGate";
+import { useTheme } from "../../hooks/useTheme";
+import type { ColorTheme } from "../../theme/colors";
 
 interface Props {
   visible: boolean;
@@ -16,28 +16,28 @@ interface Props {
 }
 
 const FEATURES = [
-  'Unlimited food scans',
-  'Full history & calendar',
-  '7-day trend charts',
-  'Priority AI analysis',
+  "Unlimited food scans",
+  "Full history & calendar",
+  "7-day trend charts",
+  "Priority AI analysis",
 ];
 
 const PLANS = [
   {
-    id: 'monthly' as const,
-    label: 'Monthly',
-    price: '₹149',
-    period: '/month',
+    id: "monthly" as const,
+    label: "Monthly",
+    price: "₹149",
+    period: "/month",
     savings: null,
     badge: null,
   },
   {
-    id: 'annual' as const,
-    label: 'Annual',
-    price: '₹999',
-    period: '/year',
-    savings: 'Save ₹789 (44% off)',
-    badge: '🔥 Best Value',
+    id: "annual" as const,
+    label: "Annual",
+    price: "₹999",
+    period: "/year",
+    savings: "Save ₹789 (44% off)",
+    badge: "🔥 Best Value",
   },
 ];
 
@@ -45,7 +45,9 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   const { session, fetchProfile } = useAuthStore();
   const { scansUsedToday, scansRemaining } = useSubscriptionGate();
   const { theme } = useTheme();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
+  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual">(
+    "annual",
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const styles = makeStyles(theme);
@@ -54,25 +56,34 @@ export function PaywallModal({ visible, onDismiss }: Props) {
     setIsLoading(true);
     try {
       // Always refresh session before subscription — token may have expired
-      const { data: { session: freshSession }, error: refreshError } = await supabase.auth.refreshSession();
+      const {
+        data: { session: freshSession },
+        error: refreshError,
+      } = await supabase.auth.refreshSession();
       if (refreshError || !freshSession?.access_token) {
-        Alert.alert('Session expired', 'Please sign out and sign back in, then try again.');
+        Alert.alert(
+          "Session expired",
+          "Please sign out and sign back in, then try again.",
+        );
         return;
       }
 
-      const order = await createSubscriptionOrder(selectedPlan, freshSession.access_token);
+      const order = await createSubscriptionOrder(
+        selectedPlan,
+        freshSession.access_token,
+      );
 
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const RazorpayCheckout = require('react-native-razorpay').default;
+      const RazorpayCheckout = require("react-native-razorpay").default;
 
       const options = {
         description: `CalSnap Pro - ${selectedPlan}`,
-        name: 'CalSnap',
+        name: "CalSnap",
         key: order.razorpayKeyId,
         subscription_id: order.subscriptionId,
-        currency: 'INR',
+        currency: "INR",
         prefill: {
-          email: freshSession.user.email ?? '',,
+          email: freshSession.user.email ?? "",
         },
         theme: { color: theme.primary },
       };
@@ -82,11 +93,14 @@ export function PaywallModal({ visible, onDismiss }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await fetchProfile();
       onDismiss();
-      Alert.alert('Welcome to Pro! 🎉', 'Your CalSnap Pro subscription is now active. Scan unlimited food!');
+      Alert.alert(
+        "Welcome to Pro! 🎉",
+        "Your CalSnap Pro subscription is now active. Scan unlimited food!",
+      );
     } catch (err: any) {
       // User closed Razorpay checkout — not an error
-      if (err?.code !== 'PAYMENT_CANCELLED') {
-        Alert.alert('Payment failed', err.message ?? 'Please try again.');
+      if (err?.code !== "PAYMENT_CANCELLED") {
+        Alert.alert("Payment failed", err.message ?? "Please try again.");
       }
     } finally {
       setIsLoading(false);
@@ -94,22 +108,36 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onDismiss}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onDismiss}
+    >
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           {/* Close button */}
           <View style={styles.closeRow}>
-            <Button mode="text" onPress={onDismiss} textColor={theme.textSecondary} compact>✕</Button>
+            <Button
+              mode="text"
+              onPress={onDismiss}
+              textColor={theme.textSecondary}
+              compact
+            >
+              ✕
+            </Button>
           </View>
 
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerEmoji}>⭐</Text>
-            <Text variant="headlineSmall" style={styles.title}>Upgrade to CalSnap Pro</Text>
+            <Text variant="headlineSmall" style={styles.title}>
+              Upgrade to CalSnap Pro
+            </Text>
             <Text variant="bodyMedium" style={styles.subtitle}>
               {scansRemaining === 0
                 ? `You've used all ${scansUsedToday} free scans today`
-                : `${scansRemaining} free scan${scansRemaining !== 1 ? 's' : ''} left today`}
+                : `${scansRemaining} free scan${scansRemaining !== 1 ? "s" : ""} left today`}
             </Text>
           </View>
 
@@ -117,8 +145,14 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           <View style={styles.features}>
             {FEATURES.map((f) => (
               <View key={f} style={styles.featureRow}>
-                <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
-                <Text variant="bodyMedium" style={styles.featureText}>{f}</Text>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={theme.primary}
+                />
+                <Text variant="bodyMedium" style={styles.featureText}>
+                  {f}
+                </Text>
               </View>
             ))}
           </View>
@@ -130,23 +164,51 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                 key={plan.id}
                 activeOpacity={0.8}
                 onPress={() => setSelectedPlan(plan.id)}
-                style={[styles.planCard, selectedPlan === plan.id && styles.planCardSelected]}
+                style={[
+                  styles.planCard,
+                  selectedPlan === plan.id && styles.planCardSelected,
+                ]}
               >
                 {plan.badge && (
                   <View style={styles.planBadge}>
-                    <Text variant="labelSmall" style={styles.planBadgeText}>{plan.badge}</Text>
+                    <Text variant="labelSmall" style={styles.planBadgeText}>
+                      {plan.badge}
+                    </Text>
                   </View>
                 )}
                 <View style={styles.planContent}>
-                  <Text variant="labelLarge" style={[styles.planLabel, selectedPlan === plan.id && styles.planLabelSelected]}>
+                  <Text
+                    variant="labelLarge"
+                    style={[
+                      styles.planLabel,
+                      selectedPlan === plan.id && styles.planLabelSelected,
+                    ]}
+                  >
                     {plan.label}
                   </Text>
-                  <Text style={[styles.planPrice, selectedPlan === plan.id && styles.planPriceSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  <Text
+                    style={[
+                      styles.planPrice,
+                      selectedPlan === plan.id && styles.planPriceSelected,
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
                     {plan.price}
                   </Text>
-                  <Text style={[styles.planPeriod, selectedPlan === plan.id && { color: theme.primary }]}>{plan.period}</Text>
+                  <Text
+                    style={[
+                      styles.planPeriod,
+                      selectedPlan === plan.id && { color: theme.primary },
+                    ]}
+                  >
+                    {plan.period}
+                  </Text>
                   {plan.savings && (
-                    <Text variant="labelSmall" style={styles.planSavings}>{plan.savings}</Text>
+                    <Text variant="labelSmall" style={styles.planSavings}>
+                      {plan.savings}
+                    </Text>
                   )}
                 </View>
               </TouchableOpacity>
@@ -163,7 +225,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             contentStyle={styles.ctaContent}
             buttonColor={theme.primary}
           >
-            Continue with {selectedPlan === 'monthly' ? 'Monthly' : 'Annual'}
+            Continue with {selectedPlan === "monthly" ? "Monthly" : "Annual"}
           </Button>
 
           <Text variant="bodySmall" style={styles.legal}>
@@ -179,8 +241,8 @@ function makeStyles(theme: ColorTheme) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'flex-end',
+      backgroundColor: "rgba(0,0,0,0.5)",
+      justifyContent: "flex-end",
     },
     sheet: {
       backgroundColor: theme.surface,
@@ -190,15 +252,15 @@ function makeStyles(theme: ColorTheme) {
       paddingBottom: 40,
       gap: 16,
     },
-    closeRow: { alignItems: 'flex-end', paddingTop: 12 },
-    header: { alignItems: 'center', gap: 6 },
+    closeRow: { alignItems: "flex-end", paddingTop: 12 },
+    header: { alignItems: "center", gap: 6 },
     headerEmoji: { fontSize: 40 },
-    title: { color: theme.textPrimary, fontWeight: '700', textAlign: 'center' },
-    subtitle: { color: theme.textSecondary, textAlign: 'center' },
+    title: { color: theme.textPrimary, fontWeight: "700", textAlign: "center" },
+    subtitle: { color: theme.textSecondary, textAlign: "center" },
     features: { gap: 10 },
-    featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    featureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
     featureText: { color: theme.textPrimary },
-    plans: { flexDirection: 'row', gap: 12 },
+    plans: { flexDirection: "row", gap: 12 },
     planCard: {
       flex: 1,
       borderRadius: 16,
@@ -206,28 +268,46 @@ function makeStyles(theme: ColorTheme) {
       borderColor: theme.borderColor,
       paddingVertical: 18,
       paddingHorizontal: 8,
-      alignItems: 'center',
-      position: 'relative',
+      alignItems: "center",
+      position: "relative",
     },
-    planCardSelected: { borderColor: theme.primary, backgroundColor: theme.primaryTint },
+    planCardSelected: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primaryTint,
+    },
     planBadge: {
-      position: 'absolute',
+      position: "absolute",
       top: -10,
       backgroundColor: theme.primary,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 10,
     },
-    planBadgeText: { color: theme.surface, fontWeight: '700' },
-    planContent: { alignItems: 'center', gap: 4, width: '100%' },
-    planLabel: { color: theme.textSecondary, fontWeight: '600', textAlign: 'center' },
+    planBadgeText: { color: theme.surface, fontWeight: "700" },
+    planContent: { alignItems: "center", gap: 4, width: "100%" },
+    planLabel: {
+      color: theme.textSecondary,
+      fontWeight: "600",
+      textAlign: "center",
+    },
     planLabelSelected: { color: theme.primary },
-    planPrice: { color: theme.textPrimary, fontWeight: '800', fontSize: 26, textAlign: 'center', width: '100%' },
+    planPrice: {
+      color: theme.textPrimary,
+      fontWeight: "800",
+      fontSize: 26,
+      textAlign: "center",
+      width: "100%",
+    },
     planPriceSelected: { color: theme.primary },
-    planPeriod: { color: theme.textSecondary, fontWeight: '500', fontSize: 13, textAlign: 'center' },
-    planSavings: { color: '#4caf50', fontWeight: '700' },
+    planPeriod: {
+      color: theme.textSecondary,
+      fontWeight: "500",
+      fontSize: 13,
+      textAlign: "center",
+    },
+    planSavings: { color: "#4caf50", fontWeight: "700" },
     ctaButton: { borderRadius: 14 },
     ctaContent: { height: 52 },
-    legal: { color: theme.textSecondary, textAlign: 'center' },
+    legal: { color: theme.textSecondary, textAlign: "center" },
   });
 }
