@@ -10,7 +10,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -31,29 +31,27 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android SDK components
+      - name: Accept Android SDK licenses & install SDK 35
         run: |
-          # ubuntu-latest already has cmdline-tools/latest — no download needed
-          # Accept all licenses, then install the SDK 35 + build-tools we need
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 | tail -5 || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 | tail -3 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-35" \
             "build-tools;35.0.0"
-          echo "=== Installed SDK components ==="
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed 2>&1 \
-            | grep -E "build-tools|platforms" || true
 
-      - name: Setup Expo & EAS CLI
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Generate CI upload keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore /tmp/calsnap-upload.keystore \
+            -alias calsnap-upload \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass calsnap_ci -keypass calsnap_ci \
+            -dname "CN=CalSnap CI, O=Sanverse, C=IN" -noprompt
 
       - name: Install dependencies
         working-directory: mobile
         run: npm ci
 
-      - name: Set versionCode from git commit count
+      - name: Set versionCode
         id: version
         run: |
           COUNT=$(git rev-list --count HEAD)
@@ -61,59 +59,48 @@ jobs:
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "Building with versionCode: $VERSION_CODE"
 
-      - name: Build Android AAB (local)
+      - name: Expo Prebuild
         working-directory: mobile
-        run: |
-          set -o pipefail
-          eas build --platform android --profile production --local \
-            --non-interactive --output ./calsnap.aab 2>&1 | tee eas-build.log
+        run: npx expo prebuild --platform android --non-interactive --clean
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
           EXPO_PUBLIC_VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
+
+      - name: Configure Gradle signing
+        working-directory: mobile/android
+        run: |
+          cp /tmp/calsnap-upload.keystore app/calsnap-upload.keystore
+          cat >> gradle.properties << 'EOF'
+          MYAPP_UPLOAD_STORE_FILE=calsnap-upload.keystore
+          MYAPP_UPLOAD_KEY_ALIAS=calsnap-upload
+          MYAPP_UPLOAD_STORE_PASSWORD=calsnap_ci
+          MYAPP_UPLOAD_KEY_PASSWORD=calsnap_ci
+          EOF
+
+      - name: Build AAB with Gradle
+        working-directory: mobile/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee ../../build.log
+        env:
+          JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
-
-      - name: Gradle diagnostics (on failure)
-        if: failure()
-        working-directory: mobile
-        run: |
-          echo "=== Last 200 lines of EAS log ==="
-          tail -200 eas-build.log 2>/dev/null || echo "No EAS log found"
-
-          echo ""
-          echo "=== SDK installed ==="
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed 2>&1 | head -30 || true
-
-          echo ""
-          if [ -d android ]; then
-            echo "=== Running Gradle with --stacktrace ==="
-            cd android && chmod +x ./gradlew
-            JAVA_TOOL_OPTIONS="-Xmx4096m" ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -300 || true
-          else
-            echo "android/ not found — prebuild likely failed. Trying expo prebuild..."
-            ANDROID_HOME=/usr/local/lib/android/sdk npx expo prebuild --platform android --non-interactive 2>&1 | tail -80 || true
-            if [ -d android ]; then
-              echo "=== Prebuild succeeded — running Gradle ==="
-              cd android && chmod +x ./gradlew
-              JAVA_TOOL_OPTIONS="-Xmx4096m" ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -300 || true
-            fi
-          fi
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: calsnap-android-v${{ github.run_number }}
-          path: mobile/calsnap.aab
+          path: mobile/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 7
 
-      - name: Upload EAS build log (on failure)
+      - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: eas-build-log-v${{ github.run_number }}
-          path: mobile/eas-build.log
+          name: build-log-v${{ github.run_number }}
+          path: mobile/build.log
           retention-days: 3
