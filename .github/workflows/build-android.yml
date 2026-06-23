@@ -12,11 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,33 +31,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android SDK command-line tools + platforms
+      - name: Install Android SDK components
         run: |
-          sudo mkdir -p $ANDROID_HOME/cmdline-tools
-          sudo chown -R $USER $ANDROID_HOME
-
-          # Download latest command-line tools
-          curl -sSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
-            -o cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d /tmp/cmdline-tools-extract
-
-          # sdkmanager expects tools at cmdline-tools/latest/
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          mv /tmp/cmdline-tools-extract/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-          rm cmdline-tools.zip
-
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-
-          # Accept all licenses and install required SDK components
-          yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses >/dev/null 2>&1 || true
-          sdkmanager --sdk_root=$ANDROID_HOME \
-            "platform-tools" \
+          # ubuntu-latest already has cmdline-tools/latest — no download needed
+          # Accept all licenses, then install the SDK 35 + build-tools we need
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 | tail -5 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "build-tools;34.0.0"
-
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+            "build-tools;35.0.0"
+          echo "=== Installed SDK components ==="
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed 2>&1 \
+            | grep -E "build-tools|platforms" || true
 
       - name: Setup Expo & EAS CLI
         uses: expo/expo-github-action@v8
@@ -94,20 +73,34 @@ jobs:
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
           EXPO_PUBLIC_VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
 
-      - name: Gradle stacktrace diagnostics (on failure)
+      - name: Gradle diagnostics (on failure)
         if: failure()
         working-directory: mobile
         run: |
-          echo "=== EAS build log tail ==="
-          tail -100 eas-build.log || true
-          echo "=== Running Gradle directly for stacktrace ==="
-          if [ -f android/gradlew ]; then
-            cd android
-            chmod +x ./gradlew
-            ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -200 || true
+          echo "=== Last 200 lines of EAS log ==="
+          tail -200 eas-build.log 2>/dev/null || echo "No EAS log found"
+
+          echo ""
+          echo "=== SDK installed ==="
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed 2>&1 | head -30 || true
+
+          echo ""
+          if [ -d android ]; then
+            echo "=== Running Gradle with --stacktrace ==="
+            cd android && chmod +x ./gradlew
+            JAVA_TOOL_OPTIONS="-Xmx4096m" ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -300 || true
           else
-            echo "android/gradlew not found — EAS prebuild may have failed"
+            echo "android/ not found — prebuild likely failed. Trying expo prebuild..."
+            ANDROID_HOME=/usr/local/lib/android/sdk npx expo prebuild --platform android --non-interactive 2>&1 | tail -80 || true
+            if [ -d android ]; then
+              echo "=== Prebuild succeeded — running Gradle ==="
+              cd android && chmod +x ./gradlew
+              JAVA_TOOL_OPTIONS="-Xmx4096m" ./gradlew bundleRelease --stacktrace --no-daemon 2>&1 | tail -300 || true
+            fi
           fi
 
       - name: Upload AAB artifact
