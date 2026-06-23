@@ -4,6 +4,7 @@ import { Text, Button } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
+import { supabase } from '../../services/supabase';
 import { createSubscriptionOrder } from '../../services/api';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { useTheme } from '../../hooks/useTheme';
@@ -50,11 +51,16 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   const styles = makeStyles(theme);
 
   const handleSubscribe = async () => {
-    if (!session?.access_token) return;
     setIsLoading(true);
-
     try {
-      const order = await createSubscriptionOrder(selectedPlan, session.access_token);
+      // Always refresh session before subscription — token may have expired
+      const { data: { session: freshSession }, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !freshSession?.access_token) {
+        Alert.alert('Session expired', 'Please sign out and sign back in, then try again.');
+        return;
+      }
+
+      const order = await createSubscriptionOrder(selectedPlan, freshSession.access_token);
 
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const RazorpayCheckout = require('react-native-razorpay').default;
@@ -66,7 +72,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
         subscription_id: order.subscriptionId,
         currency: 'INR',
         prefill: {
-          email: session.user.email ?? '',
+          email: freshSession.user.email ?? '',,
         },
         theme: { color: theme.primary },
       };

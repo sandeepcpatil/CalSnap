@@ -62,16 +62,18 @@ app.use((_req: Request, res: Response) => {
 // Never leak stack traces in production.
 
 const errorHandler: ErrorRequestHandler = (
-  err: Error & { statusCode?: number },
+  err: unknown,
   _req: Request,
   res: Response,
   _next: NextFunction,
 ) => {
-  console.error('[Error]', err.message, err.stack);
-  const statusCode = err.statusCode ?? 500;
+  const message = err instanceof Error ? err.message : JSON.stringify(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  console.error('[Error]', message, stack);
+  const statusCode = (err as any)?.statusCode ?? 500;
   res.status(statusCode).json({
     error:
-      process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+      process.env.NODE_ENV === 'production' ? 'Internal server error' : message,
   });
 };
 
