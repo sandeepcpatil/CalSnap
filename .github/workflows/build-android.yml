@@ -59,12 +59,18 @@ jobs:
         working-directory: mobile
         run: |
           PLUGIN="node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
-          if grep -q "from components.release" "$PLUGIN"; then
-            sed -i 's/from components\.release/def _comp = components.findByName("release"); if (_comp != null) { from _comp }/' "$PLUGIN"
-            echo "Patched ExpoModulesCorePlugin.gradle: replaced components.release with null-safe findByName"
-          else
-            echo "ExpoModulesCorePlugin.gradle already patched or pattern not found"
-          fi
+          python3 - "$PLUGIN" << 'PYEOF'
+          import sys, pathlib
+          f = pathlib.Path(sys.argv[1])
+          old = "from components.release"
+          new = 'def _comp = components.findByName("release"); if (_comp != null) { from _comp }'
+          content = f.read_text()
+          if old in content:
+              f.write_text(content.replace(old, new))
+              print(f"Patched {f}: replaced components.release with null-safe findByName")
+          else:
+              print(f"{f}: pattern not found, already patched or version mismatch")
+          PYEOF
 
       - name: Set versionCode
         id: version
