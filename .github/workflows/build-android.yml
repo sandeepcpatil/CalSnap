@@ -81,12 +81,10 @@ jobs:
           # Pin NDK path explicitly — three ways so AGP definitely finds it
           echo "ndk.dir=$ANDROID_NDK_HOME" >> local.properties
 
-          cat >> gradle.properties << 'EOF'
-MYAPP_UPLOAD_STORE_FILE=calsnap-upload.keystore
-MYAPP_UPLOAD_KEY_ALIAS=calsnap-upload
-MYAPP_UPLOAD_STORE_PASSWORD=calsnap_ci
-MYAPP_UPLOAD_KEY_PASSWORD=calsnap_ci
-EOF
+          echo "MYAPP_UPLOAD_STORE_FILE=calsnap-upload.keystore" >> gradle.properties
+          echo "MYAPP_UPLOAD_KEY_ALIAS=calsnap-upload" >> gradle.properties
+          echo "MYAPP_UPLOAD_STORE_PASSWORD=calsnap_ci" >> gradle.properties
+          echo "MYAPP_UPLOAD_KEY_PASSWORD=calsnap_ci" >> gradle.properties
 
       - name: Build AAB with Gradle
         working-directory: mobile/android
