@@ -45,6 +45,7 @@ module.exports = {
       {
         android: {
           targetSdkVersion: 35,
+          ndkVersion: '26.1.10909125',
         },
       },
     ],
