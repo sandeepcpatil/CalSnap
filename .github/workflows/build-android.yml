@@ -31,14 +31,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept Android SDK licenses & install SDK 35 + NDK
+      - name: Accept Android SDK licenses & install SDK 35
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 | tail -3 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;26.1.10909125"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+            "build-tools;35.0.0"
+          # Use the NDK already on the runner (26.3.11579264 is pre-installed)
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
+          echo "NDK location: $ANDROID_NDK_ROOT"
+          ls "$ANDROID_NDK_ROOT" | head -5
 
       - name: Generate CI upload keystore
         run: |
@@ -71,16 +73,20 @@ jobs:
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
           EXPO_PUBLIC_VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
 
-      - name: Configure Gradle signing
+      - name: Configure Gradle signing & NDK path
         working-directory: mobile/android
         run: |
           cp /tmp/calsnap-upload.keystore app/calsnap-upload.keystore
+
+          # Pin NDK path explicitly — three ways so AGP definitely finds it
+          echo "ndk.dir=$ANDROID_NDK_HOME" >> local.properties
+
           cat >> gradle.properties << 'EOF'
-          MYAPP_UPLOAD_STORE_FILE=calsnap-upload.keystore
-          MYAPP_UPLOAD_KEY_ALIAS=calsnap-upload
-          MYAPP_UPLOAD_STORE_PASSWORD=calsnap_ci
-          MYAPP_UPLOAD_KEY_PASSWORD=calsnap_ci
-          EOF
+MYAPP_UPLOAD_STORE_FILE=calsnap-upload.keystore
+MYAPP_UPLOAD_KEY_ALIAS=calsnap-upload
+MYAPP_UPLOAD_STORE_PASSWORD=calsnap_ci
+MYAPP_UPLOAD_KEY_PASSWORD=calsnap_ci
+EOF
 
       - name: Build AAB with Gradle
         working-directory: mobile/android
@@ -92,6 +98,7 @@ jobs:
           JAVA_TOOL_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
       - name: Upload AAB artifact
         if: success()
