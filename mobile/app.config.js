@@ -35,6 +35,7 @@ module.exports = {
     permissions: [
       'CAMERA',
     ],
+    newArchEnabled: false,
   },
   web: {
     favicon: './assets/favicon.png',
@@ -45,7 +46,10 @@ module.exports = {
       {
         android: {
           targetSdkVersion: 35,
+          compileSdkVersion: 35,
+          minSdkVersion: 24,
           ndkVersion: '26.3.11579264',
+          kotlinVersion: '1.9.25',
         },
       },
     ],
