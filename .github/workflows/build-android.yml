@@ -39,6 +39,21 @@ jobs:
         working-directory: mobile
         run: npm ci
 
+      - name: Patch expo-modules-core for AGP 8.3+ compatibility
+        working-directory: mobile
+        run: |
+          PLUGIN="node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
+          if [ -f "$PLUGIN" ]; then
+            # AGP 8.3+ removed project.android.finalizeDsl — replace with androidComponents
+            sed -i 's/project\.android\.finalizeDsl/project.androidComponents.finalizeDsl/g' "$PLUGIN"
+            # AGP 8.3+ renamed applicationIdSuffix accessor
+            sed -i 's/\.applicationIdSuffix\.get()/.applicationIdSuffix.orNull ?: ""/g' "$PLUGIN"
+            echo "Patched: $PLUGIN"
+            grep -n "finalizeDsl\|applicationIdSuffix" "$PLUGIN" || echo "No remaining incompatible lines found"
+          else
+            echo "Plugin file not found, skipping patch"
+          fi
+
       - name: Build Android AAB (local)
         working-directory: mobile
         run: eas build --platform android --profile production --local --non-interactive --output ./calsnap.aab
