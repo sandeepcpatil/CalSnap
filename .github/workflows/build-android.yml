@@ -54,12 +54,16 @@ jobs:
             echo "Plugin file not found, skipping patch"
           fi
 
+      - name: Calculate versionCode (run_number - 22, so run 26 = versionCode 4)
+        id: vc
+        run: echo "VERSION_CODE=$(( ${{ github.run_number }} - 22 ))" >> $GITHUB_OUTPUT
+
       - name: Build Android AAB (local)
         working-directory: mobile
         run: eas build --platform android --profile production --local --non-interactive --output ./calsnap.aab
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          EXPO_PUBLIC_VERSION_CODE: ${{ github.run_number }}
+          EXPO_PUBLIC_VERSION_CODE: ${{ steps.vc.outputs.VERSION_CODE }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
