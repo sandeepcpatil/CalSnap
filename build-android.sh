@@ -39,8 +39,12 @@ if [[ $MISSING -eq 1 ]]; then
   exit 1
 fi
 
-# Read current versionCode from app.config.js and increment
-CURRENT_VERSION=$(grep -E '^\s+versionCode: [0-9]+,' "$MOBILE/app.config.js" | grep -oE '[0-9]+')
+# Read fallback versionCode from the ternary in app.config.js and increment
+CURRENT_VERSION=$(grep 'versionCode:' "$MOBILE/app.config.js" | grep -oE '\) : [0-9]+' | grep -oE '[0-9]+')
+if [[ -z "$CURRENT_VERSION" ]]; then
+  echo "ERROR: Could not parse versionCode from app.config.js"
+  exit 1
+fi
 NEXT_VERSION=$((CURRENT_VERSION + 1))
 export EXPO_PUBLIC_VERSION_CODE=$NEXT_VERSION
 
@@ -49,8 +53,8 @@ echo "Building Android AAB (local)..."
 cd "$MOBILE"
 
 if eas build --platform android --profile production --local --non-interactive --output ./calsnap.aab; then
-  # Build succeeded — update versionCode in app.config.js
-  sed -i '' "s/^\(\s*\)versionCode: $CURRENT_VERSION,/\1versionCode: $NEXT_VERSION,/" "$MOBILE/app.config.js"
+  # Build succeeded — bump the fallback versionCode in the ternary expression
+  sed -i '' "s/\(versionCode:.*) : \)$CURRENT_VERSION,/\1$NEXT_VERSION,/" "$MOBILE/app.config.js"
   echo ""
   echo "Build complete: $MOBILE/calsnap.aab"
   echo "versionCode bumped to $NEXT_VERSION in app.config.js"

@@ -19,7 +19,7 @@ module.exports = {
   assetBundlePatterns: ['**/*'],
   ios: {
     supportsTablet: false,
-    bundleIdentifier: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
+    bundleIdentifier: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
     infoPlist: {
       NSCameraUsageDescription: 'CalSnap needs camera access to scan your food.',
       NSPhotoLibraryUsageDescription: 'CalSnap needs photo library access to analyze food photos.',
@@ -30,12 +30,12 @@ module.exports = {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ab3500',
     },
-    package: IS_DEV ? 'com.sanverse.calsnap.dev' : 'com.sanverse.calsnap',
-    // versionCode: process.env.EXPO_PUBLIC_VERSION_CODE ? parseInt(process.env.EXPO_PUBLIC_VERSION_CODE, 10) : 7,
-    versionCode: 24,
+    package: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
+    versionCode: process.env.EXPO_PUBLIC_VERSION_CODE ? parseInt(process.env.EXPO_PUBLIC_VERSION_CODE, 10) : 3,
     permissions: [
       'CAMERA',
     ],
+    newArchEnabled: false,
   },
   web: {
     favicon: './assets/favicon.png',
@@ -46,7 +46,10 @@ module.exports = {
       {
         android: {
           targetSdkVersion: 35,
+          compileSdkVersion: 35,
+          minSdkVersion: 24,
           ndkVersion: '26.3.11579264',
+          kotlinVersion: '1.9.25',
         },
       },
     ],
