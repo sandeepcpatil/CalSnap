@@ -51,10 +51,10 @@ export function calculateGoals(params: {
 
 export function getMealTypeFromTime(): 'breakfast' | 'lunch' | 'dinner' | 'snack' {
   const hour = new Date().getHours();
-  if (hour >= 5 && hour < 11) return 'breakfast';
-  if (hour >= 11 && hour < 15) return 'lunch';
-  if (hour >= 15 && hour < 19) return 'dinner';
-  return 'snack';
+  if (hour >= 5  && hour < 11) return 'breakfast'; // 5 AM – 10:59 AM
+  if (hour >= 11 && hour < 15) return 'lunch';     // 11 AM – 2:59 PM
+  if (hour >= 18 && hour < 23) return 'dinner';    // 6 PM – 10:59 PM
+  return 'snack';                                  // all other hours → snack
 }
 
 export function formatCalories(kcal: number): string {

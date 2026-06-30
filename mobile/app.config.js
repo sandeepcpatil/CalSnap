@@ -23,6 +23,7 @@ module.exports = {
     infoPlist: {
       NSCameraUsageDescription: 'CalSnap needs camera access to scan your food.',
       NSPhotoLibraryUsageDescription: 'CalSnap needs photo library access to analyze food photos.',
+      NSMotionUsageDescription: 'CalSnap tracks your daily steps to show activity in your health dashboard.',
     },
   },
   android: {
@@ -34,6 +35,9 @@ module.exports = {
     versionCode: process.env.EXPO_PUBLIC_VERSION_CODE ? parseInt(process.env.EXPO_PUBLIC_VERSION_CODE, 10) : 3,
     permissions: [
       'CAMERA',
+      'ACTIVITY_RECOGNITION',
+      'RECEIVE_BOOT_COMPLETED',
+      'SCHEDULE_EXACT_ALARM',
     ],
     newArchEnabled: false,
   },
@@ -53,6 +57,8 @@ module.exports = {
         },
       },
     ],
+    'expo-notifications',
+    'expo-sensors',
     'expo-secure-store',
     [
       'expo-camera',

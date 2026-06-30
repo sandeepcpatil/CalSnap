@@ -17,35 +17,67 @@ const MEAL_LABELS: Record<string, string> = {
   snack: 'Snack',
 };
 
+const MEAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  breakfast: 'cafe-outline',
+  lunch: 'fast-food-outline',
+  dinner: 'restaurant-outline',
+  snack: 'nutrition-outline',
+};
+
+const MEAL_TIMES: Record<string, string> = {
+  breakfast: '8:00 AM',
+  lunch: '12:30 PM',
+  dinner: '7:00 PM',
+  snack: '3:30 PM',
+};
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${m} ${ampm}`;
+  } catch {
+    return '';
+  }
+}
+
 export function MealSection({ mealType, logs }: Props) {
   const [expanded, setExpanded] = useState(true);
   const totalCals = logs.reduce((s, l) => s + (l.calories || 0), 0);
   const { theme } = useTheme();
   const accentColor = theme.meal[mealType];
+  const firstTime = logs.length > 0 ? formatTime(logs[0].logged_at) : MEAL_TIMES[mealType];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.borderColor }]}>
-      {/* Glass card header */}
+    <View style={[styles.container, { backgroundColor: 'rgba(15,23,42,0.80)', borderColor: 'rgba(255,255,255,0.08)' }]}>
+      {/* Header */}
       <TouchableOpacity
         onPress={() => setExpanded((v) => !v)}
-        style={[styles.header, { backgroundColor: accentColor + '0D' }]}
+        style={styles.header}
         activeOpacity={0.75}
       >
-        <View style={styles.titleRow}>
-          <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+        <View style={[styles.iconBox, { backgroundColor: accentColor + '22' }]}>
+          <Ionicons name={MEAL_ICONS[mealType]} size={22} color={accentColor} />
+        </View>
+        <View style={styles.titleBlock}>
           <Text style={[styles.title, { color: theme.textPrimary }]}>{MEAL_LABELS[mealType]}</Text>
+          <Text style={[styles.subtitle, { color: theme.textMuted }]}>
+            {firstTime}{totalCals > 0 ? `  ·  ${totalCals} kcal` : ''}
+          </Text>
         </View>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={18}
-          color="#3f4949"
+          color={theme.textMuted}
         />
       </TouchableOpacity>
 
       {expanded && (
-        <View style={styles.entries}>
+        <View style={[styles.entries, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
           {logs.length === 0 ? (
-            <Text style={styles.empty}>No food logged yet</Text>
+            <Text style={[styles.empty, { color: theme.textMuted }]}>No food logged yet</Text>
           ) : (
             logs.map((log) => <FoodLogCard key={log.id} log={log} accentColor={accentColor} />)
           )}
@@ -58,24 +90,22 @@ export function MealSection({ mealType, logs }: Props) {
 function FoodLogCard({ log, accentColor }: { log: FoodLog; accentColor: string }) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.card, { borderTopColor: theme.surface2 }]}>
+    <View style={[styles.card, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
       {log.image_url ? (
         <Image source={{ uri: log.image_url }} style={styles.thumbnail} />
       ) : (
-        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.surface2 }]}>
-          <Text style={styles.placeholderEmoji}>🍽️</Text>
+        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+          <Ionicons name="image-outline" size={22} color={theme.textMuted} />
         </View>
       )}
       <View style={styles.cardInfo}>
         <View style={styles.cardTop}>
           <Text style={[styles.foodName, { color: theme.textPrimary }]} numberOfLines={1}>{log.food_name}</Text>
-          <Text style={[styles.kcal, { color: theme.textSecondary }]}>{log.calories} kcal</Text>
+          <Text style={[styles.kcal, { color: accentColor }]}>{log.calories} kcal</Text>
         </View>
-        <View style={styles.macroPills}>
-          <Text style={[styles.pill, { backgroundColor: theme.proteinTint, color: theme.protein }]}>P: {Math.round(log.protein_g)}g</Text>
-          <Text style={[styles.pill, { backgroundColor: theme.carbsTint, color: theme.carbs }]}>C: {Math.round(log.carbs_g)}g</Text>
-          <Text style={[styles.pill, { backgroundColor: theme.fatTint, color: theme.fat }]}>F: {Math.round(log.fat_g)}g</Text>
-        </View>
+        <Text style={[styles.macroLine, { color: theme.textMuted }]}>
+          P {Math.round(log.protein_g)}g  ·  C {Math.round(log.carbs_g)}g  ·  F {Math.round(log.fat_g)}g
+        </Text>
       </View>
     </View>
   );
@@ -87,45 +117,43 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 2,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 14,
+    gap: 12,
+    padding: 16,
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  accentBar: { width: 5, height: 28, borderRadius: 50 },
-  title: { fontSize: 18, fontWeight: '700' },
-  entries: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4, gap: 10 },
-  empty: { color: '#bec8c9', fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  titleBlock: { flex: 1, gap: 2 },
+  title: { fontSize: 16, fontWeight: '700' },
+  subtitle: { fontSize: 12, fontWeight: '500' },
+  entries: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 4,
+    gap: 0,
+    borderTopWidth: 1,
+  },
+  empty: { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 6,
+    paddingVertical: 10,
     borderTopWidth: 1,
   },
-  thumbnail: { width: 56, height: 56, borderRadius: 12 },
+  thumbnail: { width: 52, height: 52, borderRadius: 10 },
   thumbnailPlaceholder: { justifyContent: 'center', alignItems: 'center' },
-  placeholderEmoji: { fontSize: 26 },
-  cardInfo: { flex: 1, gap: 6 },
+  cardInfo: { flex: 1, gap: 4 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   foodName: { flex: 1, fontSize: 14, fontWeight: '700', marginRight: 8 },
-  kcal: { fontSize: 14, fontWeight: '700' },
-  macroPills: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  pill: {
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    overflow: 'hidden',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  kcal: { fontSize: 13, fontWeight: '700' },
+  macroLine: { fontSize: 12, fontWeight: '500' },
 });

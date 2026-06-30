@@ -23,7 +23,8 @@ calsnap/
 └── admin/      # Vite admin panel
 
 ## Current Phase
-→ See TASKS.md for current progress
+→ See PROGRESS.md for design task completion status
+→ See TASKS.md for full feature specification
 
 ## Run Commands
 - Backend: cd backend && npm run dev (port 4000)

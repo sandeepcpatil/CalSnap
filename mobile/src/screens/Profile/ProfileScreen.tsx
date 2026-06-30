@@ -1,59 +1,74 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Platform } from 'react-native';
-import { Text, Button, TextInput, Divider } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Image,
+  Alert,
+  Platform,
+  TouchableOpacity,
+} from 'react-native';
+import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../store/authStore';
-import { calculateGoals } from '../../utils/nutrition';
+import { useFoodLogStore } from '../../store/foodLogStore';
+import { useHealthStore } from '../../store/healthStore';
+import { useStepCounter } from '../../hooks/useStepCounter';
 import { PaywallModal } from '../Paywall/PaywallModal';
-import { useTheme } from '../../hooks/useTheme';
-import { ThemeToggle } from '../../components/ThemeToggle';
+import { NotificationSettingsModal } from '../../components/NotificationSettingsModal';
+import { EditProfileModal } from '../../components/EditProfileModal';
 
-const APP_VERSION = '1.0.0';
+const C = {
+  bg:              '#101415',
+  glass:           'rgba(15,23,42,0.80)',
+  glassBorder:     'rgba(255,255,255,0.08)',
+  primary:         '#85d3da',
+  secondary:       '#bdf4ff',
+  tertiary:        '#c0c1ff',
+  secondaryCont:   '#00e3fd',
+  onSurface:       '#e0e3e5',
+  onSurfaceVar:    '#bec8c9',
+  outline:         '#889393',
+  outlineVar:      '#3f4949',
+  primaryCont:     '#01696f',
+  error:           '#ffb4ab',
+  surfaceCont:     '#1d2022',
+};
 
 export function ProfileScreen() {
-  const { profile, updateProfile, signOut } = useAuthStore();
-  const { theme } = useTheme();
-  const [editWeight, setEditWeight] = useState(String(profile?.weight_kg ?? ''));
-  const [editHeight, setEditHeight] = useState(String(profile?.height_cm ?? ''));
-  const [isSaving, setIsSaving] = useState(false);
+  const { profile, signOut } = useAuthStore();
+  const { todayLogs } = useFoodLogStore();
+  const { steps } = useHealthStore();
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showNotifSettings, setShowNotifSettings] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
-  const isSubscribed = profile?.is_subscribed ?? false;
-  const scanCount = profile?.scan_count ?? 0;
-  const freeScanLimit = 5;
+  // Activate step counter while this screen is mounted
+  useStepCounter();
 
-  const handleSaveStats = async () => {
-    const w = Number(editWeight);
-    const h = Number(editHeight);
-    if (w < 20 || w > 300 || h < 100 || h > 250) {
-      Alert.alert('Invalid values', 'Please enter a valid weight (20–300 kg) and height (100–250 cm).');
-      return;
-    }
+  const isSubscribed    = profile?.is_subscribed ?? false;
+  const scanCount       = profile?.scan_count    ?? 0;
+  const weight          = profile?.weight_kg     ?? 0;
+  const proteinGoal     = profile?.daily_protein_goal ?? 160;
+  const bodyGoal        = profile?.body_goal;
 
-    setIsSaving(true);
-    try {
-      const updates: Partial<typeof profile> = { weight_kg: w, height_cm: h };
+  // Today's protein from shared store
+  const proteinConsumed = todayLogs.reduce((s, l) => s + (l.protein_g || 0), 0);
+  const proteinPct      = proteinGoal > 0 ? Math.min(proteinConsumed / proteinGoal, 1) : 0;
 
-      // Recalculate goals if we have all data
-      if (profile?.age && profile?.gender && profile?.activity_level && profile?.body_goal) {
-        const { dailyCalorieGoal, dailyProteinGoal } = calculateGoals({
-          weight_kg: w,
-          height_cm: h,
-          age: profile.age,
-          gender: profile.gender,
-          activity_level: profile.activity_level,
-          body_goal: profile.body_goal,
-        });
-        updates.daily_calorie_goal = dailyCalorieGoal;
-        updates.daily_protein_goal = dailyProteinGoal;
-      }
-
-      await updateProfile(updates as any);
-      Alert.alert('Saved!', 'Your stats and goals have been updated.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  // Weight target logic
+  const weightTarget =
+    bodyGoal === 'lose_weight' ? weight - 5 :
+    bodyGoal === 'gain_muscle' ? weight + 5 :
+    weight;
+  const weightDelta  = Math.abs(weight - weightTarget);
+  const weightLabel  =
+    bodyGoal === 'lose_weight' ? `${weightDelta.toFixed(0)}kg to Target (${weightTarget.toFixed(0)}kg)` :
+    bodyGoal === 'gain_muscle' ? `${weightDelta.toFixed(0)}kg to Target (${weightTarget.toFixed(0)}kg)` :
+    'Maintaining';
+  const weightPct = bodyGoal === 'maintain' ? 1 : 0.6; // approximate progress indicator
 
   const handleSignOut = async () => {
     const confirmed =
@@ -65,210 +80,363 @@ export function ProfileScreen() {
               { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
             ])
           );
-
     if (!confirmed) return;
-    console.log('[ProfileScreen] Signing out...');
     await signOut();
-    console.log('[ProfileScreen] Sign out complete.');
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Avatar + user info */}
-        <View style={styles.userCard}>
-          {profile?.avatar_url ? (
-            <Image source={{ uri: profile.avatar_url }} style={[styles.avatar, { borderWidth: 2, borderColor: theme.primaryLight }]} />
-          ) : (
-            <View style={[styles.avatar, { backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center' }]}>
-              <Text style={styles.avatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
-            </View>
-          )}
-          <Text variant="headlineSmall" style={[styles.userName, { color: theme.textPrimary }]}>{profile?.name ?? '—'}</Text>
-          <Text variant="bodyMedium" style={styles.userEmail}>{profile?.email ?? '—'}</Text>
+    <View style={styles.root}>
+      {/* ── Top Bar ── */}
+      <SafeAreaView edges={['top']} style={styles.headerSafe}>
+        <View style={styles.header}>
+          <Ionicons name="menu-outline" size={24} color={C.primary} />
+          <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Snap</Text></Text>
+          <View style={styles.headerAvatar}>
+            {profile?.avatar_url
+              ? <Image source={{ uri: profile.avatar_url }} style={styles.headerAvatarImg} />
+              : <View style={[styles.headerAvatarImg, { backgroundColor: C.outlineVar, alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ color: C.primary, fontWeight: '700' }}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
+                </View>
+            }
+          </View>
+        </View>
+      </SafeAreaView>
 
-          {/* Subscription badge */}
-          {isSubscribed ? (
-            <View style={styles.proBadge}>
-              <Text variant="labelSmall" style={styles.proBadgeText}>✓ Pro Member</Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Profile Header ── */}
+        <View style={styles.profileSection}>
+          {/* Gradient ring avatar */}
+          <LinearGradient
+            colors={[C.primary, C.secondary]}
+            style={styles.avatarRing}
+            start={{ x: 0.1, y: 0.9 }}
+            end={{ x: 0.9, y: 0.1 }}
+          >
+            <View style={styles.avatarInner}>
+              {profile?.avatar_url
+                ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImg} />
+                : <View style={[styles.avatarImg, { backgroundColor: C.outlineVar, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: C.primary, fontSize: 32, fontWeight: '700' }}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
+                  </View>
+              }
             </View>
-          ) : (
-            <View style={styles.freeBadge}>
-              <Text variant="labelSmall" style={styles.freeBadgeText}>
-                {Math.min(scanCount, freeScanLimit)} / {freeScanLimit} free scans used
-              </Text>
-            </View>
-          )}
+          </LinearGradient>
+
+          <Text style={styles.userName}>{profile?.name ?? '—'}</Text>
+
+          {/* Badge */}
+          <View style={isSubscribed ? styles.eliteBadge : styles.freeBadge}>
+            <Ionicons
+              name={isSubscribed ? 'star' : 'flash-outline'}
+              size={12}
+              color={isSubscribed ? C.primary : C.outline}
+            />
+            <Text style={[styles.badgeText, { color: isSubscribed ? C.primary : C.outline }]}>
+              {isSubscribed ? 'Pro Member' : `${Math.min(scanCount, 5)} / 5 free scans`}
+            </Text>
+          </View>
         </View>
 
-        {/* Goals */}
-        <View style={styles.section}>
-          <Text variant="titleSmall" style={styles.sectionTitle}>Your Goals</Text>
-          <View style={styles.goalsRow}>
-            <View style={[styles.goalCard, { borderColor: theme.primaryTint }]}>
-              <Text variant="headlineSmall" style={[styles.goalValue, { color: theme.primary }]}>{profile?.daily_calorie_goal ?? '—'}</Text>
-              <Text variant="labelSmall" style={styles.goalLabel}>kcal / day</Text>
+        {/* ── Active Goals Grid ── */}
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionLabel}>ACTIVE GOALS</Text>
+          <View style={styles.goalsGrid}>
+            {/* Weight card */}
+            <View style={styles.goalCard}>
+              <View style={styles.goalCardTop}>
+                <Text style={styles.goalCardLabel}>Weight</Text>
+                <Ionicons name="scale-outline" size={20} color={C.primary} />
+              </View>
+              <View>
+                <View style={styles.goalValueRow}>
+                  <Text style={styles.goalBigNum}>{weight > 0 ? weight.toFixed(0) : '—'}</Text>
+                  <Text style={styles.goalUnit}>kg</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${weightPct * 100}%`, backgroundColor: C.primary }]} />
+                </View>
+                <Text style={[styles.goalHint, { color: C.primary }]}>{weightLabel}</Text>
+              </View>
             </View>
-            <View style={[styles.goalCard, { borderColor: theme.primaryTint }]}>
-              <Text variant="headlineSmall" style={[styles.goalValue, { color: theme.primary }]}>{profile?.daily_protein_goal ?? '—'}g</Text>
-              <Text variant="labelSmall" style={styles.goalLabel}>protein / day</Text>
+
+            {/* Protein card */}
+            <View style={styles.goalCard}>
+              <View style={styles.goalCardTop}>
+                <Text style={styles.goalCardLabel}>Protein</Text>
+                <Ionicons name="nutrition-outline" size={20} color={C.tertiary} />
+              </View>
+              <View>
+                <View style={styles.goalValueRow}>
+                  <Text style={styles.goalBigNum}>{Math.round(proteinConsumed)}</Text>
+                  <Text style={styles.goalUnit}>/ {proteinGoal}g</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${proteinPct * 100}%`, backgroundColor: C.tertiary }]} />
+                </View>
+                <Text style={[styles.goalHint, { color: C.tertiary }]}>
+                  {Math.round(proteinPct * 100)}% of Daily Goal
+                </Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Edit body stats */}
-        <View style={styles.section}>
-          <Text variant="titleSmall" style={styles.sectionTitle}>Body Stats</Text>
-          <View style={styles.statsForm}>
-            <TextInput
-              label="Weight (kg)"
-              value={editWeight}
-              onChangeText={(v) => setEditWeight(v.replace(/[^0-9.]/g, ''))}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              outlineColor={theme.borderColor}
-              activeOutlineColor={theme.primary}
-              textColor={theme.textPrimary}
-              style={[styles.statsInput, { backgroundColor: theme.surface }]}
-            />
-            <TextInput
-              label="Height (cm)"
-              value={editHeight}
-              onChangeText={(v) => setEditHeight(v.replace(/[^0-9.]/g, ''))}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              outlineColor={theme.borderColor}
-              activeOutlineColor={theme.primary}
-              textColor={theme.textPrimary}
-              style={[styles.statsInput, { backgroundColor: theme.surface }]}
-            />
-            <Button
-              mode="contained"
-              onPress={handleSaveStats}
-              loading={isSaving}
-              disabled={isSaving}
-              style={styles.saveButton}
-              buttonColor={theme.primary}
-            >
-              Save & Recalculate
-            </Button>
+        {/* ── Daily Steps ── */}
+        <View style={styles.glassCard}>
+          <View style={styles.stepsRow}>
+            <View style={[styles.stepsIcon, { backgroundColor: C.primary + '22' }]}>
+              <Ionicons name="walk-outline" size={22} color={C.primary} />
+            </View>
+            <View style={styles.stepsInfo}>
+              <Text style={styles.stepsLabel}>Today's Steps</Text>
+              <Text style={styles.stepsValue}>{steps > 0 ? steps.toLocaleString() : '—'}</Text>
+            </View>
+            <Text style={styles.stepsHint}>Auto-tracked</Text>
           </View>
         </View>
 
-        <Divider style={styles.divider} />
-
-        {/* Subscription section */}
-        <View style={styles.section}>
-          <Text variant="titleSmall" style={styles.sectionTitle}>Subscription</Text>
-          {isSubscribed ? (
-            <View style={styles.subCard}>
-              <Text variant="bodyMedium" style={styles.subStatus}>
-                ✓ Active Pro · Renews {profile?.subscription_end_date
-                  ? new Date(profile.subscription_end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : '—'}
-              </Text>
+        {/* ── Subscription CTA (if not subscribed) ── */}
+        {!isSubscribed && (
+          <View style={styles.ctaCard}>
+            <View style={styles.ctaGlow} pointerEvents="none" />
+            <View style={styles.ctaContent}>
+              <View style={styles.ctaText}>
+                <Text style={styles.ctaTitle}>Upgrade to Pro</Text>
+                <Text style={styles.ctaSubtitle} numberOfLines={2}>Unlock AI Scanning & Advanced Macros</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => setShowPaywall(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.ctaButtonText}>GO PRO</Text>
+              </TouchableOpacity>
             </View>
-          ) : (
-            <Button
-              mode="contained"
-              onPress={() => setShowPaywall(true)}
-              style={styles.upgradeButton}
-              buttonColor={theme.primary}
-              icon="star"
+          </View>
+        )}
+
+        {isSubscribed && (
+          <View style={[styles.ctaCard, { borderColor: C.primary + '40' }]}>
+            <View style={styles.ctaContent}>
+              <View style={styles.ctaText}>
+                <Text style={[styles.ctaTitle, { color: C.primary }]}>✓ Pro Active</Text>
+                <Text style={styles.ctaSubtitle}>
+                  {profile?.subscription_end_date
+                    ? `Renews ${new Date(profile.subscription_end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : 'Unlimited scans enabled'}
+                </Text>
+              </View>
+              <Ionicons name="star" size={28} color={C.primary} />
+            </View>
+          </View>
+        )}
+
+        {/* ── Settings ── */}
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionLabel}>SETTINGS</Text>
+          <View style={styles.settingsList}>
+            {[
+              { icon: 'person-outline',          label: 'Edit Profile',     color: C.onSurface },
+              // { icon: 'sync-outline',            label: 'Health Connect',   color: C.onSurface },
+              { icon: 'notifications-outline',   label: 'Notifications',    color: C.onSurface },
+            ].map((item, i) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[styles.settingsRow, i > 0 && { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }]}
+                onPress={
+                  item.label === 'Notifications' ? () => setShowNotifSettings(true) :
+                  item.label === 'Edit Profile'  ? () => setShowEditProfile(true)  :
+                  undefined
+                }
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingsLeft}>
+                  <Ionicons name={item.icon as any} size={22} color={C.outline} />
+                  <Text style={[styles.settingsLabel, { color: item.color }]}>{item.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={C.outline} />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.settingsRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }]}
+              onPress={handleSignOut}
+              activeOpacity={0.7}
             >
-              Upgrade to Pro — ₹149/month
-            </Button>
-          )}
+              <View style={styles.settingsLeft}>
+                <Ionicons name="log-out-outline" size={22} color={C.error} />
+                <Text style={[styles.settingsLabel, { color: C.error, fontWeight: '700' }]}>Sign Out</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <Divider style={styles.divider} />
-
-        {/* ── Appearance ── */}
-        <View style={styles.section}>
-          <Text variant="titleSmall" style={styles.sectionTitle}>Display Mode</Text>
-          <ThemeToggle />
-        </View>
-
-        <Divider style={styles.divider} />
-
-        {/* Links */}
-        <View style={styles.section}>
-          {[
-            { label: '📄 Privacy Policy', onPress: () => {} },
-            { label: '📋 Terms of Service', onPress: () => {} },
-            { label: `ℹ️ Version ${APP_VERSION}`, onPress: () => {} },
-          ].map((item) => (
-            <Button key={item.label} mode="text" onPress={item.onPress} style={styles.linkButton} textColor="#546e7a">
-              {item.label}
-            </Button>
-          ))}
-        </View>
-
-        <Button
-          mode="outlined"
-          onPress={handleSignOut}
-          style={styles.signOutButton}
-          textColor="#ef5350"
-          icon="logout"
-        >
-          Sign Out
-        </Button>
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       <PaywallModal visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
-    </SafeAreaView>
+      <NotificationSettingsModal visible={showNotifSettings} onDismiss={() => setShowNotifSettings(false)} />
+      <EditProfileModal visible={showEditProfile} onDismiss={() => setShowEditProfile(false)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { paddingBottom: 40, gap: 4 },
-  userCard: { alignItems: 'center', padding: 24, gap: 8 },
-  avatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 4 },
-  avatarInitial: { color: '#fff', fontSize: 32, fontWeight: '700' },
-  userName: { fontWeight: '700' },
-  userEmail: { color: '#78909c' },
-  proBadge: { backgroundColor: '#e8f5e9', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20, marginTop: 4 },
-  proBadgeText: { color: '#2e7d32', fontWeight: '700' },
-  freeBadge: { backgroundColor: '#fff3e0', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20, marginTop: 4 },
-  freeBadgeText: { color: '#e65100', fontWeight: '600' },
-  section: { paddingHorizontal: 20, paddingVertical: 8, gap: 10 },
-  sectionTitle: { color: '#90a4ae', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  goalsRow: { flexDirection: 'row', gap: 12 },
-  goalCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-  },
-  goalValue: { fontWeight: '800' },
-  goalLabel: { color: '#90a4ae' },
-  statsForm: { gap: 12 },
-  statsInput: {},
-  saveButton: { borderRadius: 12 },
-  divider: { marginHorizontal: 20, marginVertical: 4 },
-  subCard: { backgroundColor: '#e8f5e9', borderRadius: 12, padding: 14 },
-  subStatus: { color: '#2e7d32', fontWeight: '600' },
-  upgradeButton: { borderRadius: 12 },
-  // Theme switcher
-  themeRow: { flexDirection: 'row', gap: 12 },
-  themeChip: {
-    flex: 1,
+  root: { flex: 1, backgroundColor: C.bg },
+
+  /* Header */
+  headerSafe: { zIndex: 10 },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
     paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    backgroundColor: 'rgba(16,20,21,0.85)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  themeEmoji: { fontSize: 18 },
-  themeName: { fontSize: 14, fontWeight: '700' },
-  themeCheck: { fontSize: 12, color: '#fff', fontWeight: '800' },
-  linkButton: { justifyContent: 'flex-start' },
-  signOutButton: { marginHorizontal: 20, marginTop: 8, borderColor: '#ef5350', borderRadius: 12 },
+  brand: { fontSize: 22, fontWeight: '800', letterSpacing: 0.5, color: C.primary },
+  brandSnap: { color: C.secondary },
+  headerAvatar: {
+    width: 40, height: 40, borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: C.primaryCont,
+  },
+  headerAvatarImg: { width: 40, height: 40, borderRadius: 20 },
+
+  /* Scroll */
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: 28, paddingBottom: 40, gap: 28 },
+
+  /* Profile section */
+  profileSection: { alignItems: 'center', gap: 10 },
+  avatarRing: { padding: 3, borderRadius: 56 },
+  avatarInner: {
+    width: 88, height: 88, borderRadius: 44,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: C.bg,
+  },
+  avatarImg: { width: 88, height: 88, borderRadius: 44 },
+  userName: { fontSize: 24, fontWeight: '700', color: C.onSurface },
+  eliteBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(1,105,111,0.20)',
+    borderWidth: 1, borderColor: C.primary + '50',
+  },
+  freeBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(136,147,147,0.12)',
+    borderWidth: 1, borderColor: C.outlineVar,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+
+  /* Section block */
+  sectionBlock: { paddingHorizontal: 20, gap: 12 },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1.5,
+    textTransform: 'uppercase', color: C.outline,
+  },
+
+  /* Goals grid */
+  goalsGrid: { flexDirection: 'row', gap: 12 },
+  goalCard: {
+    flex: 1,
+    backgroundColor: C.glass,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+    padding: 16,
+    justifyContent: 'space-between',
+    minHeight: 152,
+  },
+  goalCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  goalCardLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: C.outline },
+  goalValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 8 },
+  goalBigNum: { fontSize: 32, fontWeight: '800', color: C.onSurface, lineHeight: 38 },
+  goalUnit: { fontSize: 14, color: C.outline },
+  progressTrack: {
+    height: 6, borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  progressFill: { height: '100%', borderRadius: 3 },
+  goalHint: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, textTransform: 'uppercase' },
+
+
+  /* Steps card */
+  glassCard: {
+    marginHorizontal: 20,
+    backgroundColor: C.glass,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+    padding: 16,
+  },
+  stepsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepsIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  stepsInfo: { flex: 1, gap: 2 },
+  stepsLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: C.outline },
+  stepsValue: { fontSize: 26, fontWeight: '800', color: C.onSurface },
+  stepsHint: { fontSize: 10, color: C.outline, fontWeight: '600' },
+
+  /* CTA card */
+  ctaCard: {
+    marginHorizontal: 20,
+    backgroundColor: C.glass,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(133,211,218,0.20)',
+    overflow: 'hidden',
+    padding: 20,
+  },
+  ctaGlow: {
+    position: 'absolute', top: -32, right: -32,
+    width: 120, height: 120,
+    backgroundColor: C.primary + '33',
+    borderRadius: 60,
+  },
+  ctaContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 1 },
+  ctaText: { flex: 1, gap: 3, marginRight: 12 },
+  ctaTitle: { fontSize: 18, fontWeight: '700', color: C.primary },
+  ctaSubtitle: { fontSize: 13, color: C.onSurfaceVar },
+  ctaButton: {
+    backgroundColor: C.secondaryCont,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  ctaButtonText: {
+    color: '#00363d',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+
+  /* Settings list */
+  settingsList: {
+    backgroundColor: C.glass,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+    overflow: 'hidden',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  settingsLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsLabel: { fontSize: 16, fontWeight: '500', color: C.onSurface },
 });

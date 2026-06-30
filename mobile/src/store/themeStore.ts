@@ -32,7 +32,7 @@ function getSystemScheme(): ColorMode {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      mode: 'light' as ThemeMode,
+      mode: 'dark' as ThemeMode,
       systemScheme: getSystemScheme(),
 
       setTheme: (mode) => set({ mode }),

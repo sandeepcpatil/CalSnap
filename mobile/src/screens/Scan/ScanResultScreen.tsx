@@ -10,6 +10,7 @@ import {
 import { Text, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
@@ -40,50 +41,65 @@ const MACRO_MAX: Record<string, number> = {
   Fiber: 20,
 };
 
-function NutrientCard({ label, value, color, barColor }: { label: string; value: number; color: string; barColor?: string }) {
+// Standard GDA (Guide Daily Amounts) for a 2 000 kcal diet
+const MACRO_GDA: Record<string, number> = {
+  Protein: 50,
+  Carbs:   260,
+  Fat:     78,
+  Fiber:   25,
+};
+
+const MACRO_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Protein: 'barbell-outline',
+  Carbs:   'restaurant-outline',
+  Fat:     'water-outline',
+  Fiber:   'leaf-outline',
+};
+
+function NutrientRow({ label, value, color }: { label: string; value: number; color: string }) {
   const { theme } = useTheme();
-  const max = MACRO_MAX[label] ?? 100;
-  const fillPct = Math.min(value / max, 1);
+  const gdaPct = Math.round((value / (MACRO_GDA[label] ?? 100)) * 100);
   return (
-    <View style={[macroStyles.card, { borderColor: theme.borderColor, backgroundColor: theme.surface }]}>
-      <View style={macroStyles.cardTop}>
-        <Text style={[macroStyles.cardLabel, { color: theme.textSecondary }]}>{label}</Text>
-        <View style={[macroStyles.dot, { backgroundColor: barColor ?? color }]} />
+    <View style={[rowStyles.row, { borderBottomColor: theme.dividerColor }]}>
+      <View style={[rowStyles.iconWrap, { backgroundColor: color + '22' }]}>
+        <Ionicons name={MACRO_ICONS[label] ?? 'nutrition-outline'} size={18} color={color} />
       </View>
-      <View style={macroStyles.valueRow}>
-        <Text style={[macroStyles.cardValue, { color }]}>{Math.round(value)}</Text>
-        <Text style={[macroStyles.cardUnit, { color: theme.textSecondary }]}>g</Text>
-      </View>
-      <View style={[macroStyles.bar, { backgroundColor: theme.surface2 }]}>
-        <View style={[macroStyles.barFill, { backgroundColor: barColor ?? color, width: `${Math.round(fillPct * 100)}%` }]} />
-      </View>
+      <Text style={[rowStyles.gdaLabel, { color: theme.textMuted }]}>{gdaPct}% GDA</Text>
+      <Text style={[rowStyles.amount, { color: theme.textPrimary }]}>
+        {Math.round(value)}<Text style={[rowStyles.unit, { color: theme.textSecondary }]}>g</Text>
+      </Text>
+      <Text style={[rowStyles.macroLabel, { color: theme.textSecondary }]}>{label}</Text>
     </View>
   );
 }
 
-const macroStyles = StyleSheet.create({
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    justifyContent: 'space-between',
-    minHeight: 110,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 2,
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardLabel: { fontSize: 12, fontWeight: '700' },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  cardValue: { fontSize: 24, fontWeight: '700', lineHeight: 30 },
-  cardUnit: { fontSize: 13, fontWeight: '500' },
-  bar: { height: 5, borderRadius: 3, overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: 3 },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gdaLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
+  amount:   { fontSize: 20, fontWeight: '800', lineHeight: 24 },
+  unit:     { fontSize: 12, fontWeight: '500' },
+  macroLabel: { fontSize: 13, fontWeight: '600', minWidth: 52, textAlign: 'right' },
 });
+
+const CONFIDENCE_PCT: Record<string, string> = {
+  high:      '98%',
+  very_high: '99%',
+  medium:    '75%',
+  low:       '52%',
+};
 
 export function ScanResultScreen({ navigation, route }: Props) {
   const { imageUri, imageStorageUrl, result } = route.params;
@@ -146,8 +162,11 @@ export function ScanResultScreen({ navigation, route }: Props) {
         {/* Hero image with AI badge */}
         <View style={styles.heroWrap}>
           <Image source={{ uri: imageUri }} style={styles.foodImage} />
-          <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'E6' }]}>
-            <Text style={styles.aiBadgeText}>✓ {result.confidence.toUpperCase()} MATCH</Text>
+          <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'EE' }]}>
+            <Ionicons name="checkmark-circle" size={14} color="#fff" />
+            <Text style={styles.aiBadgeText}>
+              {CONFIDENCE_PCT[result.confidence.toLowerCase()] ?? '—'} AI Match
+            </Text>
           </View>
         </View>
 
@@ -159,7 +178,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
             <Text style={[styles.foodName, { color: theme.textPrimary }]}>{result.food_name}</Text>
             <View style={styles.calBlock}>
               <Text style={[styles.calories, { color: theme.primary }]}>{result.calories}</Text>
-              <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>kcal</Text>
+              <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>KCAL</Text>
             </View>
           </View>
 
@@ -187,12 +206,12 @@ export function ScanResultScreen({ navigation, route }: Props) {
             ))}
           </View>
 
-          {/* 2×2 Macro grid */}
-          <View style={styles.macroGrid}>
-            <NutrientCard label="Protein" value={result.protein_g} color={theme.protein} />
-            <NutrientCard label="Carbs" value={result.carbs_g} color={theme.carbs} barColor={theme.carbs} />
-            <NutrientCard label="Fat" value={result.fat_g} color={theme.fat} />
-            <NutrientCard label="Fiber" value={result.fiber_g} color={theme.textSecondary} />
+          {/* Macro rows with GDA percentages */}
+          <View style={styles.macroList}>
+            <NutrientRow label="Protein" value={result.protein_g} color={theme.protein} />
+            <NutrientRow label="Carbs"   value={result.carbs_g}   color={theme.carbs} />
+            <NutrientRow label="Fat"     value={result.fat_g}     color={theme.fat} />
+            <NutrientRow label="Fiber"   value={result.fiber_g}   color={theme.fiber} />
           </View>
         </View>
       </ScrollView>
@@ -202,11 +221,11 @@ export function ScanResultScreen({ navigation, route }: Props) {
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}
-          style={[styles.retakeButton, { borderColor: theme.primary }]}
+          style={[styles.retakeButton, { borderColor: theme.borderColor }]}
           contentStyle={styles.buttonContent}
-          textColor={theme.primary}
+          textColor={theme.textSecondary}
         >
-          Retake
+          Edit Details
         </Button>
         <Button
           mode="contained"
@@ -216,6 +235,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           style={styles.saveButton}
           contentStyle={styles.buttonContent}
           buttonColor={theme.primary}
+          icon="check"
         >
           Log This Meal
         </Button>
@@ -231,14 +251,14 @@ const styles = StyleSheet.create({
   foodImage: { width: '100%', aspectRatio: 1, resizeMode: 'cover' },
   aiBadge: {
     position: 'absolute',
-    bottom: 14,
-    left: 14,
+    top: 14,
+    right: 14,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   aiBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   card: {
@@ -255,7 +275,7 @@ const styles = StyleSheet.create({
   foodName: { flex: 1, fontSize: 22, fontWeight: '800', lineHeight: 28 },
   calBlock: { alignItems: 'flex-end' },
   calories: { fontSize: 40, fontWeight: '800', lineHeight: 44, letterSpacing: -1 },
-  kcalUnit: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  kcalUnit: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   mealChips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   mealChip: {
     paddingHorizontal: 14,
@@ -264,8 +284,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   mealChipLabel: { fontSize: 13, fontWeight: '700' },
-  macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  mealLabel: { fontWeight: '600' },
+  macroList: { gap: 0 },
   footer: {
     position: 'absolute',
     bottom: 0,

@@ -59,45 +59,41 @@ export function CalorieRing({ consumed, goal }: Props) {
         </Svg>
 
         <View style={styles.center}>
-          <Text style={[styles.consumed, { color: isOver ? theme.error : theme.textPrimary }]}>
-            {formatCalories(consumed)}
+          <Text style={[styles.remainingLabel, { color: theme.textMuted }]}>Remaining</Text>
+          <Text style={[styles.remainingValue, { color: isOver ? theme.error : '#00e3fd' }]}>
+            {formatCalories(remaining)}
           </Text>
-          <Text style={[styles.goalLabel, { color: theme.textSecondary }]}>
-            / {formatCalories(goal)} kcal
-          </Text>
+          <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>kcal</Text>
         </View>
       </View>
 
-      {/* Energy badge */}
-      <View style={[styles.badge, { backgroundColor: isOver ? theme.errorTint : ring.badgeBg }]}>
-        <Text style={styles.badgeIcon}>⚡</Text>
-        <Text style={[styles.badgeText, { color: isOver ? theme.error : ring.badgeText }]}>
-          {isOver
-            ? `${formatCalories(consumed - goal)} kcal over`
-            : `${formatCalories(remaining)} kcal left`}
-        </Text>
+      {/* Consumed | Target stats row */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Consumed</Text>
+          <Text style={[styles.statValue, { color: theme.textPrimary }]}>{formatCalories(consumed)}</Text>
+        </View>
+        <View style={[styles.divider, { backgroundColor: theme.dividerColor }]} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Target</Text>
+          <Text style={[styles.statValue, { color: theme.textPrimary }]}>{formatCalories(goal)}</Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16 },
+  section: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
   ringWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
   svg: { position: 'absolute' },
   center: { alignItems: 'center', gap: 2 },
-  consumed: { fontSize: 48, fontWeight: '800', letterSpacing: -1, lineHeight: 56 },
-  consumedOver: {},
-  goalLabel: { fontSize: 14, fontWeight: '700' },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 50,
-    marginTop: 12,
-  },
-  badgeIcon: { fontSize: 14 },
-  badgeText: { fontSize: 14, fontWeight: '700' },
+  remainingLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
+  remainingValue: { fontSize: 52, fontWeight: '800', letterSpacing: -2, lineHeight: 60 },
+  kcalUnit: { fontSize: 16, fontWeight: '600' },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 28 },
+  statItem: { alignItems: 'center', gap: 2 },
+  statLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  statValue: { fontSize: 18, fontWeight: '700' },
+  divider: { width: 1, height: 32, borderRadius: 1 },
 });

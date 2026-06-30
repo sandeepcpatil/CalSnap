@@ -4,7 +4,7 @@
 // For semi-transparent overlays and shadows, use the dedicated opacity tokens
 // further down this file.
 //
-// Primary brand color: teal-green #1B8A6B — energetic, fresh, health-focused.
+// Primary brand color: teal #01696f (Stitch Calm primary-container) — clean, health-focused.
 // Not the clinical default #00BCD4 teal; this reads warmer and more grounded.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -136,202 +136,201 @@ export interface ColorTheme {
 }
 
 // ─── Light Theme ─────────────────────────────────────────────────────────────
-// Base: warm greenish off-white. Feels natural, not clinical.
-// Contrast ratios verified against textPrimary (#1A2B1A) on bg (#F5FAF7):
-//   - 4.5:1+ for body copy ✓  |  primary on bg: 4.6:1 ✓
+// Aligned to Stitch "CalSnap Calm" design system.
+// Primary: teal #01696f / deep #004f54. Secondary: amber #fd8b00. Tertiary: forest #006d37.
+// Surface tokens match the Stitch surface-container scale exactly.
 
 const light: ColorTheme = {
-  // Backgrounds
-  bg:            '#F5FAF7',  // warm off-white, slight mint tint
-  surface:       '#FFFFFF',
-  surface2:      '#EBF5EF',
-  surfaceOffset: '#F0F7F3',
+  // Backgrounds — Stitch surface scale
+  bg:            '#f7fafa',  // surface / background
+  surface:       '#ffffff',  // surface-container-lowest
+  surface2:      '#ebeeee',  // surface-container
+  surfaceOffset: '#e6e9e9',  // surface-container-high
 
-  // Text
-  textPrimary:   '#1A2B1A',  // near-black with green undertone
-  textSecondary: '#3C5441',  // muted forest
-  textMuted:     '#7A9A82',  // low-contrast helper text
-  textInverse:   '#FFFFFF',
+  // Text — Stitch on-surface tokens
+  textPrimary:   '#181c1d',  // on-surface
+  textSecondary: '#3f4949',  // on-surface-variant
+  textMuted:     '#6f797a',  // outline
+  textInverse:   '#ffffff',  // on-primary
 
-  // Brand
-  primary:     '#1B8A6B',
-  primaryLight:'#52C49E',
-  primaryDark: '#0E5F49',
-  primaryTint: '#D0F0E6',
+  // Brand — Stitch primary family
+  primary:     '#01696f',   // primary-container (interactive teal)
+  primaryLight:'#85d3da',   // inverse-primary
+  primaryDark: '#004f54',   // primary (deep teal)
+  primaryTint: '#a1f0f6',   // primary-fixed
 
-  // Semantic
-  success:     '#1F9B6A',
-  successTint: '#D4F5E7',
-  warning:     '#D48A10',
-  warningTint: '#FDF2D6',
-  error:       '#C83232',
-  errorTint:   '#FFE4E4',
-  info:        '#1F6FBF',
-  infoTint:    '#DAEEFF',
+  // Semantic — mapped to Stitch tertiary (green) & secondary (amber)
+  success:     '#006d37',   // tertiary-container
+  successTint: '#d4f5e7',
+  warning:     '#904d00',   // secondary
+  warningTint: '#ffdcc3',   // secondary-fixed
+  error:       '#ba1a1a',   // error
+  errorTint:   '#ffdad6',   // error-container
+  info:        '#01696f',
+  infoTint:    '#a1f0f6',
 
-  // Macros — tested for mutual distinctiveness
-  protein:     '#7B5EA7',  // muted violet
-  proteinTint: '#EDE5F8',
-  carbs:       '#C87C12',  // warm amber (darker for light bg)
-  carbsTint:   '#FEF1D8',
-  fat:         '#C84040',  // deeper coral (keeps 4.5:1 on white)
-  fatTint:     '#FFE4E0',
-  fiber:       '#2E7D52',  // forest green (darker family, distinct from teal)
-  fiberTint:   '#D8F5E7',
+  // Macros — Stitch secondary amber + Stitch violet/coral/green
+  protein:     '#7B5EA7',   // muted violet
+  proteinTint: '#ede5f8',
+  carbs:       '#904d00',   // secondary (Stitch amber)
+  carbsTint:   '#ffdcc3',   // secondary-fixed
+  fat:         '#C84040',   // coral
+  fatTint:     '#ffe4e0',
+  fiber:       '#005228',   // tertiary (Stitch forest green)
+  fiberTint:   '#d4f5e2',
 
-  // Borders
-  borderColor:  '#C8DDD0',
-  dividerColor: '#E4EFE8',
+  // Borders — Stitch outline tokens
+  borderColor:  '#bec8c9',  // outline-variant
+  dividerColor: '#e0e3e3',  // surface-variant
 
   // Interactive
-  ripple:  'rgba(27,138,107,0.12)',
-  overlay: 'rgba(10,20,14,0.50)',
-  shadow:  'rgba(10,30,20,0.10)',
+  ripple:  'rgba(1,105,111,0.12)',
+  overlay: 'rgba(24,28,29,0.50)',
+  shadow:  'rgba(24,28,29,0.10)',
 
   // Tab bar
-  tabBarBg:       '#FFFFFF',
-  tabBarActive:   '#1B8A6B',
-  tabBarInactive: '#9AB5A5',
-  tabBarBorder:   '#E0EDE5',
+  tabBarBg:       '#ffffff',
+  tabBarActive:   '#01696f',
+  tabBarInactive: '#6f797a',
+  tabBarBorder:   '#e0e3e3',
 
   // Card
-  cardBg:     '#FFFFFF',
-  cardShadow: 'rgba(10,30,20,0.08)',
+  cardBg:     '#ffffff',
+  cardShadow: 'rgba(24,28,29,0.08)',
 
   // Scan UI
-  scanOverlayColor:  'rgba(10,20,14,0.55)',
-  scanBorderColor:   '#1B8A6B',
-  scanSuccessColor:  '#1F9B6A',
+  scanOverlayColor:  'rgba(0,0,0,0.55)',
+  scanBorderColor:   '#01696f',
+  scanSuccessColor:  '#006d37',
 
   statusBar: 'dark',
 
   // Navigation
-  navBackground: '#F5FAF7',
-  navCard:       '#FFFFFF',
-  navText:       '#1A2B1A',
-  navBorder:     '#E0EDE5',
+  navBackground: '#f7fafa',
+  navCard:       '#ffffff',
+  navText:       '#181c1d',
+  navBorder:     '#e0e3e3',
 
   ring: {
-    gradFrom: '#52C49E',
-    gradTo:   '#1B8A6B',
-    track:    '#EBF5EF',
-    badgeBg:  '#FDF2D6',
-    badgeText:'#D48A10',
+    gradFrom: '#85d3da',   // inverse-primary (light teal)
+    gradTo:   '#01696f',   // primary-container
+    track:    '#ebeeee',   // surface-container
+    badgeBg:  '#ffdcc3',   // secondary-fixed (amber)
+    badgeText:'#904d00',   // secondary
   },
 
   meal: {
-    breakfast: '#E8924A',  // warm amber — morning energy
-    lunch:     '#2EA89E',  // teal — midday freshness (distinct from primary)
-    dinner:    '#6B66D0',  // indigo — calm evening
-    snack:     '#D04A6B',  // berry — light treat
+    breakfast: '#fd8b00',  // secondary-container (warm amber)
+    lunch:     '#01696f',  // primary-container (teal)
+    dinner:    '#006d37',  // tertiary-container (forest green)
+    snack:     '#ffb77d',  // secondary-fixed-dim (soft amber)
   },
 
   auth: {
-    heroGradient: ['#0E5F49', '#1B8A6B', '#52C49E', '#D0F0E6'],
-    glassBg:     'rgba(255,255,255,0.82)',
-    glassBorder: 'rgba(200,220,210,0.6)',
-    chipBgs:     ['#D0F0E6', '#FDF2D6', '#FFE4E0'],
-    chipBorder:  'rgba(200,220,210,0.5)',
+    heroGradient: ['#004f54', '#01696f', '#85d3da', '#a1f0f6'],
+    glassBg:     'rgba(255,255,255,0.88)',
+    glassBorder: 'rgba(190,200,201,0.6)',
+    chipBgs:     ['#a1f0f6', '#ffdcc3', '#d4f5e2'],
+    chipBorder:  'rgba(190,200,201,0.5)',
   },
 };
 
 // ─── Dark Theme ───────────────────────────────────────────────────────────────
-// Base: deep neutral with a green undertone — not pure black.
-// Same brand identity, accent slightly more saturated for legibility on dark bg.
-// Contrast ratios for textPrimary (#E2F5EB) on bg (#0D1A12): 16:1 ✓
+// Dark variant of the Stitch Calm palette — inverse-surface as the base.
+// Accent colors derived from Stitch inverse-primary / primary-fixed tokens.
 
 const dark: ColorTheme = {
-  // Backgrounds
-  bg:            '#0D1A12',  // very deep green-black
-  surface:       '#162218',
-  surface2:      '#1E2E22',
-  surfaceOffset: '#243829',
+  // Backgrounds — Stitch inverse-surface family
+  bg:            '#0d1718',  // very dark teal-grey
+  surface:       '#191f20',  // dark card
+  surface2:      '#252c2d',  // dark chip / input bg
+  surfaceOffset: '#2d3435',  // subtle offset
 
-  // Text
-  textPrimary:   '#E2F5EB',
-  textSecondary: '#A0C4AD',
-  textMuted:     '#5E876A',
-  textInverse:   '#0D1A12',
+  // Text — Stitch inverse-on-surface → lighter for dark
+  textPrimary:   '#eef1f1',  // inverse-on-surface
+  textSecondary: '#a0b4b5',  // muted on dark
+  textMuted:     '#6f797a',  // outline
+  textInverse:   '#002022',  // on-primary-fixed
 
-  // Brand — slightly brighter/more saturated to pop on dark bg
-  primary:     '#3EBD95',
-  primaryLight:'#70D4B8',
-  primaryDark: '#28A07E',
-  primaryTint: '#1A3D30',
+  // Brand — Stitch inverse-primary (bright teal for dark bg)
+  primary:     '#85d3da',   // inverse-primary
+  primaryLight:'#a1f0f6',   // primary-fixed
+  primaryDark: '#4da8b0',
+  primaryTint: '#002022',   // on-primary-fixed (deep dark tint)
 
   // Semantic
-  success:     '#3EBD95',
-  successTint: '#1A3B2C',
-  warning:     '#F0B840',
-  warningTint: '#3A2A0A',
-  error:       '#FF6B6B',
+  success:     '#4ae183',   // tertiary-fixed-dim
+  successTint: '#00210c',
+  warning:     '#ffb77d',   // secondary-fixed-dim
+  warningTint: '#3a2800',
+  error:       '#ffb4ab',   // on-error (lighter for dark surfaces)
   errorTint:   '#401414',
-  info:        '#5BA8F8',
-  infoTint:    '#0D2040',
+  info:        '#85d3da',
+  infoTint:    '#002022',
 
-  // Macros — lighter/more saturated versions for dark surfaces
-  protein:     '#A888D0',  // lighter violet
+  // Macros — lighter/more saturated for dark surfaces
+  protein:     '#A888D0',   // lighter violet
   proteinTint: '#2A1F40',
-  carbs:       '#F0C040',  // bright amber
+  carbs:       '#ffb77d',   // secondary-fixed-dim (warm amber)
   carbsTint:   '#3A2800',
-  fat:         '#F08080',  // soft coral
+  fat:         '#F08080',   // soft coral
   fatTint:     '#3A1414',
-  fiber:       '#50C890',  // bright fresh green
-  fiberTint:   '#1A3D28',
+  fiber:       '#4ae183',   // tertiary-fixed-dim
+  fiberTint:   '#00210c',
 
   // Borders
-  borderColor:  '#2A3D30',
-  dividerColor: '#1E2E22',
+  borderColor:  '#3f4949',  // on-surface-variant
+  dividerColor: '#2d3131',  // inverse-surface
 
   // Interactive
-  ripple:  'rgba(62,189,149,0.15)',
+  ripple:  'rgba(133,211,218,0.15)',
   overlay: 'rgba(0,0,0,0.70)',
   shadow:  'rgba(0,0,0,0.40)',
 
   // Tab bar
-  tabBarBg:       '#162218',
-  tabBarActive:   '#3EBD95',
-  tabBarInactive: '#466050',
-  tabBarBorder:   '#1E2E22',
+  tabBarBg:       '#191f20',
+  tabBarActive:   '#85d3da',
+  tabBarInactive: '#6f797a',
+  tabBarBorder:   '#252c2d',
 
   // Card
-  cardBg:     '#162218',
+  cardBg:     '#191f20',
   cardShadow: 'rgba(0,0,0,0.30)',
 
   // Scan UI
   scanOverlayColor: 'rgba(0,0,0,0.65)',
-  scanBorderColor:  '#3EBD95',
-  scanSuccessColor: '#3EBD95',
+  scanBorderColor:  '#85d3da',
+  scanSuccessColor: '#4ae183',
 
   statusBar: 'light',
 
   // Navigation
-  navBackground: '#0D1A12',
-  navCard:       '#162218',
-  navText:       '#E2F5EB',
-  navBorder:     '#1E2E22',
+  navBackground: '#0d1718',
+  navCard:       '#191f20',
+  navText:       '#eef1f1',
+  navBorder:     '#252c2d',
 
   ring: {
-    gradFrom: '#70D4B8',
-    gradTo:   '#28A07E',
-    track:    '#1E2E22',
-    badgeBg:  '#3A2A0A',
-    badgeText:'#F0B840',
+    gradFrom: '#a1f0f6',   // primary-fixed
+    gradTo:   '#85d3da',   // inverse-primary
+    track:    '#252c2d',
+    badgeBg:  '#3a2800',
+    badgeText:'#ffb77d',
   },
 
   meal: {
-    breakfast: '#F0A060',  // slightly lighter amber for dark bg
-    lunch:     '#40C0B0',  // brighter teal
-    dinner:    '#9090E8',  // lighter indigo
-    snack:     '#E870A0',  // brighter berry
+    breakfast: '#ffb77d',  // secondary-fixed-dim
+    lunch:     '#85d3da',  // inverse-primary
+    dinner:    '#4ae183',  // tertiary-fixed-dim
+    snack:     '#ffdcc3',  // secondary-fixed
   },
 
   auth: {
-    heroGradient: ['#081610', '#0E5F49', '#1B8A6B', '#3EBD95'],
-    glassBg:     'rgba(15,30,20,0.88)',
-    glassBorder: 'rgba(46,90,60,0.5)',
-    chipBgs:     ['#1A3D30', '#3A2800', '#3A1414'],
-    chipBorder:  'rgba(46,90,60,0.4)',
+    heroGradient: ['#002022', '#004f54', '#01696f', '#85d3da'],
+    glassBg:     'rgba(25,31,32,0.90)',
+    glassBorder: 'rgba(63,73,73,0.5)',
+    chipBgs:     ['#002022', '#3A2800', '#00210c'],
+    chipBorder:  'rgba(63,73,73,0.4)',
   },
 };
 
