@@ -70,7 +70,17 @@ const errorHandler: ErrorRequestHandler = (
   const message = err instanceof Error ? err.message : JSON.stringify(err);
   const stack = err instanceof Error ? err.stack : undefined;
   console.error('[Error]', message, stack);
-  const statusCode = (err as any)?.statusCode ?? 500;
+
+  // Never forward third-party service status codes (e.g. Razorpay 401) as-is —
+  // a Razorpay credential failure is a server config error (500), not a client
+  // auth failure (401). Only use the upstream statusCode for 4xx client errors
+  // that originate from our own middleware (authMiddleware sets 401, routes set 400/404).
+  const upstreamStatus = (err as any)?.statusCode;
+  const statusCode =
+    typeof upstreamStatus === 'number' && upstreamStatus >= 400 && upstreamStatus < 500
+      ? upstreamStatus
+      : 500;
+
   res.status(statusCode).json({
     error:
       process.env.NODE_ENV === 'production' ? 'Internal server error' : message,

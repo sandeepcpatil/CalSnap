@@ -81,7 +81,16 @@ router.post(
       };
 
       res.json(response);
-    } catch (err) {
+    } catch (err: unknown) {
+      // Razorpay authentication errors mean server credentials are wrong —
+      // return 500 so the mobile client doesn't treat it as a user auth failure
+      const rzpDesc = (err as any)?.error?.description;
+      const rzpStatus = (err as any)?.statusCode;
+      if (rzpStatus === 401 || rzpDesc === 'Authentication failed') {
+        console.error('[Subscription] Razorpay credential failure — check RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET:', err);
+        res.status(500).json({ error: 'Payment service configuration error. Please contact support.' });
+        return;
+      }
       next(err);
     }
   },
