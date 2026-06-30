@@ -1,5 +1,5 @@
 const IS_DEV = process.env.APP_VARIANT === 'development';
-
+// v6
 module.exports = {
   name: IS_DEV ? 'CalSnap (Dev)' : 'CalSnap',
   slug: 'calsnap',
