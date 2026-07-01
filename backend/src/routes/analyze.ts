@@ -1,6 +1,6 @@
 import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'crypto';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai';
 import type { CalorieBreakdown, FoodScanResult, ScanLimitError } from '@shared/types';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
@@ -12,38 +12,40 @@ const router: ExpressRouter = Router();
 const genAIKey = process.env.GEMINI_API_KEY;
 if (!genAIKey) throw new Error('GEMINI_API_KEY must be set in environment');
 
+// ─── Response Schema (enforced by Gemini — removes schema tokens from prompt) ─
+const RESPONSE_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    food_name:  { type: SchemaType.STRING },
+    calories:   { type: SchemaType.NUMBER },
+    protein_g:  { type: SchemaType.NUMBER },
+    carbs_g:    { type: SchemaType.NUMBER },
+    fat_g:      { type: SchemaType.NUMBER },
+    fiber_g:    { type: SchemaType.NUMBER },
+    confidence: { type: SchemaType.STRING, format: 'enum', enum: ['high', 'medium', 'low'] },
+    notes:      { type: SchemaType.STRING },
+  },
+  required: ['food_name', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'confidence', 'notes'],
+};
+
 const genai = new GoogleGenerativeAI(genAIKey);
-const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const model = genai.getGenerativeModel({
+  model: 'gemini-2.5-flash',
+  generationConfig: {
+    responseMimeType: 'application/json',
+    responseSchema: RESPONSE_SCHEMA,
+  },
+});
 
 const FREE_DAILY_SCAN_LIMIT = 3;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
-// Tailored for Indian food — the most common use case for CalSnap users.
+// Kept minimal — JSON schema + calibration examples are now enforced via
+// responseSchema above, so they don't need to consume input tokens here.
 
 const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian cuisine.
-Analyse the food in this image and return ONLY a valid JSON object — no markdown fences, no explanation.
-
-JSON schema:
-{
-  "food_name": "string — descriptive name including cooking style (e.g. 'Masala Dosa with Sambar')",
-  "calories": number  (total estimated kcal for the entire visible portion),
-  "protein_g": number,
-  "carbs_g": number,
-  "fat_g": number,
-  "fiber_g": number,
-  "confidence": "high" | "medium" | "low",
-  "notes": "string — brief note on portion size assumptions (e.g. '2 medium rotis ~60g each')"
-}
-
-Indian food examples for calibration:
-- Masala Dosa (1 large): ~200 kcal, 4g protein, 30g carbs, 8g fat
-- Idli (2 pcs): ~130 kcal, 4g protein, 26g carbs, 0.5g fat
-- Chicken Biryani (1 plate ~350g): ~520 kcal, 28g protein, 60g carbs, 16g fat
-- Dal Tadka (1 bowl): ~180 kcal, 9g protein, 25g carbs, 5g fat
-- Butter Roti (1 medium): ~120 kcal, 3g protein, 18g carbs, 4g fat
-- Paneer Butter Masala (200g): ~350 kcal, 14g protein, 18g carbs, 25g fat
-
-If you cannot identify the food, return exactly: { "error": "Could not identify food" }`;
+Analyse the food in this image and estimate calories and macronutrients for the entire visible portion.
+If you cannot identify the food, set calories to 0, confidence to "low", and explain in notes.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,27 +95,14 @@ export async function analyzeFoodPhoto(imageBase64: string, mimeType: string, de
     { inlineData: { data: imageBase64, mimeType } },
   ]);
 
-  const rawText = geminiResult.response.text();
-
-  // Strip any accidental markdown fences
-  const cleaned = rawText.replace(/```json?\n?|```/g, '').trim();
-
+  // responseSchema guarantees valid JSON — no markdown stripping or error-field
+  // handling needed. If parsing still fails, fall back gracefully.
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = JSON.parse(geminiResult.response.text());
   } catch {
-    console.warn('[analyzeFoodPhoto] Failed to parse JSON, returning fallback. Raw:', rawText.slice(0, 200));
+    console.warn('[analyzeFoodPhoto] Unexpected non-JSON response, returning fallback.');
     return fallbackBreakdown('Could not parse AI response');
-  }
-
-  // Handle explicit "error" response from the model
-  if (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'error' in parsed &&
-    typeof (parsed as Record<string, unknown>).error === 'string'
-  ) {
-    return fallbackBreakdown((parsed as { error: string }).error);
   }
 
   return validateBreakdown(parsed);

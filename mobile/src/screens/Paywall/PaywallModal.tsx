@@ -170,7 +170,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => setSelectedPlan("annual")}
-              style={[styles.planCard, selectedPlan === "annual" && styles.planCardActive, styles.planCardAnnual]}
+              style={[styles.planCard, selectedPlan === "annual" && styles.planCardActive]}
             >
               {/* Best Value badge */}
               <View style={styles.bestValueBadge}>
@@ -185,8 +185,8 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                   </View>
                   <Text style={styles.savingsLabel}>Save 45% compared to monthly</Text>
                 </View>
-                <View style={[styles.radioOuter, { borderColor: C.primary, backgroundColor: C.primary }]}>
-                  <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />
+                <View style={[styles.radioOuter, selectedPlan === "annual" && { borderColor: C.primary, backgroundColor: C.primary }]}>
+                  {selectedPlan === "annual" && <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />}
                 </View>
               </View>
             </TouchableOpacity>
@@ -220,7 +220,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           >
             <Ionicons name={isLoading ? "reload-outline" : "lock-closed"} size={20} color={C.onPrimary} />
             <Text style={styles.ctaText}>
-              {isLoading ? "Processing…" : "Secure Checkout"}
+              {isLoading ? "Processing…" : selectedPlan === "annual" ? "Secure Checkout · ₹999/yr" : "Secure Checkout · ₹149/mo"}
             </Text>
           </TouchableOpacity>
 
