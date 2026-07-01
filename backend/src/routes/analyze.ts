@@ -157,6 +157,7 @@ interface ProfileRow {
   daily_scan_reset_at: string;
   is_subscribed: boolean;
   subscription_end_date: string | null;
+  trial_end_date: string | null;
 }
 
 interface CacheRow {
@@ -206,7 +207,7 @@ router.post(
       // ── Server-side scan gate ──────────────────────────────────────────────
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('scan_count, daily_scan_count, daily_scan_reset_at, is_subscribed, subscription_end_date')
+        .select('scan_count, daily_scan_count, daily_scan_reset_at, is_subscribed, subscription_end_date, trial_end_date')
         .eq('id', req.user!.id)
         .single<ProfileRow>();
 
@@ -215,9 +216,15 @@ router.post(
         return;
       }
 
-      const isSubscribed =
+      const now = new Date();
+      const isPaidSubscriber =
         profile.is_subscribed &&
-        (!profile.subscription_end_date || new Date(profile.subscription_end_date) > new Date());
+        (!profile.subscription_end_date || new Date(profile.subscription_end_date) > now);
+      const isOnTrial =
+        !isPaidSubscriber &&
+        !!profile.trial_end_date &&
+        new Date(profile.trial_end_date) > now;
+      const isSubscribed = isPaidSubscriber || isOnTrial;
 
       if (!isSubscribed) {
         const resetDate = new Date(profile.daily_scan_reset_at);

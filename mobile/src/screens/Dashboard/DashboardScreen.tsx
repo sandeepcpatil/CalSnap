@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -17,6 +17,9 @@ import { CalorieRing } from '../../components/CalorieRing';
 import { MacroBar } from '../../components/MacroBar';
 import { MealSection } from '../../components/MealSection';
 import { useTheme } from '../../hooks/useTheme';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { PaywallModal } from '../Paywall/PaywallModal';
+import { ProGate } from '../../components/ProGate';
 
 const C = {
   bg:              '#101415',
@@ -38,6 +41,7 @@ export function DashboardScreen() {
   const { profile, session } = useAuthStore();
   const { todayLogs, selectedDate, isLoading, fetchLogsForDate } = useFoodLogStore();
   const { theme } = useTheme();
+  const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
@@ -115,27 +119,31 @@ export function DashboardScreen() {
           <CalorieRing consumed={totals.calories} goal={calorieGoal} />
         </View>
 
-        {/* ── Macro Targets Card ── */}
-        <View style={styles.glassCard}>
-          <View style={styles.cardTitleRow}>
-            <Ionicons name="analytics-outline" size={16} color={C.primary} />
-            <Text style={styles.cardTitle}>Macro Targets</Text>
+        {/* ── Macro Targets Card (Pro) ── */}
+        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macro Breakdown" borderRadius={20}>
+          <View style={styles.glassCard}>
+            <View style={styles.cardTitleRow}>
+              <Ionicons name="analytics-outline" size={16} color={C.primary} />
+              <Text style={styles.cardTitle}>Macro Targets</Text>
+            </View>
+            <View style={styles.macroBars}>
+              <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={C.primary}    unit="g" />
+              <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={C.secondary}  unit="g" />
+              <MacroBar label="Fat"           current={totals.fat}     goal={fatGoal}     color={C.tertiary}   unit="g" />
+            </View>
           </View>
-          <View style={styles.macroBars}>
-            <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={C.primary}    unit="g" />
-            <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={C.secondary}  unit="g" />
-            <MacroBar label="Fat"           current={totals.fat}     goal={fatGoal}     color={C.tertiary}   unit="g" />
-          </View>
-        </View>
+        </ProGate>
 
-        {/* ── Nutri-Insight Card ── */}
-        <View style={[styles.glassCard, { borderColor: C.insightBorder, backgroundColor: C.insightBg }]}>
-          <View style={styles.cardTitleRow}>
-            <Ionicons name="sparkles-outline" size={16} color={C.primary} />
-            <Text style={styles.cardTitle}>Nutri-Insight</Text>
+        {/* ── Nutri-Insight Card (Pro) ── */}
+        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="AI Nutri-Insight" borderRadius={20}>
+          <View style={[styles.glassCard, { borderColor: C.insightBorder, backgroundColor: C.insightBg }]}>
+            <View style={styles.cardTitleRow}>
+              <Ionicons name="sparkles-outline" size={16} color={C.primary} />
+              <Text style={styles.cardTitle}>Nutri-Insight</Text>
+            </View>
+            <Text style={styles.insightText}>{insightMsg}</Text>
           </View>
-          <Text style={styles.insightText}>{insightMsg}</Text>
-        </View>
+        </ProGate>
 
         {/* ── Today's Log heading ── */}
         <View style={styles.sectionHeader}>
@@ -150,6 +158,8 @@ export function DashboardScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
     </View>
   );
 }

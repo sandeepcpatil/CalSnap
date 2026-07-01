@@ -37,10 +37,15 @@ export function SummaryStep() {
     if (!goals) return;
     setIsSaving(true);
     try {
+      // Give every new user a 7-day free Pro trial on first onboarding
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 7);
+
       await updateProfile({
         daily_calorie_goal: goals.dailyCalorieGoal,
         daily_protein_goal: goals.dailyProteinGoal,
         onboarding_complete: true,
+        trial_end_date: trialEnd.toISOString(),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // RootNavigator will automatically redirect to Main once onboarding_complete is true

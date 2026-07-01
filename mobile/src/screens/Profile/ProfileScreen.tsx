@@ -54,6 +54,13 @@ export function ProfileScreen() {
   const proteinGoal     = profile?.daily_protein_goal ?? 160;
   const bodyGoal        = profile?.body_goal;
 
+  // Trial logic
+  const now = new Date();
+  const trialEnd = profile?.trial_end_date ? new Date(profile.trial_end_date) : null;
+  const isOnTrial = !isSubscribed && !!trialEnd && trialEnd > now;
+  const trialDaysLeft = isOnTrial ? Math.ceil((trialEnd!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  const isPro = isSubscribed || isOnTrial;
+
   // Today's protein from shared store
   const proteinConsumed = todayLogs.reduce((s, l) => s + (l.protein_g || 0), 0);
   const proteinPct      = proteinGoal > 0 ? Math.min(proteinConsumed / proteinGoal, 1) : 0;
@@ -129,14 +136,14 @@ export function ProfileScreen() {
           <Text style={styles.userName}>{profile?.name ?? '—'}</Text>
 
           {/* Badge */}
-          <View style={isSubscribed ? styles.eliteBadge : styles.freeBadge}>
+          <View style={isSubscribed ? styles.eliteBadge : isOnTrial ? styles.trialBadge : styles.freeBadge}>
             <Ionicons
-              name={isSubscribed ? 'star' : 'flash-outline'}
+              name={isSubscribed ? 'star' : isOnTrial ? 'timer-outline' : 'flash-outline'}
               size={12}
-              color={isSubscribed ? C.primary : C.outline}
+              color={isSubscribed ? C.primary : isOnTrial ? C.tertiary : C.outline}
             />
-            <Text style={[styles.badgeText, { color: isSubscribed ? C.primary : C.outline }]}>
-              {isSubscribed ? 'Pro Member' : `${Math.min(scanCount, 5)} / 5 free scans`}
+            <Text style={[styles.badgeText, { color: isSubscribed ? C.primary : isOnTrial ? C.tertiary : C.outline }]}>
+              {isSubscribed ? 'Pro Member' : isOnTrial ? `Trial · ${trialDaysLeft}d left` : `${Math.min(scanCount, 5)} / 5 free scans`}
             </Text>
           </View>
         </View>
@@ -199,14 +206,35 @@ export function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Subscription CTA (if not subscribed) ── */}
-        {!isSubscribed && (
+        {/* ── Subscription CTA ── */}
+        {isPro && !isSubscribed && (
+          // Trial active — show countdown + soft upgrade nudge
+          <View style={[styles.ctaCard, { borderColor: C.tertiary + '40' }]}>
+            <View style={styles.ctaGlow} pointerEvents="none" />
+            <View style={styles.ctaContent}>
+              <View style={styles.ctaText}>
+                <Text style={[styles.ctaTitle, { color: C.tertiary }]}>⏳ Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''}</Text>
+                <Text style={styles.ctaSubtitle}>Enjoying CalSnap Pro? Lock in your access.</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.ctaButton, { backgroundColor: C.tertiary }]}
+                onPress={() => setShowPaywall(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.ctaButtonText}>UPGRADE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {!isPro && (
+          // Free tier — hard upgrade prompt
           <View style={styles.ctaCard}>
             <View style={styles.ctaGlow} pointerEvents="none" />
             <View style={styles.ctaContent}>
               <View style={styles.ctaText}>
                 <Text style={styles.ctaTitle}>Upgrade to Pro</Text>
-                <Text style={styles.ctaSubtitle} numberOfLines={2}>Unlock AI Scanning & Advanced Macros</Text>
+                <Text style={styles.ctaSubtitle} numberOfLines={2}>Unlock AI Scanning &amp; Advanced Macros</Text>
               </View>
               <TouchableOpacity
                 style={styles.ctaButton}
@@ -330,6 +358,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: 'rgba(1,105,111,0.20)',
     borderWidth: 1, borderColor: C.primary + '50',
+  },
+  trialBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(192,193,255,0.12)',
+    borderWidth: 1, borderColor: C.tertiary + '60',
   },
   freeBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

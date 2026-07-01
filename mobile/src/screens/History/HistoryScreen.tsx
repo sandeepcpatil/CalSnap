@@ -16,6 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import type { FoodLog } from '../../store/foodLogStore';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { PaywallModal } from '../Paywall/PaywallModal';
+import { ProGate } from '../../components/ProGate';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -77,6 +80,7 @@ function buildLast7(): DayData[] {
 
 export function HistoryScreen() {
   const { session } = useAuthStore();
+  const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [weekDays, setWeekDays] = useState<DayData[]>(buildLast7());
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [avgCalories, setAvgCalories] = useState(0);
@@ -231,13 +235,21 @@ export function HistoryScreen() {
         <View style={styles.logsSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Daily Logs</Text>
-            <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.7}>
-              <Text style={styles.exportText}>EXPORT</Text>
-              <Ionicons name="share-outline" size={14} color={C.secondaryCont} />
-            </TouchableOpacity>
+            {isSubscribed ? (
+              <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.7}>
+                <Text style={styles.exportText}>EXPORT</Text>
+                <Ionicons name="share-outline" size={14} color={C.secondaryCont} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.exportBtn} onPress={showPaywall} activeOpacity={0.7}>
+                <Ionicons name="lock-closed" size={12} color={C.outline} />
+                <Text style={[styles.exportText, { color: C.outline }]}>EXPORT</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {[...weekDays].reverse().map((day) => {
+          {/* Free: show 3 most recent days. Pro: show all 7 */}
+          {[...weekDays].reverse().slice(0, isSubscribed ? 7 : 3).map((day) => {
             const isExpanded = expandedDate === day.date;
             const isDayToday = day.date === today;
 
@@ -307,6 +319,24 @@ export function HistoryScreen() {
               </View>
             );
           })}
+
+          {/* Pro gate for older days */}
+          {!isSubscribed && (
+            <ProGate isSubscribed={false} onUpgrade={showPaywall} label="4 More Days of History" borderRadius={16}>
+              <View style={styles.dayCard}>
+                <View style={styles.dayCardHeader}>
+                  <View style={styles.dateBadge}>
+                    <Text style={styles.dateBadgeDow}>MON</Text>
+                    <Text style={styles.dateBadgeNum}>+4</Text>
+                  </View>
+                  <View style={styles.dayInfo}>
+                    <Text style={styles.dayDateLabel}>Previous 4 Days</Text>
+                    <Text style={styles.dayMeta}>UNLOCK WITH PRO</Text>
+                  </View>
+                </View>
+              </View>
+            </ProGate>
+          )}
         </View>
 
         {/* Motivational Quote */}
@@ -324,6 +354,8 @@ export function HistoryScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
     </SafeAreaView>
   );
 }

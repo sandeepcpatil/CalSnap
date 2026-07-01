@@ -32,10 +32,18 @@ export function useSubscriptionGate(): ScanGateResult {
   const { profile } = useAuthStore();
   const [paywallVisible, setPaywallVisible] = useState(false);
 
-  const isSubscribed =
+  const now = new Date();
+
+  const isPaidSubscriber =
     (profile?.is_subscribed ?? false) &&
-    (!profile?.subscription_end_date ||
-      new Date(profile.subscription_end_date) > new Date());
+    (!profile?.subscription_end_date || new Date(profile.subscription_end_date) > now);
+
+  const isOnTrial =
+    !isPaidSubscriber &&
+    !!profile?.trial_end_date &&
+    new Date(profile.trial_end_date) > now;
+
+  const isSubscribed = isPaidSubscriber || isOnTrial;
 
   // Reset daily count if it's a new day (client-side estimate — server is authoritative)
   const resetDate = profile?.daily_scan_reset_at

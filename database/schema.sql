@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   is_subscribed         BOOLEAN DEFAULT false NOT NULL,
   subscription_tier     TEXT CHECK (subscription_tier IN ('free', 'monthly', 'annual')) DEFAULT 'free' NOT NULL,
   subscription_end_date TIMESTAMPTZ,
+  trial_end_date        TIMESTAMPTZ,
   razorpay_customer_id  TEXT,
   onboarding_complete   BOOLEAN DEFAULT false NOT NULL,
   created_at            TIMESTAMPTZ DEFAULT NOW() NOT NULL

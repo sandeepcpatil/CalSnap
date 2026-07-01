@@ -21,6 +21,7 @@ export interface Profile {
   is_subscribed: boolean;
   subscription_tier: 'free' | 'monthly' | 'annual';
   subscription_end_date: string | null;
+  trial_end_date: string | null;
   onboarding_complete: boolean;
 }
 

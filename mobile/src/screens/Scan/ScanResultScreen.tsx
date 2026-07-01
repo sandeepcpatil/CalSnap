@@ -19,6 +19,9 @@ import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
 import { useTheme } from '../../hooks/useTheme';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { PaywallModal } from '../Paywall/PaywallModal';
+import { ProGate } from '../../components/ProGate';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -106,6 +109,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
   const { session, fetchProfile } = useAuthStore();
   const { addLog } = useFoodLogStore();
   const { theme } = useTheme();
+  const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [selectedMeal, setSelectedMeal] = useState<typeof MEAL_TYPES[number]>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -206,13 +210,15 @@ export function ScanResultScreen({ navigation, route }: Props) {
             ))}
           </View>
 
-          {/* Macro rows with GDA percentages */}
-          <View style={styles.macroList}>
-            <NutrientRow label="Protein" value={result.protein_g} color={theme.protein} />
-            <NutrientRow label="Carbs"   value={result.carbs_g}   color={theme.carbs} />
-            <NutrientRow label="Fat"     value={result.fat_g}     color={theme.fat} />
-            <NutrientRow label="Fiber"   value={result.fiber_g}   color={theme.fiber} />
-          </View>
+          {/* Macro rows — Pro Feature */}
+          <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full Nutrition Analysis" borderRadius={12}>
+            <View style={styles.macroList}>
+              <NutrientRow label="Protein" value={result.protein_g} color={theme.protein} />
+              <NutrientRow label="Carbs"   value={result.carbs_g}   color={theme.carbs} />
+              <NutrientRow label="Fat"     value={result.fat_g}     color={theme.fat} />
+              <NutrientRow label="Fiber"   value={result.fiber_g}   color={theme.fiber} />
+            </View>
+          </ProGate>
         </View>
       </ScrollView>
 
@@ -240,6 +246,8 @@ export function ScanResultScreen({ navigation, route }: Props) {
           Log This Meal
         </Button>
       </View>
+
+      <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
     </SafeAreaView>
   );
 }
