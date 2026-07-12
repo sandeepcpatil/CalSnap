@@ -10,12 +10,23 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
+import Constants from 'expo-constants';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { supabase } from '../../services/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { LegalModal, type LegalDoc } from '../../components/LegalModal';
 
-WebBrowser.maybeCompleteAuthSession();
+// webClientId = the Google Cloud OAuth *Web* client ID (also added to Supabase →
+// Auth → Providers → Google → Authorized Client IDs). Required so the returned
+// ID token is accepted by Supabase's signInWithIdToken.
+const GOOGLE_WEB_CLIENT_ID =
+  Constants.expoConfig?.extra?.googleWebClientId ??
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
+  '';
+
+if (GOOGLE_WEB_CLIENT_ID) {
+  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+}
 
 // ── Stitch dark / tech color tokens (matches HTML exactly) ────────────────
 const C = {
@@ -40,39 +51,35 @@ const FEATURES = [
 
 export function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
 
   const handleGoogleSignIn = async () => {
+    if (!GOOGLE_WEB_CLIENT_ID) {
+      Alert.alert('Sign-in unavailable', 'Google sign-in is not configured yet. Please try again later.');
+      return;
+    }
     try {
       setIsLoading(true);
 
-      const redirectUrl = makeRedirectUri({ scheme: 'calsnap' });
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
-      });
+      // ID token shape differs across SDK versions — handle both.
+      const idToken =
+        (response as { data?: { idToken?: string | null } })?.data?.idToken ??
+        (response as { idToken?: string | null })?.idToken ??
+        null;
 
+      if (!idToken) throw new Error('Google did not return an ID token.');
+
+      const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
       if (error) throw error;
-
-      if (data.url) {
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-
-        if (result.type === 'success' && result.url) {
-          const url = new URL(result.url);
-          const fragment = new URLSearchParams(url.hash.slice(1));
-          const accessToken = fragment.get('access_token');
-          const refreshToken = fragment.get('refresh_token');
-
-          if (accessToken && refreshToken) {
-            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-          }
-        }
-      }
-    } catch (err: any) {
-      Alert.alert('Sign-in failed', err.message ?? 'Please try again.');
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      // User dismissed the picker — no error UI.
+      if (code === statusCodes.SIGN_IN_CANCELLED || code === statusCodes.IN_PROGRESS) return;
+      const message = err instanceof Error ? err.message : 'Please try again.';
+      Alert.alert('Sign-in failed', message);
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +89,7 @@ export function AuthScreen() {
     <View style={styles.root}>
       {/* ── Cinematic hero background image ─────────────────────────────── */}
       <Image
-        source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD7bSwv2b1GD_1qfmjXzb3eYWa8rtoXbSBViqrjHBGforNxlm0DEW206JH-KkNnZb4IwIzC1piUFaR6SLFfV_ufjGHTp6jZn5OeUMqqR7JSwLFNR2HwIb1ErT12xTXcQbgXmZ7Gglfi1uKrwGigZKXb6gvls1MRwJOLa4zGVS2iusesBTgNJPot8QctGjX0Nbz0pOA5wl4iMHJy3oz9WaxxNQ57oEupxFvPrfPCd8KU2jAhN7vlyFph42gtororetrXyyfD4q9YFGGy' }}
+        source={require('../../../assets/auth-hero.png')}
         style={styles.heroBg}
         resizeMode="cover"
       />
@@ -173,9 +180,19 @@ export function AuthScreen() {
               {/* Terms */}
               <Text style={[styles.terms, { color: C.onSurfaceVariant }]}>
                 By continuing, you agree to our{' '}
-                <Text style={[styles.termsLink, { color: C.secondary }]}>Clinical Data Policy</Text>
+                <Text
+                  style={[styles.termsLink, { color: C.secondary }]}
+                  onPress={() => setLegalDoc('privacy')}
+                >
+                  Privacy Policy
+                </Text>
                 {' '}and{' '}
-                <Text style={[styles.termsLink, { color: C.secondary }]}>Terms of Service</Text>.
+                <Text
+                  style={[styles.termsLink, { color: C.secondary }]}
+                  onPress={() => setLegalDoc('terms')}
+                >
+                  Terms of Service
+                </Text>.
               </Text>
             </View>
 
@@ -202,13 +219,19 @@ export function AuthScreen() {
           </ScrollView>
         </View>
       </SafeAreaView>
+
+      <LegalModal
+        visible={legalDoc !== null}
+        doc={legalDoc ?? 'terms'}
+        onClose={() => setLegalDoc(null)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#101415' },
-  heroBg: { ...StyleSheet.absoluteFillObject, opacity: 0.40 },
+  heroBg: { ...StyleSheet.absoluteFillObject, opacity: 0.9 },
 
   glowTop: {
     position: 'absolute', top: -80, left: -80,

@@ -4,12 +4,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Share,
+  Alert,
   LayoutAnimation,
   Platform,
   UIManager,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +20,7 @@ import type { FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { exportHistoryToExcel } from '../../services/export';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -93,6 +94,7 @@ export function HistoryScreen() {
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [weekDays, setWeekDays] = useState<DayData[]>(buildLast7());
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [avgCalories, setAvgCalories] = useState(0);
   const [trend, setTrend] = useState<{ pct: number; dir: 'up' | 'down' | 'neutral' }>({ pct: 0, dir: 'neutral' });
   const [quote, setQuote] = useState<string>(
@@ -171,11 +173,20 @@ export function HistoryScreen() {
   };
 
   const handleExport = async () => {
-    const lines = weekDays
-      .filter((d) => d.calories > 0)
-      .map((d) => `${d.dateLabel}: ${d.calories.toLocaleString()} kcal (${d.mealCount} meal${d.mealCount !== 1 ? 's' : ''})`)
-      .join('\n');
-    await Share.share({ message: `CalSnap Weekly Report\n\n${lines || 'No logs this week.'}` });
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const ok = await exportHistoryToExcel(
+        weekDays.map((d) => ({ date: d.date, dateLabel: d.dateLabel, logs: d.logs })),
+      );
+      if (!ok) {
+        Alert.alert('Nothing to export', 'Log some meals this week first, then export your report.');
+      }
+    } catch (err: unknown) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const maxCals = Math.max(...weekDays.map((d) => d.calories), 1);
@@ -260,9 +271,13 @@ export function HistoryScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Daily Logs</Text>
             {isSubscribed ? (
-              <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.7}>
-                <Text style={styles.exportText}>EXPORT</Text>
-                <Ionicons name="share-outline" size={14} color={C.secondaryCont} />
+              <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.7} disabled={isExporting}>
+                <Text style={styles.exportText}>{isExporting ? 'EXPORTING…' : 'EXPORT'}</Text>
+                {isExporting ? (
+                  <ActivityIndicator animating size={12} color={C.secondaryCont} />
+                ) : (
+                  <Ionicons name="download-outline" size={14} color={C.secondaryCont} />
+                )}
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.exportBtn} onPress={showPaywall} activeOpacity={0.7}>

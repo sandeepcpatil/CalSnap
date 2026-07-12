@@ -91,7 +91,9 @@ android {
         applicationId 'com.sanverse.calsnapapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
+        // Honour EXPO_PUBLIC_VERSION_CODE when set (e.g. `export EXPO_PUBLIC_VERSION_CODE=10`),
+        // otherwise default to 3. Raw gradle builds don't read app.config.js, so we read it here.
+        versionCode System.getenv("EXPO_PUBLIC_VERSION_CODE")?.toInteger() ?: 3
         versionName "1.0.0"
     }
     signingConfigs {
@@ -101,15 +103,26 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Play upload key. Values come from ~/.gradle/gradle.properties (kept out
+        // of the repo). If CALSNAP_UPLOAD_STORE_FILE is unset, release falls back
+        // to the debug key below so local dev builds still work.
+        release {
+            def uploadStoreFile = findProperty('CALSNAP_UPLOAD_STORE_FILE')
+            if (uploadStoreFile) {
+                storeFile file(uploadStoreFile)
+                storePassword findProperty('CALSNAP_UPLOAD_STORE_PASSWORD')
+                keyAlias findProperty('CALSNAP_UPLOAD_KEY_ALIAS')
+                keyPassword findProperty('CALSNAP_UPLOAD_KEY_PASSWORD')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Sign with the Play upload key when configured, otherwise debug.
+            signingConfig findProperty('CALSNAP_UPLOAD_STORE_FILE') ? signingConfigs.release : signingConfigs.debug
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

@@ -11,15 +11,21 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore, FoodLog } from '../../store/foodLogStore';
 import { CalorieRing } from '../../components/CalorieRing';
 import { MacroBar } from '../../components/MacroBar';
+import { MacroDonut } from '../../components/MacroDonut';
 import { MealSection } from '../../components/MealSection';
 import { TrialBanner } from '../../components/TrialBanner';
+import { AlertsModal } from '../../components/AlertsModal';
 import { buildNutriInsight } from '../../utils/nutrition';
+import { buildSmartAlerts } from '../../utils/alerts';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 
@@ -43,7 +49,9 @@ export function DashboardScreen() {
   const { profile, session } = useAuthStore();
   const { todayLogs, selectedDate, isLoading, fetchLogsForDate } = useFoodLogStore();
   const { theme } = useTheme();
-  const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
+  const { isSubscribed, isOnTrial, trialDaysLeft, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
@@ -75,6 +83,19 @@ export function DashboardScreen() {
 
   const insightMsg = buildNutriInsight(totals, { calorieGoal, proteinGoal });
 
+  const mealsLogged = new Set(
+    todayLogs.map((l) => l.meal_type).filter(Boolean) as string[],
+  );
+  const alerts = buildSmartAlerts({
+    totals,
+    goals: { calorieGoal, proteinGoal },
+    mealsLogged,
+    itemsLoggedToday: todayLogs.length,
+    isOnTrial,
+    trialDaysLeft,
+    hour: new Date().getHours(),
+  });
+
   return (
     <View style={styles.root}>
       {/* ── Header ── */}
@@ -84,23 +105,40 @@ export function DashboardScreen() {
           style={styles.headerGrad}
         >
           <View style={styles.header}>
-            {/* Avatar */}
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
-              </View>
-            )}
+            {/* Avatar → Profile */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+            >
+              {profile?.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
             {/* Brand */}
             <Text style={styles.brand}>
               CAL<Text style={styles.brandSnap}>SNAP</Text>
             </Text>
 
-            {/* Bell */}
-            <TouchableOpacity style={styles.bellBtn}>
+            {/* Bell → Alerts */}
+            <TouchableOpacity
+              style={styles.bellBtn}
+              onPress={() => setAlertsOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open alerts"
+            >
               <Ionicons name="notifications-outline" size={22} color={C.onSurfaceVar} />
+              {alerts.length > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{alerts.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -129,6 +167,8 @@ export function DashboardScreen() {
               <Ionicons name="analytics-outline" size={16} color={C.primary} />
               <Text style={styles.cardTitle}>Macro Targets</Text>
             </View>
+            <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} />
+            <View style={styles.macroDivider} />
             <View style={styles.macroBars}>
               <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={C.primary}    unit="g" />
               <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={C.secondary}  unit="g" />
@@ -163,6 +203,7 @@ export function DashboardScreen() {
       </ScrollView>
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
+      <AlertsModal visible={alertsOpen} onClose={() => setAlertsOpen(false)} alerts={alerts} />
     </View>
   );
 }
@@ -213,6 +254,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: '#ffc46b',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: { fontSize: 9, fontWeight: '800', color: '#101415' },
 
   /* Scroll */
   scroll:        { flex: 1 },
@@ -242,6 +296,7 @@ const styles = StyleSheet.create({
     color: C.primary,
   },
   macroBars: { gap: 16 },
+  macroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 18 },
 
   /* Insight */
   insightText: {

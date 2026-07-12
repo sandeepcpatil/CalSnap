@@ -65,6 +65,34 @@ export function formatMacro(value: number, unit = 'g'): string {
   return `${Math.round(value)}${unit}`;
 }
 
+// ─── Macro calorie split ────────────────────────────────────────────────────────
+// Converts grams to the share of *calories* each macro contributes (protein·4,
+// carbs·4, fat·9). Percentages always sum to ~100 when there is any data.
+
+export interface MacroSplit {
+  proteinPct: number;
+  carbsPct: number;
+  fatPct: number;
+  /** Total calories accounted for by the three macros. */
+  total: number;
+}
+
+export function macroCalorieSplit(protein: number, carbs: number, fat: number): MacroSplit {
+  const p = Math.max(protein, 0) * 4;
+  const c = Math.max(carbs, 0) * 4;
+  const f = Math.max(fat, 0) * 9;
+  const total = p + c + f;
+  if (total <= 0) {
+    return { proteinPct: 0, carbsPct: 0, fatPct: 0, total: 0 };
+  }
+  return {
+    proteinPct: (p / total) * 100,
+    carbsPct: (c / total) * 100,
+    fatPct: (f / total) * 100,
+    total,
+  };
+}
+
 // ─── Nutri-Insight (rule-based) ─────────────────────────────────────────────────
 // Personalized, instant, offline, and free — derived from the user's real macros
 // for the day. Returns a single sentence for the Dashboard insight card.

@@ -32,7 +32,7 @@ module.exports = {
       backgroundColor: '#ab3500',
     },
     package: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
-    versionCode: process.env.EXPO_PUBLIC_VERSION_CODE ? parseInt(process.env.EXPO_PUBLIC_VERSION_CODE, 10) : 3,
+    versionCode: 11,
     permissions: [
       'CAMERA',
       'ACTIVITY_RECOGNITION',
@@ -72,6 +72,15 @@ module.exports = {
         photosPermission: 'CalSnap needs photo library access to analyze food photos.',
       },
     ],
+    [
+      '@react-native-google-signin/google-signin',
+      {
+        // iOS reversed client ID (com.googleusercontent.apps.XXXX). Required for
+        // the iOS build; set EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME before building iOS.
+        iosUrlScheme:
+          process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || 'com.googleusercontent.apps.placeholder',
+      },
+    ],
   ],
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
@@ -79,6 +88,7 @@ module.exports = {
     backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL,
     revenueCatIosKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY,
     revenueCatAndroidKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY,
+    googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     eas: {
       projectId: '8c518e8d-9244-4a5c-a504-98d7c97e1d9b',
     },

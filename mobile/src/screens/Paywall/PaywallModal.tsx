@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import type { PurchasesOffering, PurchasesPackage } from "react-native-purchases";
 import { useAuthStore } from "../../store/authStore";
+import { LegalModal, type LegalDoc } from "../../components/LegalModal";
 import { useSubscriptionGate } from "../../hooks/useSubscriptionGate";
 import { supabase } from "../../services/supabase";
 import { syncSubscription } from "../../services/api";
@@ -60,6 +61,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   const [loadingOffering, setLoadingOffering] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
 
   const monthlyPkg: PurchasesPackage | null = offering?.monthly ?? null;
   const annualPkg: PurchasesPackage | null = offering?.annual ?? null;
@@ -284,12 +286,21 @@ export function PaywallModal({ visible, onDismiss }: Props) {
 
           {/* ── Legal ── */}
           <Text style={styles.legalText}>
-            By subscribing, you agree to our Terms of Service and Privacy Policy. Payment is charged to your {" "}
-            {/* store name is resolved by the OS */}App Store / Google Play account and subscriptions auto-renew until cancelled in your store settings.
+            By subscribing, you agree to our{" "}
+            <Text style={styles.legalLink} onPress={() => setLegalDoc("terms")}>Terms of Service</Text>
+            {" "}and{" "}
+            <Text style={styles.legalLink} onPress={() => setLegalDoc("privacy")}>Privacy Policy</Text>.
+            {" "}Payment is charged to your App Store / Google Play account and subscriptions auto-renew until cancelled in your store settings.
           </Text>
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        <LegalModal
+          visible={legalDoc !== null}
+          doc={legalDoc ?? 'terms'}
+          onClose={() => setLegalDoc(null)}
+        />
       </View>
     </Modal>
   );
@@ -429,6 +440,11 @@ const styles = StyleSheet.create({
     color: C.outline,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  legalLink: {
+    color: C.onSurfaceVar,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });
 
