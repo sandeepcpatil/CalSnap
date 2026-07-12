@@ -11,7 +11,7 @@ module.exports = {
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#01696f',
+    backgroundColor: '#f7fafa',
   },
   updates: {
     fallbackToCacheTimeout: 0,
@@ -77,7 +77,8 @@ module.exports = {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL,
-    razorpayKeyId: process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
+    revenueCatIosKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY,
+    revenueCatAndroidKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY,
     eas: {
       projectId: '8c518e8d-9244-4a5c-a504-98d7c97e1d9b',
     },

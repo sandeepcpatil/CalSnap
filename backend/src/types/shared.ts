@@ -31,6 +31,15 @@ export interface ScanLimitError {
   resets_at: string;
 }
 
+/** Returned to Pro/trial users who hit the daily fair-use ceiling (HTTP 429). */
+export interface DailyLimitError {
+  error: 'daily_limit_reached';
+  message: string;
+  scans_used: number;
+  scans_limit: number;
+  resets_at: string;
+}
+
 export interface ScanHistoryItem {
   id: string;
   food_name: string;
@@ -43,18 +52,7 @@ export interface ScanHistoryItem {
   image_url: string | null;
 }
 
-// ─── Subscription ─────────────────────────────────────────────────────────────
-
-export interface CreateOrderRequest {
-  plan: 'monthly' | 'annual';
-}
-
-export interface CreateOrderResponse {
-  subscriptionId: string;
-  razorpayKeyId: string;
-  plan: string;
-  amount: number;
-}
+// ─── Subscription (RevenueCat) ──────────────────────────────────────────────────
 
 export interface SubscriptionStatusResponse {
   isSubscribed: boolean;
@@ -65,7 +63,6 @@ export interface SubscriptionStatusResponse {
     plan: 'monthly' | 'annual';
     status: 'active';
     ends_at: string;
-    razorpay_subscription_id: string;
   } | null;
 }
 

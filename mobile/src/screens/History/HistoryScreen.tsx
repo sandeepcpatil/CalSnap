@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../services/supabase';
+import { getDailyQuote } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import type { FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
@@ -51,6 +52,15 @@ const MEAL_ICONS: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: 
 
 const CHART_BAR_HEIGHT = 120;
 
+// Local fallback so a quote always shows (offline, or before the fetch resolves).
+const LOCAL_QUOTES = [
+  'Consistency is the silent catalyst of transformation. Your data tells a story of progress.',
+  'Small choices, repeated daily, become the body you live in.',
+  'You don’t need to be perfect — just one step better than yesterday.',
+  'Your habits are voting for the person you’re becoming.',
+  'Progress is quiet. Keep going even when no one is watching.',
+];
+
 interface DayData {
   date: string;
   dow: string;
@@ -85,8 +95,22 @@ export function HistoryScreen() {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [avgCalories, setAvgCalories] = useState(0);
   const [trend, setTrend] = useState<{ pct: number; dir: 'up' | 'down' | 'neutral' }>({ pct: 0, dir: 'neutral' });
+  const [quote, setQuote] = useState<string>(
+    () => LOCAL_QUOTES[new Date().getDate() % LOCAL_QUOTES.length] ?? LOCAL_QUOTES[0],
+  );
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Fetch the shared "quote of the day" (backend caches one per day for everyone).
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) return;
+    let active = true;
+    getDailyQuote(token)
+      .then((r) => { if (active && r?.quote) setQuote(r.quote); })
+      .catch(() => { /* keep the local fallback already in state */ });
+    return () => { active = false; };
+  }, [session?.access_token]);
 
   const fetchWeekData = useCallback(async () => {
     if (!session?.user.id) return;
@@ -348,7 +372,7 @@ export function HistoryScreen() {
         >
           <Ionicons name="sparkles" size={28} color={C.secondaryCont} style={{ marginBottom: 10 }} />
           <Text style={styles.quoteText}>
-            "Consistency is the silent catalyst of transformation.{'\n'}Your data tells a story of progress."
+            "{quote}"
           </Text>
         </LinearGradient>
 

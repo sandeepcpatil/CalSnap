@@ -1,142 +1,168 @@
 import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
-import crypto from 'crypto';
-import Razorpay from 'razorpay';
-import type {
-  CreateOrderRequest,
-  CreateOrderResponse,
-  SubscriptionStatusResponse,
-} from '@shared/types';
+import type { SubscriptionStatusResponse } from '@shared/types';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 
 const router: ExpressRouter = Router();
 
-// ─── Razorpay Setup ───────────────────────────────────────────────────────────
+// ─── RevenueCat config ─────────────────────────────────────────────────────────
+// Entitlement identifier configured in the RevenueCat dashboard.
+const PRO_ENTITLEMENT = 'pro';
+const FREE_DAILY_SCAN_LIMIT = 2;
+const REVENUECAT_API = 'https://api.revenuecat.com/v1';
 
-const rzpKeyId = process.env.RAZORPAY_KEY_ID;
-const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
+const rcSecret = process.env.REVENUECAT_SECRET_KEY;
+const rcWebhookAuth = process.env.REVENUECAT_WEBHOOK_AUTH;
 
-if (!rzpKeyId || !rzpKeySecret) {
-  throw new Error('RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in environment');
+// ─── Types ──────────────────────────────────────────────────────────────────────
+
+interface EntitlementState {
+  active: boolean;
+  expiresAt: string | null; // ISO, null = lifetime
+  plan: 'monthly' | 'annual' | null;
 }
 
-const razorpay = new Razorpay({ key_id: rzpKeyId, key_secret: rzpKeySecret });
-
-// ─── Plan Config ──────────────────────────────────────────────────────────────
-// Amounts in paise (1 INR = 100 paise): ₹149 = 14900, ₹999 = 99900
-
-interface PlanConfig {
-  amount: number;
-  period: 'monthly' | 'yearly';
-  interval: number;
+interface RevenueCatEntitlement {
+  expires_date: string | null;
+  product_identifier?: string;
 }
 
-const PLANS: Record<'monthly' | 'annual', PlanConfig> = {
-  monthly: { amount: 14900, period: 'monthly', interval: 1 },
-  annual:  { amount: 99900, period: 'yearly',  interval: 1 },
-};
+interface RevenueCatSubscriberResponse {
+  subscriber?: {
+    entitlements?: Record<string, RevenueCatEntitlement>;
+  };
+}
 
-// ─── POST /api/subscription/create-order ──────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function planFromProductId(productId: string | undefined): 'monthly' | 'annual' {
+  return productId && /annual|year/i.test(productId) ? 'annual' : 'monthly';
+}
+
+/**
+ * Read the authoritative Pro entitlement for a user from RevenueCat.
+ * RevenueCat is the source of truth for what the user actually purchased.
+ */
+async function fetchEntitlement(appUserId: string): Promise<EntitlementState> {
+  if (!rcSecret) {
+    throw new Error('REVENUECAT_SECRET_KEY must be set in environment');
+  }
+
+  const res = await fetch(`${REVENUECAT_API}/subscribers/${encodeURIComponent(appUserId)}`, {
+    headers: { Authorization: `Bearer ${rcSecret}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`RevenueCat lookup failed: ${res.status} ${res.statusText}`);
+  }
+
+  const body = (await res.json()) as RevenueCatSubscriberResponse;
+  const ent = body.subscriber?.entitlements?.[PRO_ENTITLEMENT];
+
+  if (!ent) {
+    return { active: false, expiresAt: null, plan: null };
+  }
+
+  const expiresAt = ent.expires_date; // null => lifetime
+  const active = expiresAt === null || new Date(expiresAt).getTime() > Date.now();
+
+  return {
+    active,
+    expiresAt,
+    plan: active ? planFromProductId(ent.product_identifier) : null,
+  };
+}
+
+/**
+ * Persist the entitlement state to Supabase. `profiles` is what the scan gate
+ * reads, so it is the important one; the `subscriptions` row is best-effort
+ * bookkeeping for the admin dashboard.
+ */
+async function applyProStatus(userId: string, state: EntitlementState): Promise<void> {
+  await supabase
+    .from('profiles')
+    .update({
+      is_subscribed: state.active,
+      subscription_end_date: state.active ? state.expiresAt : null,
+    })
+    .eq('id', userId);
+
+  if (state.active && state.plan) {
+    await supabase.from('subscriptions').upsert(
+      {
+        user_id: userId,
+        plan: state.plan,
+        status: 'active',
+        ends_at: state.expiresAt,
+      },
+      { onConflict: 'user_id' },
+    );
+  } else {
+    await supabase
+      .from('subscriptions')
+      .update({ status: 'expired' })
+      .eq('user_id', userId)
+      .eq('status', 'active');
+  }
+}
+
+// ─── POST /api/subscription/sync ─────────────────────────────────────────────
+// Called by the app right after a successful purchase/restore so the server-side
+// scan gate unlocks immediately (instead of waiting for the async webhook).
 
 router.post(
-  '/create-order',
+  '/sync',
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { plan } = req.body as CreateOrderRequest;
+      const state = await fetchEntitlement(req.user!.id);
+      await applyProStatus(req.user!.id, state);
 
-      if (!plan || !(plan in PLANS)) {
-        res.status(400).json({ error: 'Invalid plan. Choose "monthly" or "annual".' });
-        return;
-      }
-
-      const planConfig = PLANS[plan as 'monthly' | 'annual'];
-
-      const razorpayPlan = await razorpay.plans.create({
-        period: planConfig.period,
-        interval: planConfig.interval,
-        item: {
-          name: `CalSnap Pro - ${plan}`,
-          amount: planConfig.amount,
-          currency: 'INR',
-          description: `CalSnap Pro ${plan} subscription`,
-        },
+      res.json({
+        isSubscribed: state.active,
+        subscriptionEndDate: state.expiresAt,
+        activePlan: state.plan,
       });
-
-      const subscription = await razorpay.subscriptions.create({
-        plan_id: razorpayPlan.id,
-        customer_notify: 1,
-        total_count: plan === 'annual' ? 1 : 12,
-        notes: {
-          user_id: req.user!.id,
-          plan,
-        },
-      });
-
-      const response: CreateOrderResponse = {
-        subscriptionId: subscription.id,
-        razorpayKeyId: rzpKeyId,
-        plan,
-        amount: planConfig.amount,
-      };
-
-      res.json(response);
-    } catch (err: unknown) {
-      // Razorpay authentication errors mean server credentials are wrong —
-      // return 500 so the mobile client doesn't treat it as a user auth failure
-      const rzpDesc = (err as any)?.error?.description;
-      const rzpStatus = (err as any)?.statusCode;
-      if (rzpStatus === 401 || rzpDesc === 'Authentication failed') {
-        console.error('[Subscription] Razorpay credential failure — check RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET:', err);
-        res.status(500).json({ error: 'Payment service configuration error. Please contact support.' });
-        return;
-      }
+    } catch (err) {
       next(err);
     }
   },
 );
 
 // ─── POST /api/subscription/webhook ──────────────────────────────────────────
-// CRITICAL: Always verify HMAC-SHA256 signature before processing.
-// Never trust the payload without verification — replay & tampering attacks.
+// RevenueCat authenticates webhooks with a shared secret sent in the
+// Authorization header (configured in the RevenueCat dashboard). We re-read the
+// authoritative state from RevenueCat rather than trusting the event payload.
 
 router.post(
   '/webhook',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const signature = req.headers['x-razorpay-signature'];
-      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-      if (!signature || typeof signature !== 'string' || !webhookSecret) {
-        res.status(400).json({ error: 'Missing signature or webhook secret' });
+      if (!rcWebhookAuth) {
+        console.error('[Webhook] REVENUECAT_WEBHOOK_AUTH not configured');
+        res.status(500).json({ error: 'Webhook not configured' });
         return;
       }
 
-      // req.body is a raw Buffer here (see express.raw() in index.ts)
-      const expectedSig = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(req.body as Buffer)
-        .digest('hex');
-
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
-        console.warn('[Webhook] Signature mismatch — possible tampering attempt');
-        res.status(401).json({ error: 'Invalid signature' });
+      const authHeader = req.headers.authorization;
+      if (authHeader !== `Bearer ${rcWebhookAuth}`) {
+        console.warn('[Webhook] Rejected: bad Authorization header');
+        res.status(401).json({ error: 'Invalid webhook authorization' });
         return;
       }
 
-      const event = JSON.parse((req.body as Buffer).toString()) as RazorpayWebhookEvent;
-      const { event: eventType, payload } = event;
+      const event = (req.body as {
+        event?: { app_user_id?: string; original_app_user_id?: string; type?: string };
+      })?.event;
+      const appUserId = event?.app_user_id ?? event?.original_app_user_id;
 
-      console.log(`[Webhook] Received: ${eventType}`);
-
-      if (eventType === 'subscription.activated') {
-        await handleSubscriptionActivated(payload.subscription.entity);
-      } else if (eventType === 'subscription.charged') {
-        await handleSubscriptionCharged(payload.subscription.entity);
-      } else if (eventType === 'subscription.cancelled' || eventType === 'subscription.expired') {
-        await handleSubscriptionEnded(payload.subscription.entity);
+      if (appUserId) {
+        const state = await fetchEntitlement(appUserId);
+        await applyProStatus(appUserId, state);
+        console.log(`[Webhook] ${event?.type ?? 'event'} → user=${appUserId} pro=${state.active}`);
       }
 
+      // Always 2xx so RevenueCat doesn't retry a well-formed, authorized event.
       res.json({ received: true });
     } catch (err) {
       next(err);
@@ -164,12 +190,12 @@ router.get(
 
       const { data: activePlan } = await supabase
         .from('subscriptions')
-        .select('plan, status, ends_at, razorpay_subscription_id')
+        .select('plan, status, ends_at')
         .eq('user_id', req.user!.id)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single<{ plan: string; status: string; ends_at: string; razorpay_subscription_id: string }>();
+        .single<{ plan: string; status: string; ends_at: string }>();
 
       const response: SubscriptionStatusResponse = {
         isSubscribed: profile.is_subscribed,
@@ -179,9 +205,8 @@ router.get(
         activePlan: activePlan
           ? {
               plan: activePlan.plan as 'monthly' | 'annual',
-              status: activePlan.status as 'active',
+              status: 'active',
               ends_at: activePlan.ends_at,
-              razorpay_subscription_id: activePlan.razorpay_subscription_id,
             }
           : null,
       };
@@ -192,83 +217,5 @@ router.get(
     }
   },
 );
-
-const FREE_DAILY_SCAN_LIMIT = 3;
-
-// ─── Webhook Handlers ─────────────────────────────────────────────────────────
-
-interface RazorpaySubscriptionEntity {
-  id: string;
-  status: string;
-  notes?: { user_id?: string; plan?: string };
-}
-
-interface RazorpayWebhookEvent {
-  event: string;
-  payload: {
-    subscription: { entity: RazorpaySubscriptionEntity };
-    payment?: { entity: Record<string, unknown> };
-  };
-}
-
-async function handleSubscriptionActivated(subscription: RazorpaySubscriptionEntity): Promise<void> {
-  const userId = subscription.notes?.user_id;
-  if (!userId) return;
-
-  const plan = subscription.notes?.plan ?? 'monthly';
-  const endsAt = computeEndsAt(plan);
-
-  await supabase
-    .from('profiles')
-    .update({ is_subscribed: true, subscription_end_date: endsAt.toISOString() })
-    .eq('id', userId);
-
-  await supabase.from('subscriptions').upsert(
-    {
-      user_id: userId,
-      plan,
-      status: 'active',
-      razorpay_subscription_id: subscription.id,
-      amount_paise: plan === 'annual' ? 99900 : 14900,
-      ends_at: endsAt.toISOString(),
-    },
-    { onConflict: 'razorpay_subscription_id' },
-  );
-}
-
-async function handleSubscriptionCharged(subscription: RazorpaySubscriptionEntity): Promise<void> {
-  const userId = subscription.notes?.user_id;
-  if (!userId) return;
-
-  const plan = subscription.notes?.plan ?? 'monthly';
-  const endsAt = computeEndsAt(plan);
-
-  await supabase
-    .from('profiles')
-    .update({ is_subscribed: true, subscription_end_date: endsAt.toISOString() })
-    .eq('id', userId);
-}
-
-async function handleSubscriptionEnded(subscription: RazorpaySubscriptionEntity): Promise<void> {
-  const userId = subscription.notes?.user_id;
-  if (!userId) return;
-
-  await supabase
-    .from('profiles')
-    .update({ is_subscribed: false, subscription_end_date: null })
-    .eq('id', userId);
-
-  await supabase
-    .from('subscriptions')
-    .update({ status: subscription.status === 'cancelled' ? 'cancelled' : 'expired' })
-    .eq('razorpay_subscription_id', subscription.id);
-}
-
-function computeEndsAt(plan: string): Date {
-  const ms = plan === 'annual'
-    ? 365 * 24 * 60 * 60 * 1000
-    :  30 * 24 * 60 * 60 * 1000;
-  return new Date(Date.now() + ms);
-}
 
 export default router;

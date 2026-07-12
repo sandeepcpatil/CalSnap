@@ -264,6 +264,9 @@ export function ScanScreen({ navigation }: Props) {
       // Call backend (server enforces scan count gate)
       const { result } = await analyzeFood(signedData.signedUrl, session!.access_token, userDescription || undefined);
 
+      // Optimistically decrement the local "scans left" badge (server is authoritative).
+      consumeScan();
+
       navigation.navigate('ScanResult', {
         imageUri: compressed.uri,
         imageStorageUrl: signedData.signedUrl,
@@ -271,7 +274,11 @@ export function ScanScreen({ navigation }: Props) {
       });
     } catch (err: any) {
       if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
+        // Free user out of daily scans — nudge to Pro.
         showPaywall();
+      } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
+        // Pro/trial hit the fair-use ceiling — no paywall, just let them know.
+        Alert.alert("Daily limit reached", err.message ?? "You've reached today's scan limit. It resets tomorrow.");
       } else {
         Alert.alert('Analysis failed', err.message ?? 'Please try again with a clearer photo.');
       }
@@ -305,13 +312,25 @@ export function ScanScreen({ navigation }: Props) {
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.glassBtn}>
+          <TouchableOpacity
+            style={styles.glassBtn}
+            disabled={isAnalyzing}
+            onPress={() => navigation.getParent()?.navigate('Home')}
+          >
             <Ionicons name="close" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.titleBadge}>
             <Text style={styles.titleBadgeText}>AI Scanner</Text>
           </View>
-          <TouchableOpacity style={styles.glassBtn}>
+          <TouchableOpacity
+            style={styles.glassBtn}
+            onPress={() =>
+              Alert.alert(
+                'How to scan',
+                'Point your camera at a plate of food and tap the shutter, or pick a photo from your gallery. Add an optional description to help the AI with hidden ingredients.',
+              )
+            }
+          >
             <Ionicons name="help-circle-outline" size={22} color="#fff" />
           </TouchableOpacity>
         </View>

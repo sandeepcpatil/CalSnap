@@ -64,3 +64,67 @@ export function formatCalories(kcal: number): string {
 export function formatMacro(value: number, unit = 'g'): string {
   return `${Math.round(value)}${unit}`;
 }
+
+// ─── Nutri-Insight (rule-based) ─────────────────────────────────────────────────
+// Personalized, instant, offline, and free — derived from the user's real macros
+// for the day. Returns a single sentence for the Dashboard insight card.
+
+export interface NutriTotals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface NutriGoals {
+  calorieGoal: number;
+  proteinGoal: number;
+}
+
+export function buildNutriInsight(totals: NutriTotals, goals: NutriGoals): string {
+  const { calories, protein } = totals;
+  const { calorieGoal, proteinGoal } = goals;
+
+  if (calories <= 0) {
+    return 'No meals logged yet today — snap your first meal to start tracking your macros.';
+  }
+
+  const calPct = calorieGoal > 0 ? calories / calorieGoal : 0;
+  const proteinPct = proteinGoal > 0 ? protein / proteinGoal : 0;
+  const proteinGap = Math.round(proteinGoal - protein);
+  const hour = new Date().getHours();
+
+  // Big calorie overshoot
+  if (calPct >= 1.15) {
+    return `You're ${Math.round(calories - calorieGoal)} kcal over your ${calorieGoal} goal — lighter, protein-forward choices will balance the rest of the day.`;
+  }
+
+  // Protein low while calories are already flowing — the most useful nudge
+  if (proteinPct < 0.6 && calPct >= 0.4 && proteinGap > 0) {
+    const idea =
+      proteinGap >= 20
+        ? 'grilled chicken or paneer'
+        : proteinGap >= 10
+          ? 'a boiled egg (~6g) or Greek yogurt (~10g)'
+          : 'a handful of roasted chana';
+    return `You're ${proteinGap}g short of your ${proteinGoal}g protein goal — ${idea} would close the gap.`;
+  }
+
+  // Under-fueling late in the day
+  if (calPct < 0.5 && hour >= 18) {
+    return `You've hit only ${Math.round(calPct * 100)}% of your ${calorieGoal} kcal goal — don't skip dinner, your body needs the fuel to recover.`;
+  }
+
+  // Dialed in
+  if (proteinPct >= 0.9 && calPct >= 0.8 && calPct <= 1.1) {
+    return `Dialed in — ${Math.round(protein)}g protein and right on your calorie target. This is what consistency looks like.`;
+  }
+
+  // Protein handled, calories to spare
+  if (proteinPct >= 0.9 && calPct < 0.8) {
+    return `Great protein at ${Math.round(protein)}g. You have ${Math.round(calorieGoal - calories)} kcal left — room for some healthy carbs or fats.`;
+  }
+
+  // Default progress read-out
+  return `You're at ${Math.round(calPct * 100)}% of calories and ${Math.round(proteinPct * 100)}% of protein today. Steady progress — keep logging.`;
+}

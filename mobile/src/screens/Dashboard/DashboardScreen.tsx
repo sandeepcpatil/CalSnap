@@ -16,6 +16,8 @@ import { useFoodLogStore, FoodLog } from '../../store/foodLogStore';
 import { CalorieRing } from '../../components/CalorieRing';
 import { MacroBar } from '../../components/MacroBar';
 import { MealSection } from '../../components/MealSection';
+import { TrialBanner } from '../../components/TrialBanner';
+import { buildNutriInsight } from '../../utils/nutrition';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
@@ -71,9 +73,7 @@ export function DashboardScreen() {
   const byMealType = (type: FoodLog['meal_type']) =>
     todayLogs.filter((l) => l.meal_type === type);
 
-  const insightMsg = totals.protein < proteinGoal * 0.5
-    ? `You're under protein targets today — consider adding a high-protein snack to hit your ${proteinGoal}g goal.`
-    : `Great progress! You're on track with your nutrition goals. Keep it up!`;
+  const insightMsg = buildNutriInsight(totals, { calorieGoal, proteinGoal });
 
   return (
     <View style={styles.root}>
@@ -114,6 +114,9 @@ export function DashboardScreen() {
           <RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor={C.primary} />
         }
       >
+        {/* ── Trial countdown (only during the 7-day trial) ── */}
+        <TrialBanner onPress={showPaywall} />
+
         {/* ── Calorie Ring Card ── */}
         <View style={styles.glassCard}>
           <CalorieRing consumed={totals.calories} goal={calorieGoal} />

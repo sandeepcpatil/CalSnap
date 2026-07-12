@@ -1,13 +1,17 @@
 import { useCallback, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 
-const FREE_DAILY_LIMIT = 3;
+const FREE_DAILY_LIMIT = 2;
 
 export interface ScanGateResult {
   canScan: boolean;
   scansUsedToday: number;
   scansRemaining: number;
   isSubscribed: boolean;
+  /** True while the user is inside their free 7-day Pro trial (and not yet paid). */
+  isOnTrial: boolean;
+  /** Whole days remaining in the trial (rounded up), or null if not on trial. */
+  trialDaysLeft: number | null;
   showPaywall: () => void;
   paywallVisible: boolean;
   dismissPaywall: () => void;
@@ -45,6 +49,14 @@ export function useSubscriptionGate(): ScanGateResult {
 
   const isSubscribed = isPaidSubscriber || isOnTrial;
 
+  const trialDaysLeft =
+    isOnTrial && profile?.trial_end_date
+      ? Math.max(
+          0,
+          Math.ceil((new Date(profile.trial_end_date).getTime() - now.getTime()) / 86_400_000),
+        )
+      : null;
+
   // Reset daily count if it's a new day (client-side estimate — server is authoritative)
   const resetDate = profile?.daily_scan_reset_at
     ? new Date(profile.daily_scan_reset_at)
@@ -78,6 +90,8 @@ export function useSubscriptionGate(): ScanGateResult {
     scansUsedToday,
     scansRemaining,
     isSubscribed,
+    isOnTrial,
+    trialDaysLeft,
     showPaywall,
     paywallVisible,
     dismissPaywall,

@@ -1,0 +1,54 @@
+<svg width="1242" height="2688" viewBox="0 0 1242 2688" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="41%" r="52%">
+      <stop offset="0%" stop-color="#cfeced" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#e4f2f2" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#f7fafa" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b4a4e"/>
+      <stop offset="100%" stop-color="#032a2d"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3fae74"/>
+      <stop offset="100%" stop-color="#9be7b3"/>
+    </linearGradient>
+    <radialGradient id="lens" cx="42%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#12626a"/>
+      <stop offset="100%" stop-color="#062f33"/>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <!-- base: light off-white, matches the app's default light theme -->
+  <rect width="1242" height="2688" fill="#f7fafa"/>
+  <rect width="1242" height="2688" fill="url(#glow)"/>
+
+  <!-- soft shadow under badge -->
+  <rect x="391" y="842" width="460" height="470" rx="120" fill="#01696f" opacity="0.22" filter="url(#soft)"/>
+
+  <!-- app badge (dark teal, mirrors the app icon) -->
+  <rect x="391" y="810" width="460" height="460" rx="120" fill="url(#badge)" stroke="#004f54" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- camera + leaf emblem -->
+  <g>
+    <rect x="545" y="918" width="120" height="52" rx="20" fill="#f3fbfb"/>
+    <rect x="466" y="952" width="310" height="214" rx="46" fill="#f3fbfb"/>
+    <circle cx="512" cy="992" r="12" fill="#9fd7da"/>
+    <circle cx="621" cy="1066" r="90" fill="url(#lens)"/>
+    <circle cx="621" cy="1066" r="75" fill="none" stroke="#85d3da" stroke-width="12"/>
+    <circle cx="621" cy="1066" r="52" fill="#083c41"/>
+    <circle cx="598" cy="1043" r="15" fill="#bdf4ff" fill-opacity="0.9"/>
+    <path d="M690 1188 C688 1112 748 1050 830 1044 C832 1120 772 1184 690 1188 Z" fill="url(#leaf)"/>
+    <path d="M706 1174 C742 1126 786 1088 820 1064" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- wordmark: teal primary + amber secondary (the app's two brand accents) -->
+  <text x="619" y="1495" text-anchor="end" font-family="DejaVu Sans, Liberation Sans, sans-serif" font-weight="bold" font-size="172" fill="#01696f">Cal</text>
+  <text x="619" y="1495" text-anchor="start" font-family="DejaVu Sans, Liberation Sans, sans-serif" font-weight="bold" font-size="172" fill="#fd8b00">Snap</text>
+
+  <!-- tagline -->
+  <text x="621" y="1600" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, sans-serif" font-weight="bold" font-size="44" letter-spacing="10" fill="#6f797a">AI CALORIE SCANNER</text>
+</svg>

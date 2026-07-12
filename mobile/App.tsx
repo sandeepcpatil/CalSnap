@@ -8,6 +8,7 @@ import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useTheme } from './src/hooks/useTheme';
+import { configurePurchases, identifyUser } from './src/services/purchases';
 import './src/store/themeStore';
 
 function AppContent() {
@@ -40,14 +41,23 @@ function AppContent() {
   };
 
   useEffect(() => {
+    // Configure RevenueCat once; identity is attached when a session exists.
+    configurePurchases();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchProfile();
+      if (session) {
+        identifyUser(session.user.id);
+        fetchProfile();
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) fetchProfile();
+      if (session) {
+        identifyUser(session.user.id);
+        fetchProfile();
+      }
     });
 
     return () => subscription.unsubscribe();

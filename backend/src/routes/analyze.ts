@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai';
-import type { CalorieBreakdown, FoodScanResult, ScanLimitError } from '@shared/types';
+import type { CalorieBreakdown, FoodScanResult, ScanLimitError, DailyLimitError } from '@shared/types';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 
@@ -37,7 +37,11 @@ const model = genai.getGenerativeModel({
   },
 });
 
-const FREE_DAILY_SCAN_LIMIT = 3;
+// Free users get 2 scans/day (after any trial). Pro & trial users share a
+// generous fair-use cap of 20/day — enough for any real user, but it blocks
+// abuse and keeps the annual plan safely profitable.
+const FREE_DAILY_SCAN_LIMIT = 2;
+const PRO_DAILY_SCAN_LIMIT = 20;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 // Kept minimal — JSON schema + calibration examples are now enforced via
@@ -269,28 +273,42 @@ router.post(
         !isPaidSubscriber &&
         !!profile.trial_end_date &&
         new Date(profile.trial_end_date) > now;
-      const isSubscribed = isPaidSubscriber || isOnTrial;
 
-      if (!isSubscribed) {
-        const resetDate = new Date(profile.daily_scan_reset_at);
-        const today = new Date();
-        const isNewDay = resetDate.toDateString() !== today.toDateString();
-        const effectiveDailyCount = isNewDay ? 0 : profile.daily_scan_count;
+      // Everyone has a daily cap now: free = 2, pro & trial = 20 (fair use).
+      const hasProAccess = isPaidSubscriber || isOnTrial;
+      const dailyLimit = hasProAccess ? PRO_DAILY_SCAN_LIMIT : FREE_DAILY_SCAN_LIMIT;
 
-        if (effectiveDailyCount >= FREE_DAILY_SCAN_LIMIT) {
-          const resetAt = new Date(today);
-          resetAt.setHours(24, 0, 0, 0);
+      const resetDate = new Date(profile.daily_scan_reset_at);
+      const today = new Date();
+      const isNewDay = resetDate.toDateString() !== today.toDateString();
+      const effectiveDailyCount = isNewDay ? 0 : profile.daily_scan_count;
 
-          const body: ScanLimitError = {
-            error: 'scan_limit_reached',
-            message: `Free plan allows ${FREE_DAILY_SCAN_LIMIT} scans/day. Upgrade to Pro for unlimited scans.`,
+      if (effectiveDailyCount >= dailyLimit) {
+        const resetAt = new Date(today);
+        resetAt.setHours(24, 0, 0, 0);
+
+        if (hasProAccess) {
+          // Pro/trial hit the fair-use ceiling — not a paywall moment.
+          const body: DailyLimitError = {
+            error: 'daily_limit_reached',
+            message: `You've reached today's fair-use limit of ${PRO_DAILY_SCAN_LIMIT} scans. It resets tomorrow.`,
             scans_used: effectiveDailyCount,
-            scans_limit: FREE_DAILY_SCAN_LIMIT,
+            scans_limit: PRO_DAILY_SCAN_LIMIT,
             resets_at: resetAt.toISOString(),
           };
-          res.status(402).json(body);
+          res.status(429).json(body);
           return;
         }
+
+        const body: ScanLimitError = {
+          error: 'scan_limit_reached',
+          message: `Free plan allows ${FREE_DAILY_SCAN_LIMIT} scans/day. Upgrade to Pro for more.`,
+          scans_used: effectiveDailyCount,
+          scans_limit: FREE_DAILY_SCAN_LIMIT,
+          resets_at: resetAt.toISOString(),
+        };
+        res.status(402).json(body);
+        return;
       }
 
       // ── Cache check (by image URL hash) ───────────────────────────────────
@@ -303,9 +321,14 @@ router.post(
 
       if (cached) {
         await supabase.rpc('increment_scan_count', { user_id: req.user!.id });
+        // NOTE: `hit_count` must be incremented atomically in SQL. Passing a
+        // query builder (supabase.rpc(...)) as a column value does NOT work —
+        // it serialises to an invalid payload. Increment via a dedicated RPC
+        // that takes the image hash; only touch last_hit_at inline here.
+        await supabase.rpc('increment_hit_count', { p_image_hash: imageHash });
         await supabase
           .from('scan_cache')
-          .update({ hit_count: supabase.rpc('increment_hit_count'), last_hit_at: new Date().toISOString() })
+          .update({ last_hit_at: new Date().toISOString() })
           .eq('image_hash', imageHash);
 
         const responseBody: FoodScanResult = { result: cached.ai_response, cached: true };

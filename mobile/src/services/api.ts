@@ -50,12 +50,21 @@ export async function analyzeFood(imageUrl: string, token: string, description?:
   }, token);
 }
 
-export async function createSubscriptionOrder(plan: 'monthly' | 'annual', token: string) {
-  return apiFetch<{ subscriptionId: string; razorpayKeyId: string; plan: string; amount: number }>(
-    '/api/subscription/create-order',
-    { method: 'POST', body: JSON.stringify({ plan }) },
-    token
-  );
+/**
+ * Ask the backend to re-read entitlements from RevenueCat and update the
+ * user's profile immediately (so the server-side scan gate unlocks without
+ * waiting for the async webhook). Call right after a successful purchase.
+ */
+export async function syncSubscription(token: string) {
+  return apiFetch<{
+    isSubscribed: boolean;
+    subscriptionEndDate: string | null;
+    activePlan: string | null;
+  }>('/api/subscription/sync', { method: 'POST' }, token);
+}
+
+export async function getDailyQuote(token: string): Promise<{ quote: string; date: string }> {
+  return apiFetch<{ quote: string; date: string; source?: string }>('/api/daily-quote', {}, token);
 }
 
 export async function getSubscriptionStatus(token: string) {

@@ -180,7 +180,7 @@ export function AuthScreen() {
             </View>
 
             {/* ── System status indicator ────────────────────────────────── */}
-            <View style={[styles.statusBar, {
+            {/* <View style={[styles.statusBar, {
               backgroundColor: C.glass,
               borderColor: C.glassBorder,
               borderLeftColor: C.secondary,
@@ -197,7 +197,7 @@ export function AuthScreen() {
                   <View key={i} style={[styles.accentDot, { backgroundColor: C.secondary, opacity: o }]} />
                 ))}
               </View>
-            </View>
+            </View> */}
 
           </ScrollView>
         </View>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -7,15 +7,22 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { Text } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import type { PurchasesOffering, PurchasesPackage } from "react-native-purchases";
 import { useAuthStore } from "../../store/authStore";
-import { supabase } from "../../services/supabase";
-import { createSubscriptionOrder } from "../../services/api";
 import { useSubscriptionGate } from "../../hooks/useSubscriptionGate";
+import { supabase } from "../../services/supabase";
+import { syncSubscription } from "../../services/api";
+import {
+  getCurrentOffering,
+  purchasePackage,
+  restorePurchases,
+} from "../../services/purchases";
 
 const C = {
   bg:            '#101415',
@@ -40,60 +47,100 @@ const BENEFITS = [
   { icon: 'restaurant-outline',   label: 'Personalized Meal Plans'  },
 ] as const;
 
-const PAYMENT_METHODS = [
-  { icon: 'qr-code-outline',   label: 'UPI'       },
-  { icon: 'card-outline',      label: 'CARD'      },
-  { icon: 'business-outline',  label: 'NETBANKING'},
-] as const;
-
 interface Props {
   visible: boolean;
   onDismiss: () => void;
 }
 
 export function PaywallModal({ visible, onDismiss }: Props) {
-  const { session, fetchProfile, profile } = useAuthStore();
+  const { fetchProfile, profile } = useAuthStore();
   const { scansRemaining } = useSubscriptionGate();
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual">("annual");
+  const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+  const [loadingOffering, setLoadingOffering] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const monthlyPkg: PurchasesPackage | null = offering?.monthly ?? null;
+  const annualPkg: PurchasesPackage | null = offering?.annual ?? null;
+
+  // Load the store products (localized prices) when the paywall opens.
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    setLoadingOffering(true);
+    getCurrentOffering()
+      .then((o) => { if (active) setOffering(o); })
+      .catch(() => { if (active) setOffering(null); })
+      .finally(() => { if (active) setLoadingOffering(false); });
+    return () => { active = false; };
+  }, [visible]);
+
+  // Fall back to whichever plan is available if the selected one isn't.
+  const selectedPkg =
+    selectedPlan === "annual" ? (annualPkg ?? monthlyPkg) : (monthlyPkg ?? annualPkg);
+
+  // Savings %: (monthly × 12 − annual) / (monthly × 12)
+  const savingsPct =
+    monthlyPkg && annualPkg && monthlyPkg.product.price > 0
+      ? Math.round((1 - annualPkg.product.price / (monthlyPkg.product.price * 12)) * 100)
+      : null;
+
+  // Push the fresh entitlement to the backend so the server-side scan gate
+  // unlocks immediately, then refresh the local profile.
+  const activatePro = useCallback(
+    async (title: string, body: string) => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        try {
+          await syncSubscription(token);
+        } catch {
+          // The RevenueCat webhook reconciles shortly even if this call fails.
+        }
+      }
+      await fetchProfile();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onDismiss();
+      Alert.alert(title, body);
+    },
+    [fetchProfile, onDismiss],
+  );
 
   const handleSubscribe = async () => {
+    if (!selectedPkg) {
+      Alert.alert("Unavailable", "Plans are still loading. Please try again in a moment.");
+      return;
+    }
     setIsLoading(true);
     try {
-      const {
-        data: { session: freshSession },
-        error: refreshError,
-      } = await supabase.auth.refreshSession();
-      if (refreshError || !freshSession?.access_token) {
-        Alert.alert("Session expired", "Please sign out and sign back in, then try again.");
-        return;
+      const isPro = await purchasePackage(selectedPkg);
+      if (isPro) {
+        await activatePro("Welcome to Pro! 🎉", "Your CalSnap Pro subscription is now active. Scan unlimited food!");
       }
-
-      const order = await createSubscriptionOrder(selectedPlan, freshSession.access_token);
-
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const RazorpayCheckout = require("react-native-razorpay").default;
-      const options = {
-        description: `CalSnap Pro - ${selectedPlan}`,
-        name: "CalSnap",
-        key: order.razorpayKeyId,
-        subscription_id: order.subscriptionId,
-        currency: "INR",
-        prefill: { email: freshSession.user.email ?? "" },
-        theme: { color: C.primary },
-      };
-
-      await RazorpayCheckout.open(options);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await fetchProfile();
-      onDismiss();
-      Alert.alert("Welcome to Pro! 🎉", "Your CalSnap Pro subscription is now active. Scan unlimited food!");
     } catch (err: any) {
-      if (err?.code !== "PAYMENT_CANCELLED") {
-        Alert.alert("Payment failed", err.message ?? "Please try again.");
+      // RevenueCat sets userCancelled on user-dismissed purchases — stay silent.
+      if (!err?.userCancelled) {
+        Alert.alert("Payment failed", err?.message ?? "Please try again.");
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsRestoring(true);
+    try {
+      const isPro = await restorePurchases();
+      if (isPro) {
+        await activatePro("Purchases restored", "Your CalSnap Pro subscription is active again.");
+      } else {
+        Alert.alert("Nothing to restore", "We couldn't find an active subscription for this account.");
+      }
+    } catch (err: any) {
+      Alert.alert("Restore failed", err?.message ?? "Please try again.");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -156,7 +203,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                 <View>
                   <Text style={[styles.planPeriodLabel, { color: C.outline }]}>MONTHLY</Text>
                   <View style={styles.planPriceRow}>
-                    <Text style={styles.planPrice}>₹149</Text>
+                    <Text style={styles.planPrice}>{monthlyPkg?.product.priceString ?? "—"}</Text>
                     <Text style={styles.planPriceSub}> / mo</Text>
                   </View>
                 </View>
@@ -180,10 +227,12 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                 <View>
                   <Text style={[styles.planPeriodLabel, { color: selectedPlan === "annual" ? C.primary : C.outline }]}>ANNUAL</Text>
                   <View style={styles.planPriceRow}>
-                    <Text style={styles.planPrice}>₹999</Text>
+                    <Text style={styles.planPrice}>{annualPkg?.product.priceString ?? "—"}</Text>
                     <Text style={styles.planPriceSub}> / yr</Text>
                   </View>
-                  <Text style={styles.savingsLabel}>Save 45% compared to monthly</Text>
+                  {savingsPct !== null && savingsPct > 0 && (
+                    <Text style={styles.savingsLabel}>Save {savingsPct}% compared to monthly</Text>
+                  )}
                 </View>
                 <View style={[styles.radioOuter, selectedPlan === "annual" && { borderColor: C.primary, backgroundColor: C.primary }]}>
                   {selectedPlan === "annual" && <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />}
@@ -192,41 +241,51 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             </TouchableOpacity>
           </View>
 
-          {/* ── Payment Methods ── */}
-          <View style={styles.paymentSection}>
-            <View style={styles.paymentLabelRow}>
-              <Text style={styles.paymentLabel}>Secure Payment via</Text>
-              <Text style={styles.paymentBrand}>RAZORPAY</Text>
+          {/* ── Assurance / Restore ── */}
+          <View style={styles.paymentMethods}>
+            <View style={styles.paymentMethod}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={C.outline} />
+              <Text style={styles.paymentMethodLabel}>CANCEL ANYTIME</Text>
             </View>
-            <View style={styles.paymentMethods}>
-              {PAYMENT_METHODS.map((m, i) => (
-                <React.Fragment key={m.label}>
-                  {i > 0 && <View style={styles.paymentDivider} />}
-                  <View style={styles.paymentMethod}>
-                    <Ionicons name={m.icon} size={18} color={C.outline} />
-                    <Text style={styles.paymentMethodLabel}>{m.label}</Text>
-                  </View>
-                </React.Fragment>
-              ))}
-            </View>
+            <View style={styles.paymentDivider} />
+            <TouchableOpacity
+              style={styles.paymentMethod}
+              onPress={handleRestore}
+              disabled={isRestoring || isLoading}
+              activeOpacity={0.7}
+            >
+              {isRestoring
+                ? <ActivityIndicator size="small" color={C.primary} />
+                : <Ionicons name="refresh-outline" size={18} color={C.primary} />}
+              <Text style={[styles.paymentMethodLabel, { color: C.primary }]}>RESTORE</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── CTA Button ── */}
           <TouchableOpacity
-            style={[styles.ctaButton, isLoading && { opacity: 0.7 }]}
+            style={[styles.ctaButton, (isLoading || loadingOffering || !selectedPkg) && { opacity: 0.7 }]}
             onPress={handleSubscribe}
-            disabled={isLoading}
+            disabled={isLoading || loadingOffering || !selectedPkg}
             activeOpacity={0.88}
           >
-            <Ionicons name={isLoading ? "reload-outline" : "lock-closed"} size={20} color={C.onPrimary} />
+            {isLoading || loadingOffering
+              ? <ActivityIndicator size="small" color={C.onPrimary} />
+              : <Ionicons name="lock-closed" size={20} color={C.onPrimary} />}
             <Text style={styles.ctaText}>
-              {isLoading ? "Processing…" : selectedPlan === "annual" ? "Secure Checkout · ₹999/yr" : "Secure Checkout · ₹149/mo"}
+              {loadingOffering
+                ? "Loading plans…"
+                : isLoading
+                ? "Processing…"
+                : selectedPkg
+                ? `Subscribe · ${selectedPkg.product.priceString}`
+                : "Plans unavailable"}
             </Text>
           </TouchableOpacity>
 
           {/* ── Legal ── */}
           <Text style={styles.legalText}>
-            By subscribing, you agree to our Terms of Service and Privacy Policy. Subscriptions auto-renew until cancelled in Settings.
+            By subscribing, you agree to our Terms of Service and Privacy Policy. Payment is charged to your {" "}
+            {/* store name is resolved by the OS */}App Store / Google Play account and subscriptions auto-renew until cancelled in your store settings.
           </Text>
 
           <View style={{ height: 40 }} />

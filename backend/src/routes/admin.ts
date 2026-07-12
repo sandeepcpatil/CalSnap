@@ -45,8 +45,8 @@ router.get(
 
       const monthlySubs = subscribers.data?.filter((s: { plan: string }) => s.plan === 'monthly').length ?? 0;
       const annualSubs  = subscribers.data?.filter((s: { plan: string }) => s.plan === 'annual').length ?? 0;
-      // Annual: ₹999/12 ≈ ₹83/mo — count at monthly equivalent for MRR display
-      const mrrPaise = monthlySubs * 14900 + annualSubs * 8325;
+      // MRR in paise. Monthly ₹199 = 19900. Annual ₹1299/12 ≈ ₹108.25 = 10825 (monthly equivalent).
+      const mrrPaise = monthlySubs * 19900 + annualSubs * 10825;
 
       const body: AdminStats = {
         totalUsers: totalUsers ?? 0,

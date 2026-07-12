@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
+import { logOutPurchases } from '../services/purchases';
 
 export interface Profile {
   id: string;
@@ -96,14 +97,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    console.log('[authStore] signOut called');
     try {
       await supabase.auth.signOut();
-      console.log('[authStore] supabase.auth.signOut() succeeded');
-    } catch (e) {
-      console.warn('[authStore] signOut network error (ignored):', e);
+    } catch {
+      // Ignore network errors — we still clear local state below.
     }
+    await logOutPurchases();
     set({ session: null, user: null, profile: null });
-    console.log('[authStore] local state cleared');
   },
 }));
