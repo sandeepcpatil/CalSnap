@@ -36,14 +36,6 @@ const MEAL_LABELS: Record<string, string> = {
   snack: 'Snack',
 };
 
-// maxValues used to normalise the bar fill width to a realistic upper bound
-const MACRO_MAX: Record<string, number> = {
-  Protein: 80,
-  Carbs: 120,
-  Fat: 60,
-  Fiber: 20,
-};
-
 // Standard GDA (Guide Daily Amounts) for a 2 000 kcal diet
 const MACRO_GDA: Record<string, number> = {
   Protein: 50,
@@ -62,16 +54,17 @@ const MACRO_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 function NutrientRow({ label, value, color }: { label: string; value: number; color: string }) {
   const { theme } = useTheme();
   const gdaPct = Math.round((value / (MACRO_GDA[label] ?? 100)) * 100);
+  // Natural reading order: icon → name → amount → share of daily intake.
   return (
     <View style={[rowStyles.row, { borderBottomColor: theme.dividerColor }]}>
       <View style={[rowStyles.iconWrap, { backgroundColor: color + '22' }]}>
         <Ionicons name={MACRO_ICONS[label] ?? 'nutrition-outline'} size={18} color={color} />
       </View>
-      <Text style={[rowStyles.gdaLabel, { color: theme.textMuted }]}>{gdaPct}% GDA</Text>
+      <Text style={[rowStyles.macroLabel, { color: theme.textPrimary }]}>{label}</Text>
       <Text style={[rowStyles.amount, { color: theme.textPrimary }]}>
         {Math.round(value)}<Text style={[rowStyles.unit, { color: theme.textSecondary }]}>g</Text>
       </Text>
-      <Text style={[rowStyles.macroLabel, { color: theme.textSecondary }]}>{label}</Text>
+      <Text style={[rowStyles.gdaLabel, { color: theme.textMuted }]}>{gdaPct}% GDA</Text>
     </View>
   );
 }
@@ -91,17 +84,18 @@ const rowStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gdaLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
+  macroLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
   amount:   { fontSize: 20, fontWeight: '800', lineHeight: 24 },
   unit:     { fontSize: 12, fontWeight: '500' },
-  macroLabel: { fontSize: 13, fontWeight: '600', minWidth: 52, textAlign: 'right' },
+  gdaLabel: { fontSize: 12, fontWeight: '600', minWidth: 64, textAlign: 'right' },
 });
 
-const CONFIDENCE_PCT: Record<string, string> = {
-  high:      '98%',
-  very_high: '99%',
-  medium:    '75%',
-  low:       '52%',
+// Honest confidence labels — no fabricated percentages.
+const CONFIDENCE_LABEL: Record<string, string> = {
+  very_high: 'Very high match',
+  high:      'High match',
+  medium:    'Likely match',
+  low:       'Low confidence',
 };
 
 export function ScanResultScreen({ navigation, route }: Props) {
@@ -169,7 +163,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'EE' }]}>
             <Ionicons name="checkmark-circle" size={14} color="#fff" />
             <Text style={styles.aiBadgeText}>
-              {CONFIDENCE_PCT[result.confidence.toLowerCase()] ?? '—'} AI Match
+              {CONFIDENCE_LABEL[result.confidence.toLowerCase()] ?? 'AI estimate'}
             </Text>
           </View>
         </View>
@@ -230,8 +224,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
           style={[styles.retakeButton, { borderColor: theme.borderColor }]}
           contentStyle={styles.buttonContent}
           textColor={theme.textSecondary}
+          icon="camera-retake-outline"
         >
-          Edit Details
+          Retake
         </Button>
         <Button
           mode="contained"

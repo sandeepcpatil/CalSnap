@@ -12,6 +12,66 @@ export interface ExportDay {
   logs: FoodLog[];
 }
 
+// ── Export range presets ────────────────────────────────────────────────────
+export type ExportRangeKey = 'week' | 'last30' | 'last90' | 'thisMonth' | 'lastMonth';
+
+export interface ResolvedRange {
+  key: ExportRangeKey;
+  label: string;
+  /** Inclusive YYYY-MM-DD bounds. */
+  startDate: string;
+  endDate: string;
+}
+
+const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** Resolve a preset into concrete inclusive date bounds. Pure — `now` is injectable. */
+export function resolveExportRange(key: ExportRangeKey, now: Date = new Date()): ResolvedRange {
+  const end = new Date(now);
+  const start = new Date(now);
+  switch (key) {
+    case 'week':
+      start.setDate(end.getDate() - 6);
+      return { key, label: 'This week', startDate: isoDate(start), endDate: isoDate(end) };
+    case 'last30':
+      start.setDate(end.getDate() - 29);
+      return { key, label: 'Last 30 days', startDate: isoDate(start), endDate: isoDate(end) };
+    case 'last90':
+      start.setDate(end.getDate() - 89);
+      return { key, label: 'Last 90 days', startDate: isoDate(start), endDate: isoDate(end) };
+    case 'thisMonth': {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { key, label: 'This month', startDate: isoDate(s), endDate: isoDate(end) };
+    }
+    case 'lastMonth': {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0); // day 0 = last day of prev month
+      return { key, label: 'Last month', startDate: isoDate(s), endDate: isoDate(e) };
+    }
+  }
+}
+
+/** Format an ISO YYYY-MM-DD as "12 July 2026" for sheet rows. */
+export function formatDayLabel(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/** Group raw logs into date-sorted ExportDay buckets (only days that have logs). */
+export function groupLogsByDay(logs: FoodLog[]): ExportDay[] {
+  const byDay: Record<string, FoodLog[]> = {};
+  logs.forEach((l) => {
+    const day = l.logged_at.slice(0, 10);
+    (byDay[day] ??= []).push(l);
+  });
+  return Object.keys(byDay)
+    .sort()
+    .map((date) => ({ date, dateLabel: formatDayLabel(date), logs: byDay[date] }));
+}
+
 const round = (n: number) => Math.round(n * 10) / 10;
 
 function sumLogs(logs: FoodLog[]) {

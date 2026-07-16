@@ -43,9 +43,11 @@ const C = {
 };
 
 const BENEFITS = [
-  { icon: 'camera-outline',       label: 'Unlimited AI Scans'       },
-  { icon: 'stats-chart-outline',  label: 'Deep Macro Insights'      },
-  { icon: 'restaurant-outline',   label: 'Personalized Meal Plans'  },
+  { icon: 'infinite-outline',     label: 'Unlimited AI Scans'        },
+  { icon: 'stats-chart-outline',  label: 'Full Nutrition Breakdown'  },
+  { icon: 'sparkles-outline',     label: 'AI Nutri-Insights'         },
+  { icon: 'calendar-outline',     label: '30 & 90-Day History'       },
+  { icon: 'download-outline',     label: 'Excel Data Export'         },
 ] as const;
 
 interface Props {

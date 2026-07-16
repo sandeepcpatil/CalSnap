@@ -86,6 +86,7 @@ export function DashboardScreen() {
   const mealsLogged = new Set(
     todayLogs.map((l) => l.meal_type).filter(Boolean) as string[],
   );
+  const currentHour = new Date().getHours();
   const alerts = buildSmartAlerts({
     totals,
     goals: { calorieGoal, proteinGoal },
@@ -93,8 +94,12 @@ export function DashboardScreen() {
     itemsLoggedToday: todayLogs.length,
     isOnTrial,
     trialDaysLeft,
-    hour: new Date().getHours(),
+    hour: currentHour,
   });
+
+  const firstName = (profile?.name ?? '').trim().split(' ')[0] || 'there';
+  const greeting =
+    currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
     <View style={styles.root}>
@@ -152,6 +157,12 @@ export function DashboardScreen() {
           <RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor={C.primary} />
         }
       >
+        {/* ── Personalized greeting ── */}
+        <View style={styles.greetingBlock}>
+          <Text style={styles.greetingSmall}>{greeting},</Text>
+          <Text style={styles.greetingName}>{firstName} 👋</Text>
+        </View>
+
         {/* ── Trial countdown (only during the 7-day trial) ── */}
         <TrialBanner onPress={showPaywall} />
 
@@ -271,6 +282,11 @@ const styles = StyleSheet.create({
   /* Scroll */
   scroll:        { flex: 1 },
   scrollContent: { paddingTop: 4, paddingBottom: 40, gap: 12 },
+
+  /* Greeting */
+  greetingBlock: { paddingHorizontal: 20, paddingTop: 2 },
+  greetingSmall: { fontSize: 13, fontWeight: '600', color: C.onSurfaceVar, letterSpacing: 0.3 },
+  greetingName:  { fontSize: 24, fontWeight: '800', color: C.onSurface, letterSpacing: -0.4 },
 
   /* Glass card */
   glassCard: {

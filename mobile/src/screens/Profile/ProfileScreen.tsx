@@ -12,13 +12,16 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { useHealthStore } from '../../store/healthStore';
 import { useStepCounter } from '../../hooks/useStepCounter';
+import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { NotificationSettingsModal } from '../../components/NotificationSettingsModal';
 import { EditProfileModal } from '../../components/EditProfileModal';
+import { LegalModal, type LegalDoc } from '../../components/LegalModal';
 
 const C = {
   bg:              '#101415',
@@ -44,21 +47,19 @@ export function ProfileScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
 
   // Activate step counter while this screen is mounted
   useStepCounter();
 
-  const isSubscribed    = profile?.is_subscribed ?? false;
-  const scanCount       = profile?.scan_count    ?? 0;
-  const weight          = profile?.weight_kg     ?? 0;
-  const proteinGoal     = profile?.daily_protein_goal ?? 160;
-  const bodyGoal        = profile?.body_goal;
+  // Single source of truth for subscription/trial/scan state (same hook the
+  // rest of the app uses — keeps Profile from drifting out of sync).
+  const { isOnTrial, trialDaysLeft, scansRemaining } = useSubscriptionGate();
 
-  // Trial logic
-  const now = new Date();
-  const trialEnd = profile?.trial_end_date ? new Date(profile.trial_end_date) : null;
-  const isOnTrial = !isSubscribed && !!trialEnd && trialEnd > now;
-  const trialDaysLeft = isOnTrial ? Math.ceil((trialEnd!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  const isSubscribed    = profile?.is_subscribed ?? false;
+  const weight          = profile?.weight_kg     ?? 0;
+  const proteinGoal     = profile?.daily_protein_goal ?? 80;
+  const bodyGoal        = profile?.body_goal;
   const isPro = isSubscribed || isOnTrial;
 
   // Today's protein from shared store
@@ -96,7 +97,8 @@ export function ProfileScreen() {
       {/* ── Top Bar ── */}
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <View style={styles.header}>
-          <Ionicons name="menu-outline" size={24} color={C.primary} />
+          {/* Spacer keeps the brand centered (no drawer menu in this app) */}
+          <View style={{ width: 24 }} />
           <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Snap</Text></Text>
           <View style={styles.headerAvatar}>
             {profile?.avatar_url
@@ -143,7 +145,11 @@ export function ProfileScreen() {
               color={isSubscribed ? C.primary : isOnTrial ? C.tertiary : C.outline}
             />
             <Text style={[styles.badgeText, { color: isSubscribed ? C.primary : isOnTrial ? C.tertiary : C.outline }]}>
-              {isSubscribed ? 'Pro Member' : isOnTrial ? `Trial · ${trialDaysLeft}d left` : `${Math.min(scanCount, 5)} / 5 free scans`}
+              {isSubscribed
+                ? 'Pro Member'
+                : isOnTrial
+                  ? `Trial · ${trialDaysLeft ?? 0}d left`
+                  : `Free · ${scansRemaining} scan${scansRemaining !== 1 ? 's' : ''} left today`}
             </Text>
           </View>
         </View>
@@ -213,7 +219,7 @@ export function ProfileScreen() {
             <View style={styles.ctaGlow} pointerEvents="none" />
             <View style={styles.ctaContent}>
               <View style={styles.ctaText}>
-                <Text style={[styles.ctaTitle, { color: C.tertiary }]}>⏳ Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''}</Text>
+                <Text style={[styles.ctaTitle, { color: C.tertiary }]}>⏳ Trial ends in {trialDaysLeft ?? 0} day{(trialDaysLeft ?? 0) !== 1 ? 's' : ''}</Text>
                 <Text style={styles.ctaSubtitle}>Enjoying CalSnap Pro? Lock in your access.</Text>
               </View>
               <TouchableOpacity
@@ -267,24 +273,21 @@ export function ProfileScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionLabel}>SETTINGS</Text>
           <View style={styles.settingsList}>
-            {[
-              { icon: 'person-outline',          label: 'Edit Profile',     color: C.onSurface },
-              // { icon: 'sync-outline',            label: 'Health Connect',   color: C.onSurface },
-              { icon: 'notifications-outline',   label: 'Notifications',    color: C.onSurface },
-            ].map((item, i) => (
+            {([
+              { icon: 'person-outline',           label: 'Edit Profile',     onPress: () => setShowEditProfile(true) },
+              { icon: 'notifications-outline',    label: 'Notifications',    onPress: () => setShowNotifSettings(true) },
+              { icon: 'shield-checkmark-outline', label: 'Privacy Policy',   onPress: () => setLegalDoc('privacy') },
+              { icon: 'document-text-outline',    label: 'Terms of Service', onPress: () => setLegalDoc('terms') },
+            ] as const).map((item, i) => (
               <TouchableOpacity
                 key={item.label}
                 style={[styles.settingsRow, i > 0 && { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }]}
-                onPress={
-                  item.label === 'Notifications' ? () => setShowNotifSettings(true) :
-                  item.label === 'Edit Profile'  ? () => setShowEditProfile(true)  :
-                  undefined
-                }
+                onPress={item.onPress}
                 activeOpacity={0.7}
               >
                 <View style={styles.settingsLeft}>
-                  <Ionicons name={item.icon as any} size={22} color={C.outline} />
-                  <Text style={[styles.settingsLabel, { color: item.color }]}>{item.label}</Text>
+                  <Ionicons name={item.icon} size={22} color={C.outline} />
+                  <Text style={[styles.settingsLabel, { color: C.onSurface }]}>{item.label}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={C.outline} />
               </TouchableOpacity>
@@ -302,12 +305,16 @@ export function ProfileScreen() {
           </View>
         </View>
 
+        <Text style={styles.versionText}>
+          CalSnap v{Constants.expoConfig?.version ?? '1.0.0'}
+        </Text>
         <View style={{ height: 80 }} />
       </ScrollView>
 
       <PaywallModal visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
       <NotificationSettingsModal visible={showNotifSettings} onDismiss={() => setShowNotifSettings(false)} />
       <EditProfileModal visible={showEditProfile} onDismiss={() => setShowEditProfile(false)} />
+      <LegalModal visible={legalDoc !== null} doc={legalDoc ?? 'terms'} onClose={() => setLegalDoc(null)} />
     </View>
   );
 }
@@ -474,4 +481,6 @@ const styles = StyleSheet.create({
   },
   settingsLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingsLabel: { fontSize: 16, fontWeight: '500', color: C.onSurface },
+
+  versionText: { textAlign: 'center', fontSize: 11, color: C.outlineVar, fontWeight: '600' },
 });

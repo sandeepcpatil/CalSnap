@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,15 +6,30 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
+import Svg, { Path } from 'react-native-svg';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { supabase } from '../../services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LegalModal, type LegalDoc } from '../../components/LegalModal';
+
+/** Official multicolor Google "G" (per Google sign-in branding guidelines). */
+function GoogleLogo({ size = 20 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48">
+      <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </Svg>
+  );
+}
 
 // webClientId = the Google Cloud OAuth *Web* client ID (also added to Supabase →
 // Auth → Providers → Google → Authorized Client IDs). Required so the returned
@@ -44,14 +59,30 @@ const C = {
 };
 
 const FEATURES = [
-  { icon: 'camera-outline'    as const, label: 'AI Analysis',    desc: 'Instant meal recognition via neural engine.'          },
-  { icon: 'bar-chart-outline' as const, label: 'Macro Tracking', desc: 'Deep clinical insights on protein and fibers.'        },
-  { icon: 'flame-outline'     as const, label: 'Streaks',        desc: 'Gamified wellness to sustain high performance.'       },
+  { icon: 'camera-outline'    as const, label: 'AI Analysis',    desc: 'Snap a photo — get calories & macros in seconds.'   },
+  { icon: 'bar-chart-outline' as const, label: 'Macro Tracking', desc: 'Protein, carbs, fat & fiber, tracked automatically.' },
+  { icon: 'flame-outline'     as const, label: 'Daily Insights', desc: 'Smart nudges that keep you on target every day.'     },
 ] as const;
 
 export function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
+
+  // Subtle entrance: content fades in and rises on mount.
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: 700,
+      delay: 120,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [entrance]);
+  const entranceStyle = {
+    opacity: entrance,
+    transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [26, 0] }) }],
+  };
 
   const handleGoogleSignIn = async () => {
     if (!GOOGLE_WEB_CLIENT_ID) {
@@ -78,7 +109,15 @@ export function AuthScreen() {
       const code = (err as { code?: string })?.code;
       // User dismissed the picker — no error UI.
       if (code === statusCodes.SIGN_IN_CANCELLED || code === statusCodes.IN_PROGRESS) return;
-      const message = err instanceof Error ? err.message : 'Please try again.';
+      // Map SDK codes to friendly copy — never show raw codes like DEVELOPER_ERROR.
+      let message: string;
+      if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        message = 'Google Play Services is unavailable or out of date on this device.';
+      } else if (code === 'DEVELOPER_ERROR') {
+        message = 'Sign-in is temporarily unavailable. Please update the app and try again.';
+      } else {
+        message = err instanceof Error ? err.message : 'Please try again.';
+      }
       Alert.alert('Sign-in failed', message);
     } finally {
       setIsLoading(false);
@@ -106,7 +145,7 @@ export function AuthScreen() {
       <View style={styles.glowBottom} />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <View style={{ flex: 1 }}>
+        <Animated.View style={[{ flex: 1 }, entranceStyle]}>
           <ScrollView
             contentContainerStyle={styles.scroll}
             showsVerticalScrollIndicator={false}
@@ -154,7 +193,7 @@ export function AuthScreen() {
             <View style={[styles.authCard, { backgroundColor: C.glass, borderColor: C.glassBorder }]}>
 
               <View style={styles.authHeader}>
-                <Text style={[styles.authTitle, { color: C.onSurface }]}>Get Started</Text>
+                <Text style={[styles.authTitle, { color: C.onSurface, textAlign:'center' }]}>Get Started</Text>
                 <Text style={[styles.authSubtitle, { color: C.onSurfaceVariant }]}>
                   Access your high-performance nutrition dashboard.
                 </Text>
@@ -171,7 +210,7 @@ export function AuthScreen() {
                   <ActivityIndicator animating color={C.bg} size="small" />
                 ) : (
                   <>
-                    <Text style={[styles.googleG, { color: C.bg }]}>G</Text>
+                    <GoogleLogo size={20} />
                     <Text style={[styles.googleLabel, { color: C.bg }]}>CONTINUE WITH GOOGLE</Text>
                   </>
                 )}
@@ -217,7 +256,7 @@ export function AuthScreen() {
             </View> */}
 
           </ScrollView>
-        </View>
+        </Animated.View>
       </SafeAreaView>
 
       <LegalModal
@@ -294,7 +333,6 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
   },
-  googleG:     { fontSize: 20, fontWeight: '800' },
   googleLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
 
   terms:     { fontSize: 11, textAlign: 'center', lineHeight: 16 },

@@ -27,7 +27,7 @@ export interface ScanGateResult {
  *
  * Checks whether the current user is allowed to perform a food scan.
  * - Subscribed users: always allowed
- * - Free users: allowed if daily_scan_count < FREE_DAILY_LIMIT (3)
+ * - Free users: allowed if daily_scan_count < FREE_DAILY_LIMIT (2)
  *
  * The server enforces the same limits — this hook is for UI-layer gating only
  * (preventing the camera from opening, showing the paywall proactively).

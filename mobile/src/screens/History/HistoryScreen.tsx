@@ -9,7 +9,7 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,7 +20,13 @@ import type { FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
-import { exportHistoryToExcel } from '../../services/export';
+import { ExportRangeModal } from '../../components/ExportRangeModal';
+import {
+  exportHistoryToExcel,
+  resolveExportRange,
+  groupLogsByDay,
+  type ExportRangeKey,
+} from '../../services/export';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -72,10 +78,18 @@ interface DayData {
   logs: FoodLog[];
 }
 
-function buildLast7(): DayData[] {
-  return Array.from({ length: 7 }, (_, i) => {
+// Ranges offered to Pro users. Free users are capped at the 7-day week.
+const RANGE_OPTIONS = [
+  { days: 7,  label: 'Week' },
+  { days: 30, label: 'Month' },
+  { days: 90, label: '90 Days' },
+] as const;
+type RangeDays = (typeof RANGE_OPTIONS)[number]['days'];
+
+function buildDays(count: number): DayData[] {
+  return Array.from({ length: count }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
+    d.setDate(d.getDate() - (count - 1 - i));
     const iso = d.toISOString().slice(0, 10);
     return {
       date: iso,
@@ -89,12 +103,28 @@ function buildLast7(): DayData[] {
   });
 }
 
+const buildLast7 = (): DayData[] => buildDays(7);
+
+/** Fill a range of empty DayData with logs grouped by day. Immutable. */
+function fillDays(days: DayData[], byDay: Record<string, { logs: FoodLog[] }>): DayData[] {
+  return days.map((d) => {
+    const entry = byDay[d.date];
+    if (!entry) return d;
+    const calories = entry.logs.reduce((s, l) => s + (l.calories || 0), 0);
+    const mealTypes = new Set(entry.logs.map((l) => l.meal_type).filter(Boolean));
+    return { ...d, calories: Math.round(calories), mealCount: mealTypes.size, logs: entry.logs };
+  });
+}
+
 export function HistoryScreen() {
   const { session } = useAuthStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [weekDays, setWeekDays] = useState<DayData[]>(buildLast7());
+  const [listDays, setListDays] = useState<DayData[]>(buildLast7());
+  const [historyRange, setHistoryRange] = useState<RangeDays>(7);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportPickerOpen, setExportPickerOpen] = useState(false);
+  const [exportBusyKey, setExportBusyKey] = useState<ExportRangeKey | null>(null);
   const [avgCalories, setAvgCalories] = useState(0);
   const [trend, setTrend] = useState<{ pct: number; dir: 'up' | 'down' | 'neutral' }>({ pct: 0, dir: 'neutral' });
   const [quote, setQuote] = useState<string>(
@@ -117,8 +147,11 @@ export function HistoryScreen() {
   const fetchWeekData = useCallback(async () => {
     if (!session?.user.id) return;
 
+    // Fetch enough to cover both the selected range and the 14 days the
+    // week-over-week trend needs.
+    const span = Math.max(historyRange, 14);
     const from = new Date();
-    from.setDate(from.getDate() - 13);
+    from.setDate(from.getDate() - (span - 1));
     const startISO = from.toISOString().slice(0, 10) + 'T00:00:00.000Z';
 
     const { data } = await supabase
@@ -130,21 +163,16 @@ export function HistoryScreen() {
 
     if (!data) return;
 
-    const byDay: Record<string, { calories: number; logs: FoodLog[] }> = {};
+    const byDay: Record<string, { logs: FoodLog[] }> = {};
     (data as FoodLog[]).forEach((log) => {
       const day = log.logged_at.slice(0, 10);
-      if (!byDay[day]) byDay[day] = { calories: 0, logs: [] };
-      byDay[day].calories += log.calories || 0;
+      if (!byDay[day]) byDay[day] = { logs: [] };
       byDay[day].logs.push(log);
     });
 
-    const last7 = buildLast7().map((d) => {
-      const entry = byDay[d.date];
-      if (!entry) return d;
-      const mealTypes = new Set(entry.logs.map((l) => l.meal_type).filter(Boolean));
-      return { ...d, calories: Math.round(entry.calories), mealCount: mealTypes.size, logs: entry.logs };
-    });
+    const last7 = fillDays(buildLast7(), byDay);
     setWeekDays(last7);
+    setListDays(fillDays(buildDays(historyRange), byDay));
 
     const daysWithData = last7.filter((d) => d.calories > 0);
     const avg = daysWithData.length > 0
@@ -157,13 +185,15 @@ export function HistoryScreen() {
       d.setDate(d.getDate() - 7 - i);
       return d.toISOString().slice(0, 10);
     });
-    const prevCals = prev7.map((d) => byDay[d]?.calories || 0).filter((c) => c > 0);
+    const prevCals = prev7
+      .map((d) => (byDay[d]?.logs.reduce((s, l) => s + (l.calories || 0), 0)) || 0)
+      .filter((c) => c > 0);
     const prevAvg = prevCals.length > 0 ? prevCals.reduce((s, c) => s + c, 0) / prevCals.length : 0;
     if (prevAvg > 0 && avg > 0) {
       const pct = Math.round(((avg - prevAvg) / prevAvg) * 100);
       setTrend({ pct: Math.abs(pct), dir: pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral' });
     }
-  }, [session?.user.id]);
+  }, [session?.user.id, historyRange]);
 
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
 
@@ -172,24 +202,48 @@ export function HistoryScreen() {
     setExpandedDate((prev) => (prev === date ? null : date));
   };
 
-  const handleExport = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
+  // Export queries Supabase directly for the chosen window, independent of what's
+  // currently loaded on screen — so "Last month" works even in the 7-day view.
+  const runExport = async (key: ExportRangeKey) => {
+    if (!session?.user.id || exportBusyKey) return;
+    setExportBusyKey(key);
     try {
-      const ok = await exportHistoryToExcel(
-        weekDays.map((d) => ({ date: d.date, dateLabel: d.dateLabel, logs: d.logs })),
-      );
-      if (!ok) {
-        Alert.alert('Nothing to export', 'Log some meals this week first, then export your report.');
+      const range = resolveExportRange(key);
+      const { data, error } = await supabase
+        .from('food_logs')
+        .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id')
+        .eq('user_id', session.user.id)
+        .gte('logged_at', `${range.startDate}T00:00:00.000Z`)
+        .lte('logged_at', `${range.endDate}T23:59:59.999Z`)
+        .order('logged_at', { ascending: true });
+      if (error) throw error;
+
+      const days = groupLogsByDay((data as FoodLog[]) ?? []);
+      const ok = await exportHistoryToExcel(days);
+      if (ok) {
+        setExportPickerOpen(false);
+      } else {
+        Alert.alert('Nothing to export', `No meals were logged in ${range.label.toLowerCase()}. Try another period.`);
       }
     } catch (err: unknown) {
       Alert.alert('Export failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
-      setIsExporting(false);
+      setExportBusyKey(null);
     }
   };
 
   const maxCals = Math.max(...weekDays.map((d) => d.calories), 1);
+
+  // Daily-logs list: free users see the 3 most recent days; Pro sees the whole
+  // selected range (weeks show every day, longer ranges show only logged days
+  // to avoid a wall of empty rows).
+  const reversedList = [...listDays].reverse();
+  const daysToShow = !isSubscribed
+    ? reversedList // free: full last-7-days week
+    : historyRange === 7
+      ? reversedList
+      : reversedList.filter((d) => d.logs.length > 0);
+  const loggedDayCount = listDays.filter((d) => d.logs.length > 0).length;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -271,13 +325,9 @@ export function HistoryScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Daily Logs</Text>
             {isSubscribed ? (
-              <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.7} disabled={isExporting}>
-                <Text style={styles.exportText}>{isExporting ? 'EXPORTING…' : 'EXPORT'}</Text>
-                {isExporting ? (
-                  <ActivityIndicator animating size={12} color={C.secondaryCont} />
-                ) : (
-                  <Ionicons name="download-outline" size={14} color={C.secondaryCont} />
-                )}
+              <TouchableOpacity style={styles.exportBtn} onPress={() => setExportPickerOpen(true)} activeOpacity={0.7}>
+                <Text style={styles.exportText}>EXPORT</Text>
+                <Ionicons name="download-outline" size={14} color={C.secondaryCont} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.exportBtn} onPress={showPaywall} activeOpacity={0.7}>
@@ -287,8 +337,33 @@ export function HistoryScreen() {
             )}
           </View>
 
-          {/* Free: show 3 most recent days. Pro: show all 7 */}
-          {[...weekDays].reverse().slice(0, isSubscribed ? 7 : 3).map((day) => {
+          {/* Range selector — Pro only */}
+          {isSubscribed && (
+            <View style={styles.rangeRow}>
+              {RANGE_OPTIONS.map((opt) => {
+                const active = historyRange === opt.days;
+                return (
+                  <TouchableOpacity
+                    key={opt.days}
+                    style={[styles.rangeChip, active && styles.rangeChipActive]}
+                    onPress={() => setHistoryRange(opt.days)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {isSubscribed && historyRange !== 7 && (
+            <Text style={styles.rangeCaption}>
+              {loggedDayCount} day{loggedDayCount !== 1 ? 's' : ''} logged in the last {historyRange} days
+            </Text>
+          )}
+
+          {/* Free: 3 most recent days. Pro: the selected range. */}
+          {daysToShow.map((day) => {
             const isExpanded = expandedDate === day.date;
             const isDayToday = day.date === today;
 
@@ -359,17 +434,24 @@ export function HistoryScreen() {
             );
           })}
 
+          {/* Empty state for Pro long ranges with no logs */}
+          {isSubscribed && historyRange !== 7 && daysToShow.length === 0 && (
+            <View style={styles.emptyRange}>
+              <Ionicons name="calendar-outline" size={28} color={C.outline} />
+              <Text style={styles.emptyRangeText}>No meals logged in the last {historyRange} days.</Text>
+            </View>
+          )}
+
           {/* Pro gate for older days */}
           {!isSubscribed && (
-            <ProGate isSubscribed={false} onUpgrade={showPaywall} label="4 More Days of History" borderRadius={16}>
+            <ProGate isSubscribed={false} onUpgrade={showPaywall} label="Full History, Charts & Export" borderRadius={16}>
               <View style={styles.dayCard}>
                 <View style={styles.dayCardHeader}>
                   <View style={styles.dateBadge}>
-                    <Text style={styles.dateBadgeDow}>MON</Text>
-                    <Text style={styles.dateBadgeNum}>+4</Text>
+                    <Ionicons name="calendar-outline" size={20} color={C.outline} />
                   </View>
                   <View style={styles.dayInfo}>
-                    <Text style={styles.dayDateLabel}>Previous 4 Days</Text>
+                    <Text style={styles.dayDateLabel}>30 & 90-Day History + Export</Text>
                     <Text style={styles.dayMeta}>UNLOCK WITH PRO</Text>
                   </View>
                 </View>
@@ -395,6 +477,12 @@ export function HistoryScreen() {
       </ScrollView>
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
+      <ExportRangeModal
+        visible={exportPickerOpen}
+        onClose={() => setExportPickerOpen(false)}
+        onSelect={runExport}
+        busyKey={exportBusyKey}
+      />
     </SafeAreaView>
   );
 }
@@ -458,6 +546,27 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 20, fontWeight: '700', color: C.onSurface },
   exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
   exportText:   { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: C.secondaryCont },
+
+  rangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  rangeChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  rangeChipActive: { backgroundColor: 'rgba(0,227,253,0.14)' },
+  rangeChipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: C.outline },
+  rangeChipTextActive: { color: C.secondaryCont },
+  rangeCaption: { fontSize: 11, fontWeight: '600', color: C.outline, letterSpacing: 0.3, marginTop: 2 },
+
+  emptyRange: { alignItems: 'center', gap: 8, paddingVertical: 32 },
+  emptyRangeText: { fontSize: 13, color: C.outline, textAlign: 'center' },
 
   dayCard: {
     backgroundColor: C.glass,

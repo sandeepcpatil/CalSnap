@@ -10,9 +10,12 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -30,93 +33,106 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
 
 // ─── Analyzing overlay ───────────────────────────────────────────────────────
+// Shows the user's actual photo with a scanning beam sweeping over it and a
+// step checklist that fills in — feels like the AI is "looking" at the meal.
 
 const STEPS = [
-  { emoji: '📤', text: 'Uploading photo' },
-  { emoji: '🔍', text: 'AI is analyzing' },
-  { emoji: '🥗', text: 'Identifying ingredients' },
-  { emoji: '📊', text: 'Calculating nutrition' },
-];
+  { icon: 'cloud-upload-outline', text: 'Uploading photo' },
+  { icon: 'scan-outline', text: 'AI scanning your meal' },
+  { icon: 'nutrition-outline', text: 'Identifying ingredients' },
+  { icon: 'stats-chart-outline', text: 'Calculating nutrition' },
+] as const;
 
-function AnalyzingOverlay() {
+const SCREEN_H = Dimensions.get('window').height;
+const SWEEP_RANGE = SCREEN_H * 0.52;
+
+function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
   const [stepIndex, setStepIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const ringAnim = useRef(new Animated.Value(0)).current;
-  const dot1 = useRef(new Animated.Value(0.3)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
+  const sweep = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    // Icon pulse
+    // Beam sweeps down, then back up, forever.
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.12, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
+        Animated.timing(sweep, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(sweep, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
     ).start();
 
-    // Expanding ring
+    // Soft breathing glow on the frame corners.
     Animated.loop(
       Animated.sequence([
-        Animated.timing(ringAnim, { toValue: 1, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.delay(200),
-        Animated.timing(ringAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])
+        Animated.timing(glow, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0.6, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
     ).start();
 
-    // Bouncing dots
-    const animateDot = (dot: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0.3, duration: 350, useNativeDriver: true }),
-        ])
-      ).start();
-    animateDot(dot1, 0);
-    animateDot(dot2, 180);
-    animateDot(dot3, 360);
-
-    // Cycle steps with fade
+    // Steps advance and stay done; the last one keeps spinning until the
+    // request actually finishes (the overlay unmounts).
     const interval = setInterval(() => {
-      Animated.sequence([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      ]).start();
-      setStepIndex(prev => (prev + 1) % STEPS.length);
-    }, 1500);
-
+      setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
+    }, 1800);
     return () => clearInterval(interval);
   }, []);
 
-  const ringScale = ringAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
-  const ringOpacity = ringAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.5, 0.2, 0] });
+  const translateY = sweep.interpolate({ inputRange: [0, 1], outputRange: [0, SWEEP_RANGE] });
 
   return (
     <View style={analyzeStyles.container}>
+      {/* The photo being analyzed */}
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={1} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0b0f10' }]} />
+      )}
+      {/* Dim + vignette so the beam and card read clearly */}
+      <LinearGradient
+        colors={['rgba(6,10,11,0.72)', 'rgba(6,10,11,0.35)', 'rgba(6,10,11,0.88)']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Scanning beam */}
+      <View style={analyzeStyles.sweepArea} pointerEvents="none">
+        <Animated.View style={[analyzeStyles.beam, { transform: [{ translateY }] }]}>
+          <LinearGradient
+            colors={['rgba(0,227,253,0)', 'rgba(0,227,253,0.30)']}
+            style={analyzeStyles.beamTrail}
+          />
+          <View style={analyzeStyles.beamLine} />
+        </Animated.View>
+        {/* Corner brackets to frame the "scan zone" */}
+        <Animated.View style={[analyzeStyles.frame, { opacity: glow }]} pointerEvents="none">
+          <View style={[analyzeStyles.fCorner, analyzeStyles.fTL]} />
+          <View style={[analyzeStyles.fCorner, analyzeStyles.fTR]} />
+          <View style={[analyzeStyles.fCorner, analyzeStyles.fBL]} />
+          <View style={[analyzeStyles.fCorner, analyzeStyles.fBR]} />
+        </Animated.View>
+      </View>
+
+      {/* Step checklist */}
       <View style={analyzeStyles.card}>
-        {/* Pulsing icon with expanding ring */}
-        <View style={analyzeStyles.iconWrapper}>
-          <Animated.View style={[analyzeStyles.ring, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
-          <Animated.View style={[analyzeStyles.iconCircle, { transform: [{ scale: pulseAnim }] }]}>
-            <Text style={analyzeStyles.emoji}>{STEPS[stepIndex].emoji}</Text>
-          </Animated.View>
-        </View>
-
-        {/* Cycling status */}
-        <Animated.Text style={[analyzeStyles.stepText, { opacity: fadeAnim }]}>
-          {STEPS[stepIndex].text}
-        </Animated.Text>
-
-        {/* Bouncing dots */}
-        <View style={analyzeStyles.dotsRow}>
-          {[dot1, dot2, dot3].map((dot, i) => (
-            <Animated.View key={i} style={[analyzeStyles.dot, { opacity: dot }]} />
-          ))}
-        </View>
-
-        <Text style={analyzeStyles.subText}>This takes a few seconds</Text>
+        {STEPS.map((step, i) => {
+          const done = i < stepIndex;
+          const active = i === stepIndex;
+          return (
+            <View key={step.text} style={[analyzeStyles.stepRow, !done && !active && { opacity: 0.35 }]}>
+              <View style={[analyzeStyles.stepIcon, done && analyzeStyles.stepIconDone, active && analyzeStyles.stepIconActive]}>
+                {done ? (
+                  <Ionicons name="checkmark" size={15} color="#00363a" />
+                ) : active ? (
+                  <ActivityIndicator animating size={13} color="#00e3fd" />
+                ) : (
+                  <Ionicons name={step.icon} size={14} color="rgba(255,255,255,0.6)" />
+                )}
+              </View>
+              <Text style={[analyzeStyles.stepText, done && { color: 'rgba(255,255,255,0.55)' }, active && { color: '#fff' }]}>
+                {step.text}
+              </Text>
+            </View>
+          );
+        })}
+        <Text style={analyzeStyles.subText}>Hang tight — this takes a few seconds</Text>
       </View>
     </View>
   );
@@ -125,65 +141,66 @@ function AnalyzingOverlay() {
 const analyzeStyles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.82)',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 999,
+    justifyContent: 'flex-end',
   },
+  sweepArea: {
+    position: 'absolute',
+    top: SCREEN_H * 0.12,
+    left: 24,
+    right: 24,
+    height: SWEEP_RANGE + 40,
+  },
+  beam: { position: 'absolute', left: 0, right: 0, top: 0 },
+  beamTrail: { height: 64, borderRadius: 2 },
+  beamLine: {
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: '#00e3fd',
+    shadowColor: '#00e3fd',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  frame: { ...StyleSheet.absoluteFillObject },
+  fCorner: { position: 'absolute', width: 30, height: 30, borderColor: 'rgba(133,211,218,0.9)', borderWidth: 3 },
+  fTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 18 },
+  fTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 18 },
+  fBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 18 },
+  fBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 18 },
+
   card: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 28,
+    marginHorizontal: 20,
+    marginBottom: 48,
+    backgroundColor: 'rgba(13,20,21,0.92)',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(133,211,218,0.18)',
+    paddingVertical: 20,
+    paddingHorizontal: 22,
+    gap: 14,
+  },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    paddingVertical: 40,
-    paddingHorizontal: 48,
-    alignItems: 'center',
-    gap: 18,
-    minWidth: 260,
-  },
-  iconWrapper: {
-    width: 90,
-    height: 90,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ring: {
-    position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
-    borderColor: '#85d3da',
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(1,105,111,0.20)',
-    borderWidth: 2,
-    borderColor: 'rgba(1,105,111,0.50)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 32 },
-  stepText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  dotsRow: { flexDirection: 'row', gap: 8 },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#85d3da',
-  },
+  stepIconDone: { backgroundColor: '#85d3da', borderColor: '#85d3da' },
+  stepIconActive: { borderColor: 'rgba(0,227,253,0.55)', backgroundColor: 'rgba(0,227,253,0.10)' },
+  stepText: { flex: 1, color: 'rgba(255,255,255,0.75)', fontSize: 14.5, fontWeight: '600', letterSpacing: 0.2 },
   subText: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.40)',
+    fontSize: 11.5,
     fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
   },
 });
 
@@ -305,8 +322,8 @@ export function ScanScreen({ navigation }: Props) {
     <View style={styles.container}>
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraType} />
 
-      {/* Full-screen analyzing overlay */}
-      {isAnalyzing && <AnalyzingOverlay />}
+      {/* Full-screen analyzing overlay — scans over the photo just taken */}
+      {isAnalyzing && <AnalyzingOverlay imageUri={pendingUri} />}
 
       {/* Overlay UI */}
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
