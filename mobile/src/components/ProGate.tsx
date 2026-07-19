@@ -57,7 +57,9 @@ export function ProGate({
 }
 
 const styles = StyleSheet.create({
-  container: { position: 'relative' },
+  // minHeight guarantees the centered lock card (~130px tall) is never clipped
+  // by `overflow: hidden` when the wrapped content is shorter than the card.
+  container: { position: 'relative', minHeight: 150 },
   dimmed:    { opacity: 0.15 },
 
   overlay: {

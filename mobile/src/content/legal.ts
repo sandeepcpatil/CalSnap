@@ -68,7 +68,7 @@ Payment is charged to your Apple App Store or Google Play account. Subscriptions
   },
   {
     title: '14. Governing law',
-    body: `These Terms are governed by the laws of India, and any disputes are subject to the exclusive jurisdiction of the courts of [your city], India.`,
+    body: `These Terms are governed by the laws of India, and any disputes are subject to the exclusive jurisdiction of the courts of Bengaluru, Karnataka, India.`,
   },
   {
     title: '15. Contact',

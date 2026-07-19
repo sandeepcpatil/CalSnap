@@ -50,6 +50,49 @@ export async function analyzeFood(imageUrl: string, token: string, description?:
   }, token);
 }
 
+// ─── Label scan (packaged food) ──────────────────────────────────────────────
+
+/** Nutrition values normalised to per 100 g (or 100 ml for drinks). */
+export interface LabelNutrition {
+  energy_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  sugar_g: number;
+  total_fat_g: number;
+  sat_fat_g: number;
+  fiber_g: number;
+  sodium_mg: number;
+}
+
+/** Deterministic health assessment computed server-side. */
+export interface HealthScoreDetail {
+  /** 0–100, higher = healthier. */
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  positives: string[];
+  negatives: string[];
+}
+
+export interface LabelScanData {
+  product_name: string;
+  brand: string;
+  /** Stated serving size in grams; 0 when not printed on the pack. */
+  serving_g: number;
+  is_beverage: boolean;
+  per_100g: LabelNutrition;
+  ingredients: string[];
+  confidence: 'high' | 'medium' | 'low';
+  notes: string;
+  health: HealthScoreDetail;
+}
+
+export async function analyzeLabel(imageUrl: string, token: string): Promise<{ result: LabelScanData; cached: boolean }> {
+  return apiFetch('/api/analyze-label', {
+    method: 'POST',
+    body: JSON.stringify({ imageUrl }),
+  }, token);
+}
+
 /**
  * Ask the backend to re-read entitlements from RevenueCat and update the
  * user's profile immediately (so the server-side scan gate unlocks without

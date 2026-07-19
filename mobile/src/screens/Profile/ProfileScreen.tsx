@@ -7,16 +7,16 @@ import {
   Alert,
   Platform,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
+import { SUPPORT_EMAIL } from '../../content/legal';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
-import { useHealthStore } from '../../store/healthStore';
-import { useStepCounter } from '../../hooks/useStepCounter';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { NotificationSettingsModal } from '../../components/NotificationSettingsModal';
@@ -43,14 +43,10 @@ const C = {
 export function ProfileScreen() {
   const { profile, signOut } = useAuthStore();
   const { todayLogs } = useFoodLogStore();
-  const { steps } = useHealthStore();
   const [showPaywall, setShowPaywall] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
-
-  // Activate step counter while this screen is mounted
-  useStepCounter();
 
   // Single source of truth for subscription/trial/scan state (same hook the
   // rest of the app uses — keeps Profile from drifting out of sync).
@@ -77,6 +73,31 @@ export function ProfileScreen() {
     bodyGoal === 'gain_muscle' ? `${weightDelta.toFixed(0)}kg to Target (${weightTarget.toFixed(0)}kg)` :
     'Maintaining';
   const weightPct = bodyGoal === 'maintain' ? 1 : 0.6; // approximate progress indicator
+
+  const handleContactSupport = async () => {
+    const version = Constants.expoConfig?.version ?? '1.0.0';
+    const subject = `CalSnap Support (v${version})`;
+    // Pre-fill context so support has what they need without asking.
+    const body = [
+      '',
+      '',
+      '— — — — — — — — — —',
+      'The details below help us assist you (feel free to edit):',
+      `App version: ${version}`,
+      `Platform: ${Platform.OS} ${Platform.Version}`,
+      `Account: ${profile?.email ?? 'unknown'}`,
+    ].join('\n');
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) throw new Error('no mail app');
+      await Linking.openURL(url);
+    } catch {
+      // No mail app configured — show the address so the user can still reach us.
+      Alert.alert('Contact support', `Email us at ${SUPPORT_EMAIL}`);
+    }
+  };
 
   const handleSignOut = async () => {
     const confirmed =
@@ -198,19 +219,6 @@ export function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Daily Steps ── */}
-        <View style={styles.glassCard}>
-          <View style={styles.stepsRow}>
-            <View style={[styles.stepsIcon, { backgroundColor: C.primary + '22' }]}>
-              <Ionicons name="walk-outline" size={22} color={C.primary} />
-            </View>
-            <View style={styles.stepsInfo}>
-              <Text style={styles.stepsLabel}>Today's Steps</Text>
-              <Text style={styles.stepsValue}>{steps > 0 ? steps.toLocaleString() : '—'}</Text>
-            </View>
-            <Text style={styles.stepsHint}>Auto-tracked</Text>
-          </View>
-        </View>
 
         {/* ── Subscription CTA ── */}
         {isPro && !isSubscribed && (
@@ -274,10 +282,11 @@ export function ProfileScreen() {
           <Text style={styles.sectionLabel}>SETTINGS</Text>
           <View style={styles.settingsList}>
             {([
-              { icon: 'person-outline',           label: 'Edit Profile',     onPress: () => setShowEditProfile(true) },
-              { icon: 'notifications-outline',    label: 'Notifications',    onPress: () => setShowNotifSettings(true) },
-              { icon: 'shield-checkmark-outline', label: 'Privacy Policy',   onPress: () => setLegalDoc('privacy') },
-              { icon: 'document-text-outline',    label: 'Terms of Service', onPress: () => setLegalDoc('terms') },
+              { icon: 'person-outline',           label: 'Edit Profile',        onPress: () => setShowEditProfile(true) },
+              { icon: 'notifications-outline',    label: 'Notifications',       onPress: () => setShowNotifSettings(true) },
+              { icon: 'chatbubble-ellipses-outline', label: 'Contact Support',  onPress: handleContactSupport },
+              { icon: 'shield-checkmark-outline', label: 'Privacy Policy',      onPress: () => setLegalDoc('privacy') },
+              { icon: 'document-text-outline',    label: 'Terms of Service',    onPress: () => setLegalDoc('terms') },
             ] as const).map((item, i) => (
               <TouchableOpacity
                 key={item.label}
@@ -414,23 +423,6 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', borderRadius: 3 },
   goalHint: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, textTransform: 'uppercase' },
-
-
-  /* Steps card */
-  glassCard: {
-    marginHorizontal: 20,
-    backgroundColor: C.glass,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    padding: 16,
-  },
-  stepsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepsIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  stepsInfo: { flex: 1, gap: 2 },
-  stepsLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: C.outline },
-  stepsValue: { fontSize: 26, fontWeight: '800', color: C.onSurface },
-  stepsHint: { fontSize: 10, color: C.outline, fontWeight: '600' },
 
   /* CTA card */
   ctaCard: {

@@ -13,7 +13,7 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
-import { Text, Button, ActivityIndicator } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
@@ -25,7 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
 import { supabase } from '../../services/supabase';
-import { analyzeFood } from '../../services/api';
+import { analyzeFood, analyzeLabel } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
@@ -206,11 +206,14 @@ const analyzeStyles = StyleSheet.create({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+type ScanMode = 'meal' | 'label';
+
 export function ScanScreen({ navigation }: Props) {
   const { session } = useAuthStore();
   const { canScan, scansRemaining, isSubscribed, paywallVisible, showPaywall, dismissPaywall, consumeScan } = useSubscriptionGate();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
+  const [scanMode, setScanMode] = useState<ScanMode>('meal');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -222,9 +225,15 @@ export function ScanScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
     if (photo?.uri) {
-      setPendingUri(photo.uri);
-      setDescription('');
-      setShowDescModal(true);
+      if (scanMode === 'label') {
+        // Labels don't need a description — straight to analysis.
+        setPendingUri(photo.uri);
+        processLabelPhoto(photo.uri);
+      } else {
+        setPendingUri(photo.uri);
+        setDescription('');
+        setShowDescModal(true);
+      }
     }
   };
 
@@ -235,9 +244,63 @@ export function ScanScreen({ navigation }: Props) {
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]) {
-      setPendingUri(result.assets[0].uri);
-      setDescription('');
-      setShowDescModal(true);
+      if (scanMode === 'label') {
+        setPendingUri(result.assets[0].uri);
+        processLabelPhoto(result.assets[0].uri);
+      } else {
+        setPendingUri(result.assets[0].uri);
+        setDescription('');
+        setShowDescModal(true);
+      }
+    }
+  };
+
+  /** Compress, upload to Supabase Storage, and return local + signed URLs. */
+  const uploadAndSign = async (rawUri: string): Promise<{ compressedUri: string; signedUrl: string }> => {
+    // Compress to max 1024px before uploading
+    const compressed = await ImageManipulator.manipulateAsync(
+      rawUri,
+      [{ resize: { width: 1024 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    const fileName = `${session!.user.id}/${Date.now()}.jpg`;
+
+    // Read as base64 — fetch(file://) fails on Android production builds
+    const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from('food-images')
+      .upload(fileName, bytes, { contentType: 'image/jpeg', upsert: false });
+
+    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+    // Get a 1-hour signed URL for the backend to use
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('food-images')
+      .createSignedUrl(fileName, 3600);
+
+    if (signedError || !signedData?.signedUrl) throw new Error('Could not get signed URL');
+
+    return { compressedUri: compressed.uri, signedUrl: signedData.signedUrl };
+  };
+
+  const handleScanError = (err: any) => {
+    if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
+      // Free user out of daily scans — nudge to Pro.
+      showPaywall();
+    } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
+      // Pro/trial hit the fair-use ceiling — no paywall, just let them know.
+      Alert.alert("Daily limit reached", err.message ?? "You've reached today's scan limit. It resets tomorrow.");
+    } else {
+      Alert.alert('Analysis failed', err.message ?? 'Please try again with a clearer photo.');
     }
   };
 
@@ -245,60 +308,40 @@ export function ScanScreen({ navigation }: Props) {
     setShowDescModal(false);
     setIsAnalyzing(true);
     try {
-      // Compress to max 1024px before uploading
-      const compressed = await ImageManipulator.manipulateAsync(
-        rawUri,
-        [{ resize: { width: 1024 } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-      );
-
-      // Upload to Supabase Storage
-      const fileName = `${session!.user.id}/${Date.now()}.jpg`;
-
-      // Read as base64 — fetch(file://) fails on Android production builds
-      const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const { error: uploadError } = await supabase.storage
-        .from('food-images')
-        .upload(fileName, bytes, { contentType: 'image/jpeg', upsert: false });
-
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-
-      // Get a 1-hour signed URL for the backend to use
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('food-images')
-        .createSignedUrl(fileName, 3600);
-
-      if (signedError || !signedData?.signedUrl) throw new Error('Could not get signed URL');
+      const { compressedUri, signedUrl } = await uploadAndSign(rawUri);
 
       // Call backend (server enforces scan count gate)
-      const { result } = await analyzeFood(signedData.signedUrl, session!.access_token, userDescription || undefined);
+      const { result } = await analyzeFood(signedUrl, session!.access_token, userDescription || undefined);
 
       // Optimistically decrement the local "scans left" badge (server is authoritative).
       consumeScan();
 
       navigation.navigate('ScanResult', {
-        imageUri: compressed.uri,
-        imageStorageUrl: signedData.signedUrl,
+        imageUri: compressedUri,
+        imageStorageUrl: signedUrl,
         result,
       });
     } catch (err: any) {
-      if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
-        // Free user out of daily scans — nudge to Pro.
-        showPaywall();
-      } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
-        // Pro/trial hit the fair-use ceiling — no paywall, just let them know.
-        Alert.alert("Daily limit reached", err.message ?? "You've reached today's scan limit. It resets tomorrow.");
-      } else {
-        Alert.alert('Analysis failed', err.message ?? 'Please try again with a clearer photo.');
-      }
+      handleScanError(err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const processLabelPhoto = async (rawUri: string) => {
+    setIsAnalyzing(true);
+    try {
+      const { compressedUri, signedUrl } = await uploadAndSign(rawUri);
+      const { result } = await analyzeLabel(signedUrl, session!.access_token);
+      consumeScan();
+
+      navigation.navigate('LabelResult', {
+        imageUri: compressedUri,
+        imageStorageUrl: signedUrl,
+        result,
+      });
+    } catch (err: any) {
+      handleScanError(err);
     } finally {
       setIsAnalyzing(false);
     }
@@ -306,15 +349,39 @@ export function ScanScreen({ navigation }: Props) {
 
   if (!permission?.granted) {
     return (
-      <SafeAreaView style={styles.permissionContainer}>
-        <Text variant="headlineSmall" style={styles.permissionTitle}>Camera access needed</Text>
-        <Text variant="bodyMedium" style={styles.permissionText}>
-          CalSnap needs camera access to scan your food.
-        </Text>
-        <Button mode="contained" onPress={requestPermission} style={styles.permissionButton}>
-          Grant Permission
-        </Button>
-      </SafeAreaView>
+      <View style={styles.permissionRoot}>
+        <SafeAreaView style={styles.permissionContainer} edges={['top', 'bottom']}>
+          {/* Close */}
+          <TouchableOpacity
+            style={styles.permissionClose}
+            onPress={() => navigation.getParent()?.navigate('Home')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={24} color="#bec8c9" />
+          </TouchableOpacity>
+
+          <View style={styles.permissionContent}>
+            <View style={styles.permissionIconWrap}>
+              <Ionicons name="camera-outline" size={44} color="#85d3da" />
+            </View>
+
+            <Text style={styles.permissionTitle}>Camera access needed</Text>
+            <Text style={styles.permissionText}>
+              CalSnap uses your camera to scan meals and packaged-food labels. Photos are only used
+              to analyze nutrition.
+            </Text>
+
+            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission} activeOpacity={0.88}>
+              <Ionicons name="lock-open-outline" size={18} color="#00363a" />
+              <Text style={styles.permissionButtonText}>Grant Camera Access</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handlePickFromLibrary} activeOpacity={0.7} style={styles.permissionSecondary}>
+              <Text style={styles.permissionSecondaryText}>Pick from gallery instead</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -368,7 +435,37 @@ export function ScanScreen({ navigation }: Props) {
             <View style={[styles.corner, styles.cornerBR]} />
           </View>
           <View style={styles.hintWrap}>
-            <Text style={styles.hint}>Point at your food</Text>
+            <Text style={styles.hint}>
+              {scanMode === 'label' ? 'Point at the nutrition label' : 'Point at your food'}
+            </Text>
+          </View>
+
+          {/* Mode toggle: Meal | Label */}
+          <View style={styles.modeToggle}>
+            {(['meal', 'label'] as const).map((mode) => {
+              const active = scanMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.modePill, active && styles.modePillActive]}
+                  onPress={() => {
+                    if (!active) Haptics.selectionAsync();
+                    setScanMode(mode);
+                  }}
+                  disabled={isAnalyzing}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={mode === 'meal' ? 'restaurant-outline' : 'barcode-outline'}
+                    size={14}
+                    color={active ? '#00363a' : 'rgba(255,255,255,0.75)'}
+                  />
+                  <Text style={[styles.modePillText, active && styles.modePillTextActive]}>
+                    {mode === 'meal' ? 'MEAL' : 'LABEL'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -442,10 +539,33 @@ export function ScanScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  permissionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 16, backgroundColor: '#f7fafa' },
-  permissionTitle: { color: '#004f54', fontWeight: '700' },
-  permissionText: { color: '#3f4949', textAlign: 'center' },
-  permissionButton: { borderRadius: 50, backgroundColor: '#004f54' },
+  permissionRoot: { flex: 1, backgroundColor: '#101415' },
+  permissionContainer: { flex: 1, paddingHorizontal: 28 },
+  permissionClose: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    marginTop: 8,
+  },
+  permissionContent: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingBottom: 60 },
+  permissionIconWrap: {
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: 'rgba(1,105,111,0.20)',
+    borderWidth: 1, borderColor: 'rgba(133,211,218,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  permissionTitle: { color: '#e0e3e5', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
+  permissionText: { color: '#bec8c9', fontSize: 15, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
+  permissionButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    height: 54, borderRadius: 14, backgroundColor: '#85d3da',
+    alignSelf: 'stretch', marginTop: 12,
+  },
+  permissionButtonText: { color: '#00363a', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  permissionSecondary: { paddingVertical: 8 },
+  permissionSecondaryText: { color: '#85d3da', fontSize: 14, fontWeight: '600' },
   overlay: { flex: 1, justifyContent: 'space-between' },
   scanCountBadge: {
     alignSelf: 'center',
@@ -511,6 +631,27 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   hint: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 50,
+    padding: 4,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  modePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 50,
+  },
+  modePillActive: { backgroundColor: '#85d3da' },
+  modePillText: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  modePillTextActive: { color: '#00363a' },
 
   bottomBar: {
     flexDirection: 'row',
