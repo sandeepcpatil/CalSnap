@@ -60,6 +60,8 @@ export interface HealthScoreDetail {
   score: number;
   /** Nutri-Score style letter grade. */
   grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  /** One-line, human-readable reason built from the biggest score drivers. */
+  summary: string;
   positives: string[];
   negatives: string[];
 }

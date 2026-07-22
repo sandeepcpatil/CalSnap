@@ -69,6 +69,9 @@ export interface HealthScoreDetail {
   /** 0–100, higher = healthier. */
   score: number;
   grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  /** One-line reason naming the biggest score drivers. Optional so the app
+   *  tolerates a backend that hasn't been redeployed yet. */
+  summary?: string;
   positives: string[];
   negatives: string[];
 }

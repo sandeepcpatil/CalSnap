@@ -38,6 +38,8 @@ const points = (value: number, steps: readonly number[]): number =>
 interface IngredientFlag {
   pattern: RegExp;
   label: string;
+  /** Compact name used inside the one-line summary sentence. */
+  short: string;
   penalty: number;
 }
 
@@ -45,27 +47,37 @@ const INGREDIENT_FLAGS: readonly IngredientFlag[] = [
   {
     pattern: /\b(sugar|glucose|fructose|dextrose|maltodextrin|corn syrup|invert syrup|jaggery|honey)\b/i,
     label: 'Contains added sugars',
+    short: 'added sugars',
     penalty: 3,
   },
-  { pattern: /\bpalm(olein)?\s*(kernel)?\s*oil|\bpalmolein\b/i, label: 'Contains palm oil', penalty: 2 },
+  {
+    pattern: /\bpalm(olein)?\s*(kernel)?\s*oil|\bpalmolein\b/i,
+    label: 'Contains palm oil',
+    short: 'palm oil',
+    penalty: 2,
+  },
   {
     pattern: /\b(aspartame|sucralose|acesulfame|saccharin|ins\s*95[015]|e\s*95[015])\b/i,
     label: 'Artificial sweeteners',
+    short: 'artificial sweeteners',
     penalty: 3,
   },
   {
     pattern: /\b(monosodium glutamate|msg|ins\s*621|e\s*621)\b/i,
     label: 'Flavour enhancer (MSG)',
+    short: 'MSG',
     penalty: 2,
   },
   {
     pattern: /\b(hydrogenated|partially hydrogenated|shortening)\b/i,
     label: 'Hydrogenated fats (trans-fat risk)',
+    short: 'hydrogenated fats',
     penalty: 4,
   },
   {
     pattern: /\b(tartrazine|sunset yellow|ins\s*1(02|10|22|24|29)|e\s*1(02|10|22|24|29))\b/i,
     label: 'Artificial colours',
+    short: 'artificial colours',
     penalty: 2,
   },
 ];
@@ -134,15 +146,19 @@ export function computeHealthScore(
   ingredients: readonly string[],
   isBeverage = false,
 ): HealthScoreDetail {
-  // 1. Nutri-Score points
+  // 1. Nutri-Score points — kept per-component so the summary can name the
+  //    biggest drivers of the final score.
   const energyKj = per100g.energy_kcal * 4.184;
-  const negativePts =
-    points(energyKj, isBeverage ? BEV_ENERGY_KJ_STEPS : ENERGY_KJ_STEPS) +
-    points(per100g.sugar_g, isBeverage ? BEV_SUGAR_G_STEPS : SUGAR_G_STEPS) +
-    points(per100g.sat_fat_g, SAT_FAT_G_STEPS) +
-    points(per100g.sodium_mg, SODIUM_MG_STEPS);
-  const positivePts =
-    points(per100g.fiber_g, FIBER_G_STEPS) + points(per100g.protein_g, PROTEIN_G_STEPS);
+  const energyPts = points(energyKj, isBeverage ? BEV_ENERGY_KJ_STEPS : ENERGY_KJ_STEPS);
+  const sugarPts = points(per100g.sugar_g, isBeverage ? BEV_SUGAR_G_STEPS : SUGAR_G_STEPS);
+  const satFatPts = points(per100g.sat_fat_g, SAT_FAT_G_STEPS);
+  const sodiumPts = points(per100g.sodium_mg, SODIUM_MG_STEPS);
+  const negativePts = energyPts + sugarPts + satFatPts + sodiumPts;
+
+  const fiberPts = points(per100g.fiber_g, FIBER_G_STEPS);
+  const proteinPts = points(per100g.protein_g, PROTEIN_G_STEPS);
+  const positivePts = fiberPts + proteinPts;
+
   const nutriPoints = negativePts - positivePts; // range −10 … 40
 
   // 2. Letter grade from official Nutri-Score bands
@@ -166,5 +182,83 @@ export function computeHealthScore(
   const { positives, negatives } = describe(per100g);
   const allNegatives = [...negatives, ...hitFlags.map((f) => f.label)];
 
-  return { score, grade, positives, negatives: allNegatives };
+  const summary = buildSummary({
+    score,
+    energyPts,
+    sugarPts,
+    satFatPts,
+    sodiumPts,
+    fiberPts,
+    proteinPts,
+    flagShorts: hitFlags.map((f) => f.short),
+  });
+
+  return { score, grade, summary, positives, negatives: allNegatives };
+}
+
+// ── One-line reason ──────────────────────────────────────────────────────────
+
+interface SummaryInput {
+  score: number;
+  energyPts: number;
+  sugarPts: number;
+  satFatPts: number;
+  sodiumPts: number;
+  fiberPts: number;
+  proteinPts: number;
+  flagShorts: readonly string[];
+}
+
+function joinList(items: readonly string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0] ?? '';
+  const last = items[items.length - 1] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${last}`;
+}
+
+/**
+ * Build a deterministic one-sentence explanation of the score, naming the
+ * biggest point contributors first — so 45/100 never feels arbitrary.
+ */
+function buildSummary(s: SummaryInput): string {
+  const negDrivers = [
+    { name: 'high calorie density', pts: s.energyPts },
+    { name: 'high sugar', pts: s.sugarPts },
+    { name: 'high saturated fat', pts: s.satFatPts },
+    { name: 'high sodium', pts: s.sodiumPts },
+  ]
+    .filter((d) => d.pts > 0)
+    .sort((a, b) => b.pts - a.pts);
+
+  const posDrivers = [
+    { name: 'protein', pts: s.proteinPts },
+    { name: 'fibre', pts: s.fiberPts },
+  ]
+    .filter((d) => d.pts > 0)
+    .sort((a, b) => b.pts - a.pts);
+
+  // Top two nutrient concerns + up to two flagged ingredients.
+  const negNames = [...negDrivers.slice(0, 2).map((d) => d.name), ...s.flagShorts.slice(0, 2)];
+  const posNames = posDrivers.map((d) => d.name);
+
+  if (s.score >= 76 || negNames.length === 0) {
+    if (posNames.length === 0) {
+      return 'No significant nutritional strengths or concerns on this label.';
+    }
+    const tail = negNames.length > 0 ? ` Keep an eye on the ${joinList(negNames.map(stripHigh))}.` : '';
+    return `Rated high for its ${joinList(posNames)} content.${tail}`;
+  }
+
+  if (s.score >= 56) {
+    const support = posNames.length > 0 ? `, though ${joinList(posNames)} work in its favour` : '';
+    return `Held back by ${joinList(negNames)}${support}.`;
+  }
+
+  const offset = posNames.length > 0 ? `, despite good ${joinList(posNames)}` : '';
+  return `Rated low mainly due to ${joinList(negNames)}${offset}.`;
+}
+
+/** "high sugar" → "sugar" for softer phrasing in high-score sentences. */
+function stripHigh(name: string): string {
+  return name.replace(/^high /, '');
 }

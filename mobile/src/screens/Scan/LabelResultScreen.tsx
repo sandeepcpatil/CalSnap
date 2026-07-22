@@ -178,6 +178,9 @@ export function LabelResultScreen({ navigation, route }: Props) {
               : health.score >= 56 ? 'Okay in moderation'
               : 'Consider a healthier alternative'}
           </Text>
+          {!!health.summary && (
+            <Text style={styles.scoreSummary}>{health.summary}</Text>
+          )}
           {result.confidence !== 'high' && (
             <Text style={styles.confidenceNote}>
               ⚠ Label was partially readable — double-check values against the pack.
@@ -309,6 +312,13 @@ const styles = StyleSheet.create({
   },
   gradeChipText: { fontSize: 16, fontWeight: '800', color: '#00363a' },
   scoreCaption: { fontSize: 15, fontWeight: '700', color: C.onSurface },
+  scoreSummary: {
+    fontSize: 13,
+    color: C.onSurfaceVar,
+    textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 24,
+  },
   confidenceNote: {
     fontSize: 12, color: C.medium, textAlign: 'center',
     paddingHorizontal: 24, lineHeight: 17,

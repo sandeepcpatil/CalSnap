@@ -117,4 +117,29 @@ const base: LabelNutrition = {
   assert.deepStrictEqual(a, b);
 }
 
+// 7. Summary: always present, and names the biggest drivers
+{
+  // Neutral label → generic but non-empty sentence.
+  const neutral = computeHealthScore(base, ['water']);
+  assert.ok(neutral.summary.length > 0, 'neutral summary should not be empty');
+
+  // Chips (low score) → summary should lead with the dominant negative.
+  const chips = computeHealthScore(
+    { ...base, energy_kcal: 550, protein_g: 7, carbs_g: 52, sugar_g: 2, total_fat_g: 34, sat_fat_g: 14, fiber_g: 4, sodium_mg: 800 },
+    ['potato', 'palm oil', 'salt', 'ins 621'],
+  );
+  assert.ok(chips.summary.includes('saturated fat'), `chips summary should name saturated fat, got: "${chips.summary}"`);
+  assert.ok(chips.summary.toLowerCase().includes('rated low'), `chips summary should read as low, got: "${chips.summary}"`);
+
+  // Chana (high score) → positive-led summary naming protein/fibre.
+  const chana = computeHealthScore(
+    { ...base, energy_kcal: 370, protein_g: 19, carbs_g: 58, sugar_g: 4, total_fat_g: 6, sat_fat_g: 0.8, fiber_g: 17, sodium_mg: 60 },
+    ['roasted bengal gram', 'salt'],
+  );
+  assert.ok(
+    chana.summary.includes('protein') || chana.summary.includes('fibre'),
+    `chana summary should credit protein/fibre, got: "${chana.summary}"`,
+  );
+}
+
 console.log('✅ all healthScore tests passed');
