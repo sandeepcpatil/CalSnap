@@ -7,11 +7,14 @@ module.exports = {
   orientation: 'portrait',
   scheme: 'calsnap',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'automatic',
+  // The app ships dark-only — 'automatic' let the OS force a light appearance
+  // on some surfaces while every screen renders dark.
+  userInterfaceStyle: 'dark',
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#f7fafa',
+    // Was near-white #f7fafa — a white flash before a dark app.
+    backgroundColor: '#0C1112',
   },
   updates: {
     fallbackToCacheTimeout: 0,
@@ -28,7 +31,8 @@ module.exports = {
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#ab3500',
+      // Was orange #ab3500 — clashed with the teal brand on the home screen.
+      backgroundColor: '#01696F',
     },
     package: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
     versionCode: 11,

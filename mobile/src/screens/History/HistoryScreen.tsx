@@ -21,6 +21,7 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { ExportRangeModal } from '../../components/ExportRangeModal';
+import { T } from '../../theme';
 import {
   exportHistoryToExcel,
   resolveExportRange,
@@ -32,29 +33,31 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:            '#101415',
-  glass:         'rgba(15,23,42,0.80)',
-  glassBorder:   'rgba(255,255,255,0.08)',
-  primary:       '#85d3da',
-  secondary:     '#bdf4ff',
-  tertiary:      '#c0c1ff',
-  secondaryCont: '#00e3fd',
-  onSurface:     '#e0e3e5',
-  onSurfaceVar:  '#bec8c9',
-  outline:       '#889393',
-  outlineVar:    '#3f4949',
-  primaryCont:   '#01696f',
-  error:         '#ffb4ab',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  tertiary: T.protein,
+  secondaryCont: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  primaryCont: T.primaryDeep,
+  error: T.error,
 };
 
 const DOW_SHORT = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 const MEAL_ICONS: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
-  breakfast: { icon: 'cafe-outline',       color: '#ffd580' },
+  breakfast: { icon: 'cafe-outline',       color: T.mealBreakfast },
   lunch:     { icon: 'fast-food-outline',  color: C.primary },
   dinner:    { icon: 'restaurant-outline', color: C.tertiary },
-  snack:     { icon: 'nutrition-outline',  color: '#a8d8a8' },
+  snack:     { icon: 'nutrition-outline',  color: T.mealSnack },
 };
 
 const CHART_BAR_HEIGHT = 120;
@@ -270,7 +273,7 @@ export function HistoryScreen() {
             <View style={styles.chartTrendBlock}>
               <Text style={styles.chartTrendLabel}>Week Trend</Text>
               {trend.pct > 0 ? (
-                <Text style={[styles.chartTrendValue, { color: trend.dir === 'up' ? C.error : '#a8d8a8' }]}>
+                <Text style={[styles.chartTrendValue, { color: trend.dir === 'up' ? C.error : T.mealSnack }]}>
                   {trend.dir === 'up' ? '+' : '-'}{trend.pct}% {trend.dir === 'up' ? 'up' : 'down'}
                 </Text>
               ) : (
@@ -299,7 +302,7 @@ export function HistoryScreen() {
                   <View style={[styles.barTrack, isToday && styles.barTrackToday, !day.calories && { opacity: 0.3 }]}>
                     {barH > 0 && (
                       <LinearGradient
-                        colors={['#01696f', '#00e3fd']}
+                        colors={[T.primaryDeep, T.primary]}
                         style={[styles.barFill, { height: barH }]}
                         start={{ x: 0.5, y: 1 }}
                         end={{ x: 0.5, y: 0 }}
@@ -462,7 +465,7 @@ export function HistoryScreen() {
 
         {/* Motivational Quote */}
         <LinearGradient
-          colors={['rgba(1,105,111,0.18)', 'rgba(73,75,214,0.12)']}
+          colors={[T.primaryTint, T.primaryTint]}
           style={styles.quoteCard}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -510,7 +513,7 @@ const styles = StyleSheet.create({
   chartBigNum:    { fontSize: 40, fontWeight: '800', color: C.secondary, letterSpacing: -1 },
   chartUnit:      { fontSize: 14, color: C.onSurfaceVar, fontWeight: '400' },
   chartTrendBlock:{ alignItems: 'flex-end', gap: 2 },
-  chartTrendLabel:{ fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: C.outline, textTransform: 'uppercase' },
+  chartTrendLabel:{ fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: C.outline, textTransform: 'uppercase' },
   chartTrendValue:{ fontSize: 18, fontWeight: '700' },
 
   barChart: {
@@ -522,24 +525,24 @@ const styles = StyleSheet.create({
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
 
   todayPill:           { backgroundColor: C.secondaryCont, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  todayPillText:       { fontSize: 8, fontWeight: '800', color: '#00363a', letterSpacing: 0.5 },
+  todayPillText:       { fontSize: 11, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.5 },
   todayPillPlaceholder:{ height: 18 },
 
   barTrack: {
     width: '100%',
     height: CHART_BAR_HEIGHT,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: T.surface2,
     borderRadius: 8,
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
   barTrackToday: {
-    backgroundColor: 'rgba(0,227,253,0.08)',
+    backgroundColor: T.primaryTint,
     borderWidth: 1,
-    borderColor: 'rgba(0,227,253,0.25)',
+    borderColor: T.border,
   },
   barFill:  { width: '100%', borderRadius: 8 },
-  barLabel: { fontSize: 9, fontWeight: '700', color: C.outline, letterSpacing: 0.5 },
+  barLabel: { fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 0.5 },
 
   logsSection:  { gap: 12, paddingHorizontal: 20 },
   sectionHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -550,7 +553,7 @@ const styles = StyleSheet.create({
   rangeRow: {
     flexDirection: 'row',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: T.divider,
     borderRadius: 12,
     padding: 4,
   },
@@ -560,7 +563,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
   },
-  rangeChipActive: { backgroundColor: 'rgba(0,227,253,0.14)' },
+  rangeChipActive: { backgroundColor: T.primaryTint },
   rangeChipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: C.outline },
   rangeChipTextActive: { color: C.secondaryCont },
   rangeCaption: { fontSize: 11, fontWeight: '600', color: C.outline, letterSpacing: 0.3, marginTop: 2 },
@@ -579,26 +582,26 @@ const styles = StyleSheet.create({
   dayCardExpanded: { borderLeftWidth: 3, borderLeftColor: C.secondaryCont },
   dayCardHeader:   { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
 
-  dateBadge:    { width: 48, height: 48, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', gap: 1 },
-  dateBadgeDow: { fontSize: 9, fontWeight: '700', color: C.outline, letterSpacing: 0.8 },
+  dateBadge:    { width: 48, height: 48, borderRadius: 10, backgroundColor: T.divider, alignItems: 'center', justifyContent: 'center', gap: 1 },
+  dateBadgeDow: { fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 0.8 },
   dateBadgeNum: { fontSize: 20, fontWeight: '700', color: C.onSurface, lineHeight: 22 },
 
   dayInfo:      { flex: 1, gap: 3 },
   dayDateLabel: { fontSize: 15, fontWeight: '600', color: C.onSurface },
-  dayMeta:      { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: C.outline },
+  dayMeta:      { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: C.outline },
 
   macroDots: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   dot:        { width: 7, height: 7, borderRadius: 4 },
 
   expandedBody:  { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
-  expandDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: 4 },
+  expandDivider: { height: 1, backgroundColor: T.divider, marginBottom: 4 },
 
   logItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   logLeft:  { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   logName:  { fontSize: 14, color: C.onSurface, flex: 1 },
   logCal:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.outline },
 
-  logTotalRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  logTotalRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: T.divider },
   logTotalLabel:{ fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
   logTotalValue:{ fontSize: 15, fontWeight: '800', color: C.primary },
 
@@ -610,7 +613,7 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.15)',
+    borderColor: T.border,
   },
   quoteText: {
     fontSize: 15,

@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CalSnap Feature Graphic 1024x500</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #222;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  /* EXACT Play Store feature graphic size */
+  .graphic {
+    width: 1024px; height: 500px;
+    background: linear-gradient(135deg, #0b0f10 0%, #101415 45%, #01696f 140%);
+    position: relative; overflow: hidden;
+    display: flex; align-items: center;
+    padding: 0 64px;
+  }
+  .glow1, .glow2 {
+    position: absolute; border-radius: 50%; filter: blur(70px);
+  }
+  .glow1 { width: 340px; height: 340px; background: rgba(0,227,253,0.18); top: -120px; right: 120px; }
+  .glow2 { width: 260px; height: 260px; background: rgba(133,211,218,0.14); bottom: -110px; right: 340px; }
+
+  .left { position: relative; z-index: 2; max-width: 620px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(15,23,42,0.6);
+    padding: 8px 16px; border-radius: 100px;
+    font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    color: #bdf4ff; margin-bottom: 22px;
+  }
+  h1 {
+    font-size: 62px; font-weight: 800; letter-spacing: -1.5px;
+    color: #e0e3e5; line-height: 1.05; margin-bottom: 16px;
+  }
+  h1 .accent { color: #85d3da; }
+  p {
+    font-size: 21px; color: #bec8c9; line-height: 1.45; font-weight: 500;
+    margin-bottom: 26px;
+  }
+  .features { display: flex; gap: 12px; flex-wrap: wrap; }
+  .chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(133,211,218,0.28);
+    color: #bdf4ff; font-size: 14px; font-weight: 700;
+    padding: 9px 16px; border-radius: 10px;
+  }
+
+  /* Right side: score ring visual */
+  .right {
+    position: absolute; right: 78px; top: 50%; transform: translateY(-50%);
+    z-index: 2; text-align: center;
+  }
+  .ring {
+    width: 230px; height: 230px; border-radius: 50%;
+    background: conic-gradient(#78d8a8 0turn 0.82turn, rgba(255,255,255,0.07) 0.82turn 1turn);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 60px rgba(120,216,168,0.25);
+  }
+  .ring-inner {
+    width: 186px; height: 186px; border-radius: 50%;
+    background: #101415;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .score { font-size: 62px; font-weight: 800; color: #78d8a8; line-height: 1; }
+  .outof { font-size: 15px; color: #889393; font-weight: 700; margin-top: 4px; }
+  .ring-label {
+    margin-top: 16px; font-size: 13px; font-weight: 800;
+    letter-spacing: 1.6px; color: #bec8c9;
+  }
+  .note { color:#888; font-size:13px; text-align:center; margin-top:16px; font-family:monospace; }
+</style>
+</head>
+<body>
+<div>
+  <div class="graphic">
+    <div class="glow1"></div>
+    <div class="glow2"></div>
+
+    <div class="left">
+      <div class="badge">📸 AI NUTRITION SCANNER</div>
+      <h1>Snap. Track.<br><span class="accent">Thrive.</span></h1>
+      <p>Instant calories &amp; macros from a photo —<br>plus health scores for packaged foods.</p>
+      <div class="features">
+        <div class="chip">AI Meal Scan</div>
+        <div class="chip">Label Health Score</div>
+        <div class="chip">Macro Tracking</div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="ring">
+        <div class="ring-inner">
+          <div class="score">82</div>
+          <div class="outof">/ 100</div>
+        </div>
+      </div>
+      <div class="ring-label">HEALTH SCORE</div>
+    </div>
+  </div>
+  <div class="note">↑ Screenshot exactly this box → 1024 × 500 px</div>
+</div>
+</body>
+</html>

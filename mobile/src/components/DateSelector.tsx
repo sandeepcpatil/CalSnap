@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { T } from '../theme';
 
 interface Props {
   selectedDate: string; // YYYY-MM-DD
@@ -35,7 +36,7 @@ export function DateSelector({ selectedDate, onDateChange }: Props) {
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={() => onDateChange(addDays(selectedDate, -1))} style={styles.arrow}>
-        <Ionicons name="chevron-back" size={20} color="#546e7a" />
+        <Ionicons name="chevron-back" size={20} color={T.textMuted} />
       </TouchableOpacity>
 
       <Text variant="titleMedium" style={styles.date}>{formatDisplay(selectedDate)}</Text>
@@ -45,7 +46,7 @@ export function DateSelector({ selectedDate, onDateChange }: Props) {
         style={[styles.arrow, isToday && styles.arrowDisabled]}
         disabled={isToday}
       >
-        <Ionicons name="chevron-forward" size={20} color={isToday ? '#e0e0e0' : '#546e7a'} />
+        <Ionicons name="chevron-forward" size={20} color={isToday ? T.border : T.textSecondary} />
       </TouchableOpacity>
     </View>
   );
@@ -61,5 +62,5 @@ const styles = StyleSheet.create({
   },
   arrow: { padding: 8 },
   arrowDisabled: { opacity: 0.4 },
-  date: { color: '#37474f', fontWeight: '600', minWidth: 100, textAlign: 'center' },
+  date: { color: T.textPrimary, fontWeight: '600', minWidth: 100, textAlign: 'center' },
 });

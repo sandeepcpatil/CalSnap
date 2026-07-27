@@ -4,6 +4,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExportRangeKey } from '../services/export';
+import { T } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -12,15 +13,17 @@ interface Props {
   busyKey: ExportRangeKey | null;
 }
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  sheet: '#161b1c',
-  glassBorder: 'rgba(255,255,255,0.08)',
-  primary: '#85d3da',
-  secondaryCont: '#00e3fd',
-  onSurface: '#e0e3e5',
-  onSurfaceVar: '#bec8c9',
-  outline: '#889393',
-  rowBg: 'rgba(255,255,255,0.04)',
+  sheet: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondaryCont: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  rowBg: T.surface2,
 };
 
 const OPTIONS: { key: ExportRangeKey; label: string; sub: string; icon: keyof typeof Ionicons.glyphMap }[] = [

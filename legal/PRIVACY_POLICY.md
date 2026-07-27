@@ -27,7 +27,7 @@ We do not sell your personal data. We share it only with service providers that 
 Food images are automatically deleted 90 days after upload. Your account and nutrition logs are retained until you delete your account. You can request deletion at any time.
 
 ## 7. Your rights & choices
-You can access and correct your profile in the App. You can delete your account and associated data by contacting us at [support@calsnap.app] (or via the in-app delete option, where available). Depending on your location, you may have additional rights under applicable data protection laws.
+You can access and correct your profile in the App. You can delete your account and associated data by contacting us at [calsnap.support@gmail.com] (or via the in-app delete option, where available). Depending on your location, you may have additional rights under applicable data protection laws.
 
 ## 8. Security
 We use industry-standard measures to protect your data, including encryption in transit and access controls. No method of transmission or storage is 100% secure, but we work to protect your information.
@@ -42,4 +42,4 @@ Your information may be processed on servers located outside your country (for e
 We may update this Privacy Policy. Material changes will be notified in the App, and the "last updated" date above will change.
 
 ## 12. Contact
-For privacy questions or requests, contact us at [support@calsnap.app].
+For privacy questions or requests, contact us at [calsnap.support@gmail.com].

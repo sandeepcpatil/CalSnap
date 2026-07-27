@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { SmartAlert, AlertTone } from '../utils/alerts';
+import { T } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -11,22 +12,24 @@ interface Props {
   alerts: SmartAlert[];
 }
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg: '#101415',
-  glass: 'rgba(15,23,42,0.80)',
-  glassBorder: 'rgba(255,255,255,0.08)',
-  primary: '#85d3da',
-  secondary: '#bdf4ff',
-  onSurface: '#e0e3e5',
-  onSurfaceVar: '#bec8c9',
-  outline: '#889393',
-  header: 'rgba(16,20,21,0.92)',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  header: T.bg,
 };
 
 const TONE: Record<AlertTone, { bg: string; border: string; icon: string }> = {
-  success: { bg: 'rgba(46,160,120,0.12)', border: 'rgba(120,216,168,0.30)', icon: '#78d8a8' },
-  warning: { bg: 'rgba(255,180,80,0.12)', border: 'rgba(255,180,80,0.30)', icon: '#ffc46b' },
-  info: { bg: 'rgba(0,227,253,0.10)', border: 'rgba(0,227,253,0.25)', icon: '#5fd0e6' },
+  success: { bg: 'rgba(122,220,166,0.14)', border: T.border, icon: T.success },
+  warning: { bg: 'rgba(242,193,112,0.14)', border: T.border, icon: T.warning },
+  info: { bg: T.primaryTint, border: T.border, icon: T.primary },
 };
 
 export function AlertsModal({ visible, onClose, alerts }: Props) {

@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { FoodLog } from '../store/foodLogStore';
 import { useTheme } from '../hooks/useTheme';
+import { T } from '../theme';
 
 interface Props {
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -51,7 +52,7 @@ export function MealSection({ mealType, logs }: Props) {
   const firstTime = logs.length > 0 ? formatTime(logs[0].logged_at) : MEAL_TIMES[mealType];
 
   return (
-    <View style={[styles.container, { backgroundColor: 'rgba(15,23,42,0.80)', borderColor: 'rgba(255,255,255,0.08)' }]}>
+    <View style={[styles.container, { backgroundColor: T.surface, borderColor: T.border }]}>
       {/* Header */}
       <TouchableOpacity
         onPress={() => setExpanded((v) => !v)}
@@ -75,7 +76,7 @@ export function MealSection({ mealType, logs }: Props) {
       </TouchableOpacity>
 
       {expanded && (
-        <View style={[styles.entries, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
+        <View style={[styles.entries, { borderTopColor: T.divider }]}>
           {logs.length === 0 ? (
             <Text style={[styles.empty, { color: theme.textMuted }]}>No food logged yet</Text>
           ) : (
@@ -90,11 +91,11 @@ export function MealSection({ mealType, logs }: Props) {
 function FoodLogCard({ log, accentColor }: { log: FoodLog; accentColor: string }) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.card, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
+    <View style={[styles.card, { borderTopColor: T.divider }]}>
       {log.image_url ? (
         <Image source={{ uri: log.image_url }} style={styles.thumbnail} />
       ) : (
-        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+        <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: T.divider }]}>
           <Ionicons name="image-outline" size={22} color={theme.textMuted} />
         </View>
       )}

@@ -14,12 +14,18 @@ interface ReminderConfig {
   enabled: boolean;
 }
 
+/** Result of a toggle so the UI can explain a failure instead of silently reverting. */
+export interface ToggleResult {
+  ok: boolean;
+  reason?: 'permission_denied' | 'schedule_failed';
+}
+
 interface NotificationState {
   permissionGranted: boolean;
   reminders: Record<MealType, ReminderConfig>;
 
   requestPermission: () => Promise<boolean>;
-  toggleReminder: (mealType: MealType) => Promise<void>;
+  toggleReminder: (mealType: MealType) => Promise<ToggleResult>;
   setReminderTime: (mealType: MealType, hour: number, minute: number) => Promise<void>;
 }
 
@@ -46,21 +52,30 @@ export const useNotificationStore = create<NotificationState>()(
         const current = get().reminders[mealType];
         const enabled = !current.enabled;
 
-        // Ask for permission if enabling for the first time
-        if (enabled && !get().permissionGranted) {
+        // Always verify permission live when enabling — the persisted flag can be
+        // stale if the user revoked notifications in system settings.
+        if (enabled) {
           const granted = await requestNotificationPermission();
-          if (!granted) return; // user denied — don't enable
-          set({ permissionGranted: true });
+          set({ permissionGranted: granted });
+          if (!granted) return { ok: false, reason: 'permission_denied' };
         }
 
         const updated = { ...current, enabled };
         set((s) => ({ reminders: { ...s.reminders, [mealType]: updated } }));
 
-        if (enabled) {
-          await scheduleMealReminder({ mealType, ...updated });
-        } else {
-          await cancelMealReminder(mealType);
+        try {
+          if (enabled) {
+            await scheduleMealReminder({ mealType, ...updated });
+          } else {
+            await cancelMealReminder(mealType);
+          }
+        } catch {
+          // Scheduling failed — revert the switch so UI reflects reality.
+          set((s) => ({ reminders: { ...s.reminders, [mealType]: current } }));
+          return { ok: false, reason: 'schedule_failed' };
         }
+
+        return { ok: true };
       },
 
       setReminderTime: async (mealType, hour, minute) => {

@@ -180,6 +180,22 @@ export function ScanResultScreen({ navigation, route }: Props) {
             </View>
           </View>
 
+          {/* Portion the estimate is based on — the biggest source of error, so
+              show it plainly rather than hiding the assumption. */}
+          {(result.portion_g > 0 || !!result.portion_desc) && (
+            <View style={styles.portionRow}>
+              <Ionicons name="scale-outline" size={14} color={theme.textMuted} />
+              <Text style={[styles.portionText, { color: theme.textSecondary }]}>
+                Based on {result.portion_desc || 'the visible portion'}
+                {result.portion_g > 0 ? ` · ~${Math.round(result.portion_g)}g` : ''}
+              </Text>
+            </View>
+          )}
+
+          {!!result.notes && (
+            <Text style={[styles.notesText, { color: theme.textMuted }]}>{result.notes}</Text>
+          )}
+
           {/* Meal type chips */}
           <View style={styles.mealChips}>
             {MEAL_TYPES.map((meal) => (
@@ -279,6 +295,9 @@ const styles = StyleSheet.create({
   calBlock: { alignItems: 'flex-end' },
   calories: { fontSize: 40, fontWeight: '800', lineHeight: 44, letterSpacing: -1 },
   kcalUnit: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  portionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  portionText: { fontSize: 13, fontWeight: '600', flex: 1 },
+  notesText: { fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
   mealChips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   mealChip: {
     paddingHorizontal: 14,

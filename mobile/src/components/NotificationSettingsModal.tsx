@@ -6,32 +6,37 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  Alert,
+  Linking,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotificationStore } from '../store/notificationStore';
 import type { MealType } from '../services/notifications';
+import { T } from '../theme';
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:           '#101415',
-  glass:        'rgba(15,23,42,0.80)',
-  glassBorder:  'rgba(255,255,255,0.08)',
-  primary:      '#85d3da',
-  secondary:    '#bdf4ff',
-  onSurface:    '#e0e3e5',
-  onSurfaceVar: '#bec8c9',
-  outline:      '#889393',
-  outlineVar:   '#3f4949',
-  header:       'rgba(16,20,21,0.88)',
-  error:        '#ffb4ab',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  header: T.bg,
+  error: T.error,
 };
 
 const MEALS: { type: MealType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-  { type: 'breakfast', label: 'Breakfast', icon: 'cafe-outline',        color: '#ffd580' },
-  { type: 'lunch',     label: 'Lunch',     icon: 'fast-food-outline',   color: '#85d3da' },
-  { type: 'dinner',    label: 'Dinner',    icon: 'restaurant-outline',  color: '#c0c1ff' },
-  { type: 'snack',     label: 'Snack',     icon: 'nutrition-outline',   color: '#a8d8a8' },
+  { type: 'breakfast', label: 'Breakfast', icon: 'cafe-outline',        color: T.mealBreakfast },
+  { type: 'lunch',     label: 'Lunch',     icon: 'fast-food-outline',   color: T.mealLunch },
+  { type: 'dinner',    label: 'Dinner',    icon: 'restaurant-outline',  color: T.mealDinner },
+  { type: 'snack',     label: 'Snack',     icon: 'nutrition-outline',   color: T.mealSnack },
 ];
 
 interface Props {
@@ -41,6 +46,24 @@ interface Props {
 
 export function NotificationSettingsModal({ visible, onDismiss }: Props) {
   const { reminders, toggleReminder, setReminderTime } = useNotificationStore();
+
+  const handleToggle = async (mealType: MealType) => {
+    const result = await toggleReminder(mealType);
+    if (result.ok) return;
+
+    if (result.reason === 'permission_denied') {
+      Alert.alert(
+        'Notifications are turned off',
+        'To get meal reminders, allow notifications for CalSnap in your device settings.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
+    } else {
+      Alert.alert('Could not set reminder', 'Something went wrong scheduling this reminder. Please try again.');
+    }
+  };
 
   const adjustHour   = (mealType: MealType, delta: number) => {
     const r = reminders[mealType];
@@ -91,7 +114,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
                   <Text style={styles.mealLabel}>{meal.label}</Text>
                   <Switch
                     value={config.enabled}
-                    onValueChange={() => toggleReminder(meal.type)}
+                    onValueChange={() => handleToggle(meal.type)}
                     trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
                     thumbColor={config.enabled ? C.primary : C.outline}
                   />
@@ -150,7 +173,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: C.header,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: T.border,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: C.onSurface },
@@ -186,7 +209,7 @@ const styles = StyleSheet.create({
 
   timePicker: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+    borderTopColor: T.divider,
     paddingVertical: 16,
     paddingHorizontal: 20,
     alignItems: 'center',
@@ -212,5 +235,5 @@ const styles = StyleSheet.create({
   },
   timeNumber: { fontSize: 22, fontWeight: '700', color: C.onSurface, minWidth: 36, textAlign: 'center' },
   timeSep: { fontSize: 24, fontWeight: '700', color: C.outline, marginBottom: 4 },
-  stepHint: { fontSize: 10, color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
+  stepHint: { fontSize: 11, color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
 });

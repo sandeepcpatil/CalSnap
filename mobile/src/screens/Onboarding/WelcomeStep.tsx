@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { T } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<OnboardingStackParamList, 'Welcome'> };
 
@@ -41,9 +42,10 @@ export function WelcomeStep({ navigation }: Props) {
               value={name}
               onChangeText={setName}
               mode="outlined"
+              textColor={T.textPrimary}
               style={styles.input}
-              outlineColor="#b0bec5"
-              activeOutlineColor="#01696f"
+              outlineColor={T.border}
+              activeOutlineColor={T.primary}
               autoCapitalize="words"
             />
 
@@ -52,10 +54,11 @@ export function WelcomeStep({ navigation }: Props) {
               value={age}
               onChangeText={(v) => setAge(v.replace(/[^0-9]/g, ''))}
               mode="outlined"
+              textColor={T.textPrimary}
               style={styles.input}
               keyboardType="number-pad"
-              outlineColor="#b0bec5"
-              activeOutlineColor="#01696f"
+              outlineColor={T.border}
+              activeOutlineColor={T.primary}
               maxLength={3}
             />
 
@@ -89,14 +92,14 @@ export function WelcomeStep({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
+  container: { flex: 1, backgroundColor: T.bg },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: '#01696f', fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#546e7a', marginBottom: 32 },
+  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
+  subtitle: { color: T.textSecondary, marginBottom: 32 },
   form: { gap: 16 },
-  input: { backgroundColor: '#fff' },
-  label: { color: '#37474f', marginTop: 4, marginBottom: 4 },
+  input: { backgroundColor: T.surface },
+  label: { color: T.textPrimary, marginTop: 4, marginBottom: 4 },
   footer: { padding: 24 },
-  button: { borderRadius: 12, backgroundColor: '#01696f' },
+  button: { borderRadius: 12, backgroundColor: T.primary },
   buttonContent: { height: 52 },
 });

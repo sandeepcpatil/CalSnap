@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { T } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<OnboardingStackParamList, 'BodyStats'> };
 
@@ -40,10 +41,11 @@ export function BodyStatsStep({ navigation }: Props) {
               value={weight}
               onChangeText={(v) => setWeight(v.replace(/[^0-9.]/g, ''))}
               mode="outlined"
+              textColor={T.textPrimary}
               style={styles.input}
               keyboardType="decimal-pad"
-              outlineColor="#b0bec5"
-              activeOutlineColor="#01696f"
+              outlineColor={T.border}
+              activeOutlineColor={T.primary}
               right={<TextInput.Affix text="kg" />}
             />
 
@@ -52,10 +54,11 @@ export function BodyStatsStep({ navigation }: Props) {
               value={height}
               onChangeText={(v) => setHeight(v.replace(/[^0-9.]/g, ''))}
               mode="outlined"
+              textColor={T.textPrimary}
               style={styles.input}
               keyboardType="decimal-pad"
-              outlineColor="#b0bec5"
-              activeOutlineColor="#01696f"
+              outlineColor={T.border}
+              activeOutlineColor={T.primary}
               right={<TextInput.Affix text="cm" />}
             />
           </View>
@@ -81,14 +84,14 @@ export function BodyStatsStep({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
+  container: { flex: 1, backgroundColor: T.bg },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: '#01696f', fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#546e7a', marginBottom: 32 },
+  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
+  subtitle: { color: T.textSecondary, marginBottom: 32 },
   form: { gap: 16 },
-  input: { backgroundColor: '#fff' },
+  input: { backgroundColor: T.surface },
   footer: { padding: 24, flexDirection: 'row', gap: 12 },
-  backButton: { flex: 1, borderColor: '#01696f' },
-  button: { flex: 2, borderRadius: 12, backgroundColor: '#01696f' },
+  backButton: { flex: 1, borderColor: T.primary },
+  button: { flex: 2, borderRadius: 12, backgroundColor: T.primary },
   buttonContent: { height: 52 },
 });

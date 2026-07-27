@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
+import { T } from '../theme';
 
 interface Props {
   step: number;
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
   container: { alignItems: 'center', paddingTop: 16, paddingBottom: 8, gap: 8 },
   dotsRow: { flexDirection: 'row', gap: 8 },
   dot: { width: 32, height: 4, borderRadius: 2 },
-  dotActive: { backgroundColor: '#01696f' },
-  dotInactive: { backgroundColor: '#e0e0e0' },
-  label: { color: '#90a4ae' },
+  dotActive: { backgroundColor: T.primary },
+  dotInactive: { backgroundColor: T.border },
+  label: { color: T.textMuted },
 });

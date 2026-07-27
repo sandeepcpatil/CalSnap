@@ -19,27 +19,30 @@ import { LegalModal, type LegalDoc } from "../../components/LegalModal";
 import { useSubscriptionGate } from "../../hooks/useSubscriptionGate";
 import { supabase } from "../../services/supabase";
 import { syncSubscription } from "../../services/api";
+import { T } from '../../theme';
 import {
   getCurrentOffering,
   purchasePackage,
   restorePurchases,
 } from "../../services/purchases";
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:            '#101415',
-  glass:         'rgba(15,23,42,0.80)',
-  glassBorder:   'rgba(255,255,255,0.08)',
-  primary:       '#85d3da',
-  secondary:     '#bdf4ff',
-  primaryCont:   '#01696f',
-  onPrimaryCont: '#97e6ec',
-  onPrimary:     '#00363a',
-  onSurface:     '#e0e3e5',
-  onSurfaceVar:  '#bec8c9',
-  outline:       '#889393',
-  outlineVar:    '#3f4949',
-  surfaceCont:   '#1d2022',
-  header:        'rgba(16,20,21,0.88)',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  primaryCont: T.primaryDeep,
+  onPrimaryCont: T.primary,
+  onPrimary: T.textOnPrimary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  surfaceCont: T.surface2,
+  header: T.bg,
 };
 
 const BENEFITS = [
@@ -211,8 +214,8 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                     <Text style={styles.planPriceSub}> / mo</Text>
                   </View>
                 </View>
-                <View style={[styles.radioOuter, selectedPlan === "monthly" && { borderColor: C.primary }]}>
-                  {selectedPlan === "monthly" && <View style={styles.radioInner} />}
+                <View style={[styles.radioOuter, selectedPlan === "monthly" && { borderColor: C.primary, backgroundColor: C.primary }]}>
+                  {selectedPlan === "monthly" && <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />}
                 </View>
               </View>
             </TouchableOpacity>
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: C.header,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: T.border,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   brand: { fontSize: 22, fontWeight: '800', letterSpacing: 0.5, color: C.primary },
@@ -397,7 +400,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 5,
     borderBottomLeftRadius: 10,
   },
-  bestValueText: { fontSize: 10, fontWeight: '800', color: C.onPrimary, letterSpacing: 0.5 },
+  bestValueText: { fontSize: 11, fontWeight: '800', color: C.onPrimary, letterSpacing: 0.5 },
 
   /* Payment */
   paymentSection: { gap: 10 },
@@ -409,15 +412,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: T.divider,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: T.divider,
     gap: 16,
   },
   paymentMethod: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  paymentMethodLabel: { fontSize: 10, fontWeight: '800', color: C.outline, letterSpacing: 0.5 },
-  paymentDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.10)' },
+  paymentMethodLabel: { fontSize: 11, fontWeight: '800', color: C.outline, letterSpacing: 0.5 },
+  paymentDivider: { width: 1, height: 16, backgroundColor: T.border },
 
   /* CTA */
   ctaButton: {

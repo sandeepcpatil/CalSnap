@@ -18,6 +18,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { supabase } from '../../services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LegalModal, type LegalDoc } from '../../components/LegalModal';
+import { T } from '../../theme';
 
 /** Official multicolor Google "G" (per Google sign-in branding guidelines). */
 function GoogleLogo({ size = 20 }: { size?: number }) {
@@ -44,18 +45,20 @@ if (GOOGLE_WEB_CLIENT_ID) {
 }
 
 // ── Stitch dark / tech color tokens (matches HTML exactly) ────────────────
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:               '#101415',
-  glass:            'rgba(15, 23, 42, 0.80)',
-  glassBorder:      'rgba(255, 255, 255, 0.10)',
-  primary:          '#85d3da',
-  secondary:        '#bdf4ff',
-  primaryContainer: '#01696f',
-  onSurface:        '#e0e3e5',
-  onSurfaceVariant: '#bec8c9',
-  outline:          '#889393',
-  outlineVariant:   '#3f4949',
-  surfaceLowest:    '#0b0f10',
+  bg: T.bg,
+  glass: T.glass,
+  glassBorder: T.glassBorder,
+  primary: T.primary,
+  secondary: T.primary,
+  primaryContainer: T.primaryDeep,
+  onSurface: T.textPrimary,
+  onSurfaceVariant: T.textSecondary,
+  outline: T.textMuted,
+  outlineVariant: T.border,
+  surfaceLowest: T.bg,
 };
 
 const FEATURES = [
@@ -134,7 +137,7 @@ export function AuthScreen() {
       />
       {/* Dark gradient overlay — dims the photo so text stays legible */}
       <LinearGradient
-        colors={['rgba(10,16,21,0.55)', 'rgba(16,20,21,0.78)', '#101415']}
+        colors={['rgba(10,16,21,0.55)', 'rgba(16,20,21,0.78)', T.bg]}
         style={StyleSheet.absoluteFillObject}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -269,13 +272,13 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#101415' },
+  root: { flex: 1, backgroundColor: T.bg },
   heroBg: { ...StyleSheet.absoluteFillObject, opacity: 0.9 },
 
   glowTop: {
     position: 'absolute', top: -80, left: -80,
     width: 260, height: 260, borderRadius: 130,
-    backgroundColor: 'rgba(0,227,253,0.06)',
+    backgroundColor: T.primaryTint,
   },
   glowBottom: {
     position: 'absolute', bottom: -60, right: -60,
@@ -297,12 +300,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 9,
     borderRadius: 100, borderWidth: 1,
   },
-  badgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: '#bdf4ff' },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: T.primary },
 
   // Brand
   brandBlock: { alignItems: 'center', gap: 6 },
   brandName:  { fontSize: 56, fontWeight: '800', letterSpacing: -2, lineHeight: 62 },
-  brandCal:   { color: '#e0e3e5' },
+  brandCal:   { color: T.textPrimary },
   tagline:    { fontSize: 18, fontWeight: '600', letterSpacing: 0.4 },
 
   // Bento stack — one card per row, icon left + text right
@@ -322,7 +325,7 @@ const styles = StyleSheet.create({
   // Auth card
   authCard: {
     borderRadius: 20, borderWidth: 1, padding: 22, gap: 16,
-    shadowColor: '#00e3fd', shadowOffset: { width: 0, height: 0 },
+    shadowColor: T.primary, shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.12, shadowRadius: 24, elevation: 4,
   },
   authHeader:   { gap: 4 },
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: 14, borderRadius: 12, borderWidth: 1, borderLeftWidth: 4,
   },
-  statusLabel:  { fontSize: 9, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  statusLabel:  { fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
   statusRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot:    { width: 8, height: 8, borderRadius: 4 },
   statusActive: { fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },

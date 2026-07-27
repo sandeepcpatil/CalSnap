@@ -25,16 +25,18 @@ if (!genAIKey) throw new Error('GEMINI_API_KEY must be set in environment');
 const RESPONSE_SCHEMA: Schema = {
   type: SchemaType.OBJECT,
   properties: {
-    food_name:  { type: SchemaType.STRING },
-    calories:   { type: SchemaType.NUMBER },
-    protein_g:  { type: SchemaType.NUMBER },
-    carbs_g:    { type: SchemaType.NUMBER },
-    fat_g:      { type: SchemaType.NUMBER },
-    fiber_g:    { type: SchemaType.NUMBER },
-    confidence: { type: SchemaType.STRING, format: 'enum', enum: ['high', 'medium', 'low'] },
-    notes:      { type: SchemaType.STRING },
+    food_name:    { type: SchemaType.STRING },
+    portion_g:    { type: SchemaType.NUMBER },
+    portion_desc: { type: SchemaType.STRING },
+    calories:     { type: SchemaType.NUMBER },
+    protein_g:    { type: SchemaType.NUMBER },
+    carbs_g:      { type: SchemaType.NUMBER },
+    fat_g:        { type: SchemaType.NUMBER },
+    fiber_g:      { type: SchemaType.NUMBER },
+    confidence:   { type: SchemaType.STRING, format: 'enum', enum: ['high', 'medium', 'low'] },
+    notes:        { type: SchemaType.STRING },
   },
-  required: ['food_name', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'confidence', 'notes'],
+  required: ['food_name', 'portion_g', 'portion_desc', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'confidence', 'notes'],
 };
 
 const genai = new GoogleGenerativeAI(genAIKey);
@@ -43,6 +45,10 @@ const model = genai.getGenerativeModel({
   generationConfig: {
     responseMimeType: 'application/json',
     responseSchema: RESPONSE_SCHEMA,
+    // A nutrition estimate is a measurement, not a creative task: the same
+    // photo must return the same numbers every time. The default (~1.0) made
+    // repeat scans of one dish disagree with each other.
+    temperature: 0,
   },
 });
 
@@ -101,12 +107,51 @@ const FREE_DAILY_SCAN_LIMIT = 2;
 const PRO_DAILY_SCAN_LIMIT = 20;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
-// Kept minimal — JSON schema + calibration examples are now enforced via
-// responseSchema above, so they don't need to consume input tokens here.
+// NOTE: `responseSchema` constrains the JSON *shape and types* only — it cannot
+// constrain *values*. The calibration anchors below are what keep estimates in
+// a realistic range; removing them to save tokens is what caused portion drift.
+// They cost ~350 input tokens and are the cheapest accuracy we can buy.
 
-const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian cuisine.
-Analyse the food in this image and estimate calories and macronutrients for the entire visible portion.
-If you cannot identify the food, set calories to 0, confidence to "low", and explain in notes.`;
+const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
+
+TASK
+Estimate the nutrition of the food visible in the photo, for the WHOLE portion shown.
+
+METHOD — follow in order:
+1. Identify each distinct food item on the plate.
+2. Estimate the weight of each item in grams. Use these anchors for scale:
+   • 1 roti / chapati ≈ 40 g · 1 paratha ≈ 70 g · 1 slice bread ≈ 25 g
+   • 1 katori / small bowl ≈ 180 g · 1 cup cooked rice ≈ 150 g
+   • 1 idli ≈ 50 g · 1 plain dosa ≈ 100 g · 1 samosa ≈ 60 g
+   • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g
+   • A standard Indian dinner plate is 26–28 cm across — use it to judge scale.
+3. Apply per-100 g nutrition for each item, then sum across the plate.
+4. Report the total weight in portion_g and describe it in portion_desc
+   (e.g. "1 medium katori", "2 rotis + 1 katori dal").
+
+CALIBRATION — typical values for one standard serving:
+• Dal (1 katori, 180 g, medium thickness): 140 kcal · P 9 · C 20 · F 3 · Fib 5
+  (thin/watery dal ≈ 90 kcal, P 6 · thick dal fry with ghee ≈ 200 kcal, P 11)
+• Plain cooked rice (1 cup, 150 g): 200 kcal · P 4 · C 45 · F 0.5 · Fib 1
+• Roti (1, 40 g): 120 kcal · P 3 · C 25 · F 0.5 · Fib 3
+• Mixed veg sabzi (1 katori, 150 g): 130 kcal · P 3 · C 12 · F 8 · Fib 4
+• Paneer butter masala (1 katori, 180 g): 350 kcal · P 12 · C 12 · F 28 · Fib 2
+• Chicken curry (1 katori, 180 g): 280 kcal · P 22 · C 8 · F 18 · Fib 1
+• Curd / dahi (1 katori, 150 g): 90 kcal · P 5 · C 7 · F 5 · Fib 0
+• Idli (2 pieces): 130 kcal · P 4 · C 27 · F 0.5 · Fib 1
+• Plain dosa (1): 170 kcal · P 4 · C 30 · F 4 · Fib 1.5
+• Poha (1 plate, 180 g): 250 kcal · P 5 · C 45 · F 6 · Fib 3
+• Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2
+
+RULES
+- Indian gravies usually carry more oil than they look — do not under-estimate fat.
+- Do not assume a large portion by default; most home servings are one katori.
+- confidence: "high" only when both the dish AND the portion are clear;
+  "medium" when the dish is clear but the portion is ambiguous;
+  "low" when the dish itself is uncertain.
+- If no food is identifiable, set calories to 0, confidence "low", and say why in notes.
+- Keep notes to one short sentence naming the main assumption you made
+  (e.g. "Assumed a medium katori of moderately thick dal").`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -228,6 +273,8 @@ function fallbackBreakdown(reason: string): CalorieBreakdown {
     carbs_g: 0,
     fat_g: 0,
     fiber_g: 0,
+    portion_g: 0,
+    portion_desc: '',
     confidence: 'low',
     notes: reason,
   };
@@ -242,6 +289,8 @@ function validateBreakdown(raw: unknown): CalorieBreakdown {
     carbs_g: typeof r['carbs_g'] === 'number' ? r['carbs_g'] : 0,
     fat_g: typeof r['fat_g'] === 'number' ? r['fat_g'] : 0,
     fiber_g: typeof r['fiber_g'] === 'number' ? r['fiber_g'] : 0,
+    portion_g: typeof r['portion_g'] === 'number' && r['portion_g'] > 0 ? Math.round(r['portion_g']) : 0,
+    portion_desc: typeof r['portion_desc'] === 'string' ? r['portion_desc'] : '',
     confidence:
       r['confidence'] === 'high' || r['confidence'] === 'medium' || r['confidence'] === 'low'
         ? r['confidence']

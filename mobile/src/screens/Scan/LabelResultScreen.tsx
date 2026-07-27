@@ -22,24 +22,27 @@ import { getMealTypeFromTime } from '../../utils/nutrition';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { T } from '../../theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'LabelResult'>;
   route: RouteProp<ScanStackParamList, 'LabelResult'>;
 };
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:           '#101415',
-  glass:        'rgba(15,23,42,0.80)',
-  glassBorder:  'rgba(255,255,255,0.08)',
-  primary:      '#85d3da',
-  secondary:    '#bdf4ff',
-  onSurface:    '#e0e3e5',
-  onSurfaceVar: '#bec8c9',
-  outline:      '#889393',
-  good:         '#78d8a8',
-  medium:       '#ffc46b',
-  bad:          '#ff8a80',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  good: T.success,
+  medium: T.warning,
+  bad: T.error,
 };
 
 function scoreColor(score: number): string {
@@ -259,7 +262,7 @@ export function LabelResultScreen({ navigation, route }: Props) {
           style={styles.logBtn}
           contentStyle={styles.btnContent}
           buttonColor={C.primary}
-          textColor="#00363a"
+          textColor={T.textOnPrimary}
           icon="plus"
         >
           Log {servingLabel}
@@ -290,11 +293,11 @@ const styles = StyleSheet.create({
   productBrand: { fontSize: 13, color: C.onSurfaceVar, fontWeight: '600' },
   tagRow: { flexDirection: 'row', gap: 6, marginTop: 3 },
   tag: {
-    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6,
+    backgroundColor: T.divider, borderRadius: 6,
     paddingHorizontal: 8, paddingVertical: 3,
     borderWidth: 1, borderColor: C.glassBorder,
   },
-  tagText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: C.outline },
+  tagText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: C.outline },
 
   scoreCard: {
     backgroundColor: C.glass, borderRadius: 20, borderWidth: 1, borderColor: C.glassBorder,
@@ -310,7 +313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: C.bg,
   },
-  gradeChipText: { fontSize: 16, fontWeight: '800', color: '#00363a' },
+  gradeChipText: { fontSize: 16, fontWeight: '800', color: T.textOnPrimary },
   scoreCaption: { fontSize: 15, fontWeight: '700', color: C.onSurface },
   scoreSummary: {
     fontSize: 13,
@@ -332,15 +335,15 @@ const styles = StyleSheet.create({
   factRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   factText: { flex: 1, fontSize: 14, color: C.onSurface, lineHeight: 19 },
 
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 8 },
-  tableTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: C.outline, marginBottom: 6 },
+  divider: { height: 1, backgroundColor: T.divider, marginVertical: 8 },
+  tableTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, color: C.outline, marginBottom: 6 },
   nutRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   nutLabel: { fontSize: 14, color: C.onSurfaceVar, fontWeight: '600' },
   nutSubLabel: { paddingLeft: 14, fontWeight: '400', color: C.outline },
   nutValue: { fontSize: 14, color: C.onSurface, fontWeight: '700' },
   ingredientsText: { fontSize: 12.5, color: C.onSurfaceVar, lineHeight: 19 },
 
-  disclaimer: { fontSize: 10.5, color: C.outline, textAlign: 'center', lineHeight: 15, paddingHorizontal: 12 },
+  disclaimer: { fontSize: 11, color: C.outline, textAlign: 'center', lineHeight: 15, paddingHorizontal: 12 },
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

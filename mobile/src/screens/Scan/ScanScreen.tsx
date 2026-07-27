@@ -29,6 +29,7 @@ import { analyzeFood, analyzeLabel } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { T } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
 
@@ -84,7 +85,7 @@ function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
       {imageUri ? (
         <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={1} />
       ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0b0f10' }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
       )}
       {/* Dim + vignette so the beam and card read clearly */}
       <LinearGradient
@@ -96,7 +97,7 @@ function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
       <View style={analyzeStyles.sweepArea} pointerEvents="none">
         <Animated.View style={[analyzeStyles.beam, { transform: [{ translateY }] }]}>
           <LinearGradient
-            colors={['rgba(0,227,253,0)', 'rgba(0,227,253,0.30)']}
+            colors={['rgba(133,211,218,0)', 'rgba(133,211,218,0.30)']}
             style={analyzeStyles.beamTrail}
           />
           <View style={analyzeStyles.beamLine} />
@@ -119,9 +120,9 @@ function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
             <View key={step.text} style={[analyzeStyles.stepRow, !done && !active && { opacity: 0.35 }]}>
               <View style={[analyzeStyles.stepIcon, done && analyzeStyles.stepIconDone, active && analyzeStyles.stepIconActive]}>
                 {done ? (
-                  <Ionicons name="checkmark" size={15} color="#00363a" />
+                  <Ionicons name="checkmark" size={15} color={T.textOnPrimary} />
                 ) : active ? (
-                  <ActivityIndicator animating size={13} color="#00e3fd" />
+                  <ActivityIndicator animating size={13} color={T.primary} />
                 ) : (
                   <Ionicons name={step.icon} size={14} color="rgba(255,255,255,0.6)" />
                 )}
@@ -156,8 +157,8 @@ const analyzeStyles = StyleSheet.create({
   beamLine: {
     height: 2.5,
     borderRadius: 2,
-    backgroundColor: '#00e3fd',
-    shadowColor: '#00e3fd',
+    backgroundColor: T.primary,
+    shadowColor: T.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 12,
@@ -173,10 +174,10 @@ const analyzeStyles = StyleSheet.create({
   card: {
     marginHorizontal: 20,
     marginBottom: 48,
-    backgroundColor: 'rgba(13,20,21,0.92)',
+    backgroundColor: T.surface,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.18)',
+    borderColor: T.border,
     paddingVertical: 20,
     paddingHorizontal: 22,
     gap: 14,
@@ -186,17 +187,17 @@ const analyzeStyles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: T.divider,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: T.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepIconDone: { backgroundColor: '#85d3da', borderColor: '#85d3da' },
-  stepIconActive: { borderColor: 'rgba(0,227,253,0.55)', backgroundColor: 'rgba(0,227,253,0.10)' },
-  stepText: { flex: 1, color: 'rgba(255,255,255,0.75)', fontSize: 14.5, fontWeight: '600', letterSpacing: 0.2 },
+  stepIconDone: { backgroundColor: T.primary, borderColor: T.primary },
+  stepIconActive: { borderColor: T.primary, backgroundColor: T.primaryTint },
+  stepText: { flex: 1, color: T.textSecondary, fontSize: 14.5, fontWeight: '600', letterSpacing: 0.2 },
   subText: {
-    color: 'rgba(255,255,255,0.40)',
+    color: T.textSecondary,
     fontSize: 11.5,
     fontWeight: '500',
     textAlign: 'center',
@@ -357,12 +358,12 @@ export function ScanScreen({ navigation }: Props) {
             onPress={() => navigation.getParent()?.navigate('Home')}
             activeOpacity={0.7}
           >
-            <Ionicons name="close" size={24} color="#bec8c9" />
+            <Ionicons name="close" size={24} color={T.textSecondary} />
           </TouchableOpacity>
 
           <View style={styles.permissionContent}>
             <View style={styles.permissionIconWrap}>
-              <Ionicons name="camera-outline" size={44} color="#85d3da" />
+              <Ionicons name="camera-outline" size={44} color={T.primary} />
             </View>
 
             <Text style={styles.permissionTitle}>Camera access needed</Text>
@@ -372,7 +373,7 @@ export function ScanScreen({ navigation }: Props) {
             </Text>
 
             <TouchableOpacity style={styles.permissionButton} onPress={requestPermission} activeOpacity={0.88}>
-              <Ionicons name="lock-open-outline" size={18} color="#00363a" />
+              <Ionicons name="lock-open-outline" size={18} color={T.textOnPrimary} />
               <Text style={styles.permissionButtonText}>Grant Camera Access</Text>
             </TouchableOpacity>
 
@@ -458,7 +459,7 @@ export function ScanScreen({ navigation }: Props) {
                   <Ionicons
                     name={mode === 'meal' ? 'restaurant-outline' : 'barcode-outline'}
                     size={14}
-                    color={active ? '#00363a' : 'rgba(255,255,255,0.75)'}
+                    color={active ? T.textOnPrimary : T.textSecondary}
                   />
                   <Text style={[styles.modePillText, active && styles.modePillTextActive]}>
                     {mode === 'meal' ? 'MEAL' : 'LABEL'}
@@ -508,7 +509,7 @@ export function ScanScreen({ navigation }: Props) {
             <TextInput
               style={descStyles.input}
               placeholder="e.g. 2 rotis with dal, extra ghee on top…"
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor={T.textMuted}
               value={description}
               onChangeText={setDescription}
               multiline
@@ -539,33 +540,33 @@ export function ScanScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  permissionRoot: { flex: 1, backgroundColor: '#101415' },
+  permissionRoot: { flex: 1, backgroundColor: T.bg },
   permissionContainer: { flex: 1, paddingHorizontal: 28 },
   permissionClose: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: T.divider,
+    borderWidth: 1, borderColor: T.border,
     marginTop: 8,
   },
   permissionContent: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingBottom: 60 },
   permissionIconWrap: {
     width: 96, height: 96, borderRadius: 48,
-    backgroundColor: 'rgba(1,105,111,0.20)',
+    backgroundColor: T.primaryTint,
     borderWidth: 1, borderColor: 'rgba(133,211,218,0.35)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8,
   },
-  permissionTitle: { color: '#e0e3e5', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
-  permissionText: { color: '#bec8c9', fontSize: 15, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
+  permissionTitle: { color: T.textPrimary, fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
+  permissionText: { color: T.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
   permissionButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    height: 54, borderRadius: 14, backgroundColor: '#85d3da',
+    height: 54, borderRadius: 14, backgroundColor: T.primary,
     alignSelf: 'stretch', marginTop: 12,
   },
-  permissionButtonText: { color: '#00363a', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  permissionButtonText: { color: T.textOnPrimary, fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
   permissionSecondary: { paddingVertical: 8 },
-  permissionSecondaryText: { color: '#85d3da', fontSize: 14, fontWeight: '600' },
+  permissionSecondaryText: { color: T.primary, fontSize: 14, fontWeight: '600' },
   overlay: { flex: 1, justifyContent: 'space-between' },
   scanCountBadge: {
     alignSelf: 'center',
@@ -588,14 +589,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: T.scrim,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
   titleBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: T.scrim,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 50,
@@ -639,7 +640,7 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: T.border,
   },
   modePill: {
     flexDirection: 'row',
@@ -649,9 +650,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 50,
   },
-  modePillActive: { backgroundColor: '#85d3da' },
-  modePillText: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  modePillTextActive: { color: '#00363a' },
+  modePillActive: { backgroundColor: T.primary },
+  modePillText: { color: T.textSecondary, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  modePillTextActive: { color: T.textOnPrimary },
 
   bottomBar: {
     flexDirection: 'row',
@@ -681,7 +682,7 @@ const descStyles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#0d2b2d',
+    backgroundColor: T.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
@@ -701,7 +702,7 @@ const descStyles = StyleSheet.create({
     lineHeight: 19,
   },
   input: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: T.surface2,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(77,208,216,0.3)',
@@ -721,7 +722,7 @@ const descStyles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: T.glassBorder,
     alignItems: 'center',
   },
   skipText: {
@@ -733,7 +734,7 @@ const descStyles = StyleSheet.create({
     flex: 2,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: '#01696f',
+    backgroundColor: T.primaryDeep,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { calculateGoals } from '../../utils/nutrition';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { T } from '../../theme';
 
 export function SummaryStep() {
   const { profile, updateProfile } = useAuthStore();
@@ -57,7 +58,7 @@ export function SummaryStep() {
   if (!goals) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator animating color="#01696f" size="large" />
+        <ActivityIndicator animating color={T.primary} size="large" />
       </SafeAreaView>
     );
   }
@@ -119,7 +120,7 @@ export function SummaryStep() {
 
       <View style={styles.footer}>
         {isSaving ? (
-          <ActivityIndicator animating color="#01696f" />
+          <ActivityIndicator animating color={T.primary} />
         ) : (
           <Button
             mode="contained"
@@ -136,16 +137,16 @@ export function SummaryStep() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
+  container: { flex: 1, backgroundColor: T.bg },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: '#01696f', fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#546e7a', marginBottom: 28 },
+  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
+  subtitle: { color: T.textSecondary, marginBottom: 28 },
   summaryCard: {
-    backgroundColor: '#fff',
+    backgroundColor: T.surface,
     borderRadius: 20,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#e0f2f1',
+    borderColor: T.primaryTint,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -154,19 +155,19 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   cardHeader: { marginBottom: 4 },
-  cardTitle: { color: '#01696f', fontWeight: '700' },
+  cardTitle: { color: T.primary, fontWeight: '700' },
   metric: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   metricIcon: { fontSize: 32 },
   metricText: { flex: 1 },
-  metricValue: { color: '#212121', fontWeight: '700' },
-  metricLabel: { color: '#757575', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#f0f0f0' },
+  metricValue: { color: T.textPrimary, fontWeight: '700' },
+  metricLabel: { color: T.textSecondary, marginTop: 2 },
+  divider: { height: 1, backgroundColor: T.surface2 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center', gap: 4 },
-  statLabel: { color: '#90a4ae', textTransform: 'uppercase', letterSpacing: 0.5 },
-  statValue: { color: '#37474f', fontWeight: '600', textTransform: 'capitalize' },
-  note: { color: '#b0bec5', textAlign: 'center', marginTop: 16 },
+  statLabel: { color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  statValue: { color: T.textPrimary, fontWeight: '600', textTransform: 'capitalize' },
+  note: { color: T.textMuted, textAlign: 'center', marginTop: 16 },
   footer: { padding: 24 },
-  button: { borderRadius: 12, backgroundColor: '#01696f' },
+  button: { borderRadius: 12, backgroundColor: T.primary },
   buttonContent: { height: 52 },
 });

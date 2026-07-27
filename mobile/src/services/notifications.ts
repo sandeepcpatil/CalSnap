@@ -68,6 +68,7 @@ export async function scheduleMealReminder(reminder: MealReminder): Promise<void
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: reminder.hour,
       minute: reminder.minute,
+      channelId: 'meal-reminders',
     },
   });
 }

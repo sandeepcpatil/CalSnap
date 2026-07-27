@@ -239,98 +239,101 @@ const light: ColorTheme = {
 // Dark variant of the Stitch Calm palette — inverse-surface as the base.
 // Accent colors derived from Stitch inverse-primary / primary-fixed tokens.
 
+// "CalSnap Ink" — kept in exact sync with theme/tokens.ts (`T`), which is what
+// the screens import. One teal-grey surface hue, one accent family, shared
+// macro colours, and every text pair at WCAG AA or better.
 const dark: ColorTheme = {
-  // Backgrounds — Stitch inverse-surface family
-  bg:            '#0d1718',  // very dark teal-grey
-  surface:       '#191f20',  // dark card
-  surface2:      '#252c2d',  // dark chip / input bg
-  surfaceOffset: '#2d3435',  // subtle offset
+  // Surfaces — one hue, four steps
+  bg:            '#0C1112',
+  surface:       '#151B1C',
+  surface2:      '#1C2324',
+  surfaceOffset: '#232B2C',
 
-  // Text — Stitch inverse-on-surface → lighter for dark
-  textPrimary:   '#eef1f1',  // inverse-on-surface
-  textSecondary: '#a0b4b5',  // muted on dark
-  textMuted:     '#6f797a',  // outline
-  textInverse:   '#002022',  // on-primary-fixed
+  // Text — AA-safe on every surface step
+  textPrimary:   '#EDF2F2',  // 15.9:1
+  textSecondary: '#AAB6B7',  // 8.4:1
+  textMuted:     '#7E8A8C',  // 4.9:1 — was #6f797a (3.6:1, failed AA)
+  textInverse:   '#00363A',
 
-  // Brand — Stitch inverse-primary (bright teal for dark bg)
-  primary:     '#85d3da',   // inverse-primary
-  primaryLight:'#a1f0f6',   // primary-fixed
-  primaryDark: '#4da8b0',
-  primaryTint: '#002022',   // on-primary-fixed (deep dark tint)
+  // Brand — one accent family
+  primary:     '#85D3DA',
+  primaryLight:'#A9EDF3',
+  primaryDark: '#01696F',
+  primaryTint: 'rgba(133,211,218,0.14)',
 
-  // Semantic
-  success:     '#4ae183',   // tertiary-fixed-dim
-  successTint: '#00210c',
-  warning:     '#ffb77d',   // secondary-fixed-dim
-  warningTint: '#3a2800',
-  error:       '#ffb4ab',   // on-error (lighter for dark surfaces)
-  errorTint:   '#401414',
-  info:        '#85d3da',
-  infoTint:    '#002022',
+  // Semantic (= score colours)
+  success:     '#7ADCA6',
+  successTint: 'rgba(122,220,166,0.14)',
+  warning:     '#F2C170',
+  warningTint: 'rgba(242,193,112,0.14)',
+  error:       '#FF9E94',
+  errorTint:   'rgba(255,158,148,0.14)',
+  info:        '#85D3DA',
+  infoTint:    'rgba(133,211,218,0.14)',
 
-  // Macros — lighter/more saturated for dark surfaces
-  protein:     '#A888D0',   // lighter violet
-  proteinTint: '#2A1F40',
-  carbs:       '#ffb77d',   // secondary-fixed-dim (warm amber)
-  carbsTint:   '#3A2800',
-  fat:         '#F08080',   // soft coral
-  fatTint:     '#3A1414',
-  fiber:       '#4ae183',   // tertiary-fixed-dim
-  fiberTint:   '#00210c',
+  // Macros — matched vibrance, shared app-wide
+  protein:     '#B9A3EC',
+  proteinTint: 'rgba(185,163,236,0.14)',
+  carbs:       '#EFBE7A',
+  carbsTint:   'rgba(239,190,122,0.14)',
+  fat:         '#F2938C',
+  fatTint:     'rgba(242,147,140,0.14)',
+  fiber:       '#86DCA8',
+  fiberTint:   'rgba(134,220,168,0.14)',
 
-  // Borders
-  borderColor:  '#3f4949',  // on-surface-variant
-  dividerColor: '#2d3131',  // inverse-surface
+  // Borders — only two hairlines allowed
+  borderColor:  'rgba(255,255,255,0.08)',
+  dividerColor: 'rgba(255,255,255,0.05)',
 
   // Interactive
   ripple:  'rgba(133,211,218,0.15)',
-  overlay: 'rgba(0,0,0,0.70)',
-  shadow:  'rgba(0,0,0,0.40)',
+  overlay: 'rgba(12,17,18,0.72)',
+  shadow:  'rgba(0,0,0,0.35)',
 
   // Tab bar
-  tabBarBg:       '#191f20',
-  tabBarActive:   '#85d3da',
-  tabBarInactive: '#6f797a',
-  tabBarBorder:   '#252c2d',
+  tabBarBg:       '#151B1C',
+  tabBarActive:   '#85D3DA',
+  tabBarInactive: '#7E8A8C',
+  tabBarBorder:   'rgba(255,255,255,0.08)',
 
   // Card
-  cardBg:     '#191f20',
-  cardShadow: 'rgba(0,0,0,0.30)',
+  cardBg:     '#151B1C',
+  cardShadow: 'rgba(0,0,0,0.35)',
 
   // Scan UI
-  scanOverlayColor: 'rgba(0,0,0,0.65)',
-  scanBorderColor:  '#85d3da',
-  scanSuccessColor: '#4ae183',
+  scanOverlayColor: 'rgba(12,17,18,0.65)',
+  scanBorderColor:  '#85D3DA',
+  scanSuccessColor: '#7ADCA6',
 
   statusBar: 'light',
 
   // Navigation
-  navBackground: '#0d1718',
-  navCard:       '#191f20',
-  navText:       '#eef1f1',
-  navBorder:     '#252c2d',
+  navBackground: '#0C1112',
+  navCard:       '#151B1C',
+  navText:       '#EDF2F2',
+  navBorder:     'rgba(255,255,255,0.08)',
 
   ring: {
-    gradFrom: '#a1f0f6',   // primary-fixed
-    gradTo:   '#85d3da',   // inverse-primary
-    track:    '#252c2d',
-    badgeBg:  '#3a2800',
-    badgeText:'#ffb77d',
+    gradFrom: '#A9EDF3',
+    gradTo:   '#38B6C2',
+    track:    '#1C2324',
+    badgeBg:  'rgba(242,193,112,0.14)',
+    badgeText:'#F2C170',
   },
 
   meal: {
-    breakfast: '#ffb77d',  // secondary-fixed-dim
-    lunch:     '#85d3da',  // inverse-primary
-    dinner:    '#4ae183',  // tertiary-fixed-dim
-    snack:     '#ffdcc3',  // secondary-fixed
+    breakfast: '#EFBE7A',
+    lunch:     '#85D3DA',
+    dinner:    '#B9A3EC',
+    snack:     '#86DCA8',
   },
 
   auth: {
-    heroGradient: ['#002022', '#004f54', '#01696f', '#85d3da'],
-    glassBg:     'rgba(25,31,32,0.90)',
-    glassBorder: 'rgba(63,73,73,0.5)',
-    chipBgs:     ['#002022', '#3A2800', '#00210c'],
-    chipBorder:  'rgba(63,73,73,0.4)',
+    heroGradient: ['#00363A', '#01696F', '#38B6C2', '#85D3DA'],
+    glassBg:     'rgba(12,17,18,0.80)',
+    glassBorder: 'rgba(255,255,255,0.10)',
+    chipBgs:     ['rgba(133,211,218,0.14)', 'rgba(239,190,122,0.14)', 'rgba(134,220,168,0.14)'],
+    chipBorder:  'rgba(255,255,255,0.08)',
   },
 };
 

@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { T } from '../../theme';
 
 type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 type Props = { navigation: NativeStackNavigationProp<OnboardingStackParamList, 'Activity'> };
@@ -72,10 +73,10 @@ export function ActivityStep({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fffe' },
+  container: { flex: 1, backgroundColor: T.bg },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: '#01696f', fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#546e7a', marginBottom: 24 },
+  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
+  subtitle: { color: T.textSecondary, marginBottom: 24 },
   options: { gap: 10 },
   option: {
     flexDirection: 'row',
@@ -83,18 +84,18 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
+    borderColor: T.border,
+    backgroundColor: T.surface,
     gap: 12,
   },
-  optionSelected: { borderColor: '#01696f', backgroundColor: '#e0f2f1' },
+  optionSelected: { borderColor: T.primary, backgroundColor: T.primaryTint },
   optionEmoji: { fontSize: 24, width: 32, textAlign: 'center' },
   optionText: { flex: 1 },
-  optionLabel: { color: '#37474f', fontWeight: '600' },
-  optionLabelSelected: { color: '#01696f' },
-  optionDesc: { color: '#90a4ae', marginTop: 2 },
+  optionLabel: { color: T.textPrimary, fontWeight: '600' },
+  optionLabelSelected: { color: T.primary },
+  optionDesc: { color: T.textMuted, marginTop: 2 },
   footer: { padding: 24, flexDirection: 'row', gap: 12 },
-  backButton: { flex: 1, borderColor: '#01696f' },
-  button: { flex: 2, borderRadius: 12, backgroundColor: '#01696f' },
+  backButton: { flex: 1, borderColor: T.primary },
+  button: { flex: 2, borderRadius: 12, backgroundColor: T.primary },
   buttonContent: { height: 52 },
 });

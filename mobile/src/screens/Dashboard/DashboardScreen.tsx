@@ -21,28 +21,31 @@ import { MacroDonut } from '../../components/MacroDonut';
 import { MealSection } from '../../components/MealSection';
 import { TrialBanner } from '../../components/TrialBanner';
 import { AlertsModal } from '../../components/AlertsModal';
-import { buildNutriInsight } from '../../utils/nutrition';
+import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
 import { buildSmartAlerts } from '../../utils/alerts';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { T } from '../../theme';
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:              '#101415',
-  glass:           'rgba(15,23,42,0.80)',
-  glassBorder:     'rgba(255,255,255,0.08)',
-  primary:         '#85d3da',
-  secondary:       '#bdf4ff',
-  tertiary:        '#c0c1ff',
-  onSurface:       '#e0e3e5',
-  onSurfaceVar:    '#bec8c9',
-  outline:         '#889393',
-  outlineVar:      '#3f4949',
-  surfaceLowest:   '#0b0f10',
-  insightBg:       'rgba(1,105,111,0.18)',
-  insightBorder:   'rgba(133,211,218,0.25)',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  tertiary: T.protein,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  surfaceLowest: T.bg,
+  insightBg: T.primaryTint,
+  insightBorder: T.border,
 };
 
 export function DashboardScreen() {
@@ -82,6 +85,7 @@ export function DashboardScreen() {
     todayLogs.filter((l) => l.meal_type === type);
 
   const insightMsg = buildNutriInsight(totals, { calorieGoal, proteinGoal });
+  const macroSplit = macroCalorieSplit(totals.protein, totals.carbs, totals.fat);
 
   const mealsLogged = new Set(
     todayLogs.map((l) => l.meal_type).filter(Boolean) as string[],
@@ -106,7 +110,7 @@ export function DashboardScreen() {
       {/* ── Header ── */}
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <LinearGradient
-          colors={['rgba(16,20,21,1)', 'rgba(16,20,21,0.90)', 'rgba(16,20,21,0)']}
+          colors={['rgba(12,17,18,1)', 'rgba(12,17,18,0.90)', 'rgba(12,17,18,0)']}
           style={styles.headerGrad}
         >
           <View style={styles.header}>
@@ -160,7 +164,7 @@ export function DashboardScreen() {
         {/* ── Personalized greeting ── */}
         <View style={styles.greetingBlock}>
           <Text style={styles.greetingSmall}>{greeting},</Text>
-          <Text style={styles.greetingName}>{firstName} 👋</Text>
+          <Text style={styles.greetingName}>{firstName}</Text>
         </View>
 
         {/* ── Trial countdown (only during the 7-day trial) ── */}
@@ -178,12 +182,12 @@ export function DashboardScreen() {
               <Ionicons name="analytics-outline" size={16} color={C.primary} />
               <Text style={styles.cardTitle}>Macro Targets</Text>
             </View>
-            <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} />
+            <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} showLegend={false} />
             <View style={styles.macroDivider} />
             <View style={styles.macroBars}>
-              <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={C.primary}    unit="g" />
-              <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={C.secondary}  unit="g" />
-              <MacroBar label="Fat"           current={totals.fat}     goal={fatGoal}     color={C.tertiary}   unit="g" />
+              <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={T.protein} unit="g" percent={macroSplit.proteinPct} />
+              <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={T.carbs}   unit="g" percent={macroSplit.carbsPct} />
+              <MacroBar label="Fat"           current={totals.fat}     goal={fatGoal}     color={T.fat}     unit="g" percent={macroSplit.fatPct} />
             </View>
           </View>
         </ProGate>
@@ -273,11 +277,11 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     paddingHorizontal: 4,
-    backgroundColor: '#ffc46b',
+    backgroundColor: T.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bellBadgeText: { fontSize: 9, fontWeight: '800', color: '#101415' },
+  bellBadgeText: { fontSize: 11, fontWeight: '800', color: T.textOnPrimary },
 
   /* Scroll */
   scroll:        { flex: 1 },
@@ -312,7 +316,7 @@ const styles = StyleSheet.create({
     color: C.primary,
   },
   macroBars: { gap: 16 },
-  macroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 18 },
+  macroDivider: { height: 1, backgroundColor: T.divider, marginVertical: 18 },
 
   /* Insight */
   insightText: {

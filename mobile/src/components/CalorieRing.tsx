@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { formatCalories } from '../utils/nutrition';
 import { useTheme } from '../hooks/useTheme';
+import { T } from '../theme';
 
 interface Props {
   consumed: number;
@@ -47,7 +48,7 @@ export function CalorieRing({ consumed, goal }: Props) {
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={RADIUS}
-            stroke={isOver ? '#ba1a1a' : 'url(#ringGrad)'}
+            stroke={isOver ? T.error : 'url(#ringGrad)'}
             strokeWidth={STROKE_WIDTH}
             fill="none"
             strokeDasharray={CIRCUMFERENCE}
@@ -60,7 +61,7 @@ export function CalorieRing({ consumed, goal }: Props) {
 
         <View style={styles.center}>
           <Text style={[styles.remainingLabel, { color: theme.textMuted }]}>Remaining</Text>
-          <Text style={[styles.remainingValue, { color: isOver ? theme.error : '#00e3fd' }]}>
+          <Text style={[styles.remainingValue, { color: isOver ? theme.error : T.primary }]}>
             {formatCalories(remaining)}
           </Text>
           <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>kcal</Text>

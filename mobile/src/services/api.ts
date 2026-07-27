@@ -39,6 +39,10 @@ export interface FoodAnalysisResult {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /** Estimated total weight in grams. 0 when the AI (or an older cached scan) didn't report one. */
+  portion_g: number;
+  /** Human-readable portion, e.g. "1 medium katori". Empty when unknown. */
+  portion_desc: string;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
 }

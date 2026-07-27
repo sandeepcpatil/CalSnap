@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { T } from '../theme';
 
 interface Props {
   isSubscribed: boolean;
@@ -42,11 +43,11 @@ export function ProGate({
         <View style={styles.overlay}>
           <View style={styles.lockCard}>
             <View style={styles.lockIconCircle}>
-              <Ionicons name="lock-closed" size={16} color="#00e3fd" />
+              <Ionicons name="lock-closed" size={16} color={T.primary} />
             </View>
             <Text style={styles.lockLabel}>{label}</Text>
             <View style={styles.upgradeBadge}>
-              <Ionicons name="star" size={10} color="#00363a" />
+              <Ionicons name="star" size={10} color={T.textOnPrimary} />
               <Text style={styles.upgradeText}>UPGRADE TO PRO</Text>
             </View>
           </View>
@@ -74,17 +75,17 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     paddingHorizontal: 24,
-    backgroundColor: 'rgba(15,23,42,0.95)',
+    backgroundColor: T.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,227,253,0.25)',
+    borderColor: T.border,
   },
 
   lockIconCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,227,253,0.12)',
+    backgroundColor: T.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   lockLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#e0e3e5',
+    color: T.textPrimary,
     letterSpacing: 0.3,
   },
 
@@ -102,15 +103,15 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: '#00e3fd',
+    backgroundColor: T.primary,
     borderRadius: 20,
     marginTop: 2,
   },
 
   upgradeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#00363a',
+    color: T.textOnPrimary,
     letterSpacing: 1,
   },
 });

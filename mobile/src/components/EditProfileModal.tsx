@@ -14,20 +14,23 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
+import { T } from '../theme';
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:           '#101415',
-  glass:        'rgba(15,23,42,0.80)',
-  glassBorder:  'rgba(255,255,255,0.08)',
-  primary:      '#85d3da',
-  secondary:    '#bdf4ff',
-  tertiary:     '#c0c1ff',
-  onSurface:    '#e0e3e5',
-  onSurfaceVar: '#bec8c9',
-  outline:      '#889393',
-  outlineVar:   '#3f4949',
-  error:        '#ffb4ab',
-  inputBg:      'rgba(255,255,255,0.05)',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  tertiary: T.protein,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  error: T.error,
+  inputBg: T.surface2,
 };
 
 interface Props {
@@ -287,7 +290,7 @@ const styles = StyleSheet.create({
   backBtn:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(133,211,218,0.10)' },
   headerTitle:{ fontSize: 17, fontWeight: '700', color: C.onSurface, letterSpacing: 0.3 },
   saveBtn:    { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: C.primary, borderRadius: 20 },
-  saveBtnText:{ fontSize: 14, fontWeight: '700', color: '#00363a' },
+  saveBtnText:{ fontSize: 14, fontWeight: '700', color: T.textOnPrimary },
 
   scroll:   { flex: 1 },
   content:  { paddingHorizontal: 20, paddingTop: 20, gap: 10 },
@@ -326,7 +329,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.glassBorder,
   },
-  chipActive: { backgroundColor: 'rgba(133,211,218,0.15)', borderColor: C.primary },
+  chipActive: { backgroundColor: T.border, borderColor: C.primary },
   chipText: { fontSize: 14, color: C.outline, fontWeight: '600' },
   chipTextActive: { color: C.primary },
 

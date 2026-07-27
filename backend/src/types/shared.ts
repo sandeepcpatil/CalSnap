@@ -14,6 +14,14 @@ export interface CalorieBreakdown {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /**
+   * Total estimated weight of the food in grams. Surfaced in the UI so the
+   * user can sanity-check the assumption behind the numbers — portion size is
+   * the single largest source of error in photo-based estimation.
+   */
+  portion_g: number;
+  /** Human-readable portion, e.g. "1 medium katori" or "2 rotis". */
+  portion_desc: string;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
 }

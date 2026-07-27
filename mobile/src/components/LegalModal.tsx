@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TERMS, PRIVACY, LEGAL_LAST_UPDATED, type LegalSection } from '../content/legal';
+import { T } from '../theme';
 
 export type LegalDoc = 'terms' | 'privacy';
 
@@ -13,14 +14,16 @@ interface LegalModalProps {
   onClose: () => void;
 }
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg: '#101415',
-  header: 'rgba(16,20,21,0.96)',
-  border: 'rgba(255,255,255,0.08)',
-  primary: '#85d3da',
-  title: '#e0e3e5',
-  body: '#bec8c9',
-  muted: '#889393',
+  bg: T.bg,
+  header: T.bg,
+  border: T.border,
+  primary: T.primary,
+  title: T.textPrimary,
+  body: T.textSecondary,
+  muted: T.textMuted,
 };
 
 export function LegalModal({ visible, doc, onClose }: LegalModalProps) {

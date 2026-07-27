@@ -49,4 +49,4 @@ We may update these Terms from time to time. Material changes will be notified i
 These Terms are governed by the laws of India, and any disputes are subject to the exclusive jurisdiction of the courts of [your city], India.
 
 ## 15. Contact
-Questions about these Terms? Contact us at [support@calsnap.app].
+Questions about these Terms? Contact us at [calsnap.support@gmail.com].

@@ -22,22 +22,25 @@ import { PaywallModal } from '../Paywall/PaywallModal';
 import { NotificationSettingsModal } from '../../components/NotificationSettingsModal';
 import { EditProfileModal } from '../../components/EditProfileModal';
 import { LegalModal, type LegalDoc } from '../../components/LegalModal';
+import { T } from '../../theme';
 
+// Screen palette — derived from the shared design tokens so colours stay in
+// sync app-wide (see theme/tokens.ts).
 const C = {
-  bg:              '#101415',
-  glass:           'rgba(15,23,42,0.80)',
-  glassBorder:     'rgba(255,255,255,0.08)',
-  primary:         '#85d3da',
-  secondary:       '#bdf4ff',
-  tertiary:        '#c0c1ff',
-  secondaryCont:   '#00e3fd',
-  onSurface:       '#e0e3e5',
-  onSurfaceVar:    '#bec8c9',
-  outline:         '#889393',
-  outlineVar:      '#3f4949',
-  primaryCont:     '#01696f',
-  error:           '#ffb4ab',
-  surfaceCont:     '#1d2022',
+  bg: T.bg,
+  glass: T.surface,
+  glassBorder: T.border,
+  primary: T.primary,
+  secondary: T.primary,
+  tertiary: T.protein,
+  secondaryCont: T.primary,
+  onSurface: T.textPrimary,
+  onSurfaceVar: T.textSecondary,
+  outline: T.textMuted,
+  outlineVar: T.border,
+  primaryCont: T.primaryDeep,
+  error: T.error,
+  surfaceCont: T.surface2,
 };
 
 export function ProfileScreen() {
@@ -290,7 +293,7 @@ export function ProfileScreen() {
             ] as const).map((item, i) => (
               <TouchableOpacity
                 key={item.label}
-                style={[styles.settingsRow, i > 0 && { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }]}
+                style={[styles.settingsRow, i > 0 && { borderTopWidth: 1, borderTopColor: T.divider }]}
                 onPress={item.onPress}
                 activeOpacity={0.7}
               >
@@ -302,7 +305,7 @@ export function ProfileScreen() {
               </TouchableOpacity>
             ))}
             <TouchableOpacity
-              style={[styles.settingsRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }]}
+              style={[styles.settingsRow, { borderTopWidth: 1, borderTopColor: T.divider }]}
               onPress={handleSignOut}
               activeOpacity={0.7}
             >
@@ -339,9 +342,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: 'rgba(16,20,21,0.85)',
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: T.border,
   },
   brand: { fontSize: 22, fontWeight: '800', letterSpacing: 0.5, color: C.primary },
   brandSnap: { color: C.secondary },
@@ -372,7 +375,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 12, paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: 'rgba(1,105,111,0.20)',
+    backgroundColor: T.primaryTint,
     borderWidth: 1, borderColor: C.primary + '50',
   },
   trialBadge: {
@@ -417,12 +420,12 @@ const styles = StyleSheet.create({
   goalUnit: { fontSize: 14, color: C.outline },
   progressTrack: {
     height: 6, borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: T.border,
     overflow: 'hidden',
     marginTop: 8,
   },
   progressFill: { height: '100%', borderRadius: 3 },
-  goalHint: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, textTransform: 'uppercase' },
+  goalHint: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, textTransform: 'uppercase' },
 
   /* CTA card */
   ctaCard: {
@@ -451,7 +454,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   ctaButtonText: {
-    color: '#00363d',
+    color: T.textOnPrimary,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1.5,
