@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
+import type { FoodItem } from '../../services/api';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
@@ -22,6 +23,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { ScanItemsEditor } from '../../components/ScanItemsEditor';
+import { sumItems } from '../../utils/foodItems';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -107,28 +110,57 @@ export function ScanResultScreen({ navigation, route }: Props) {
   const [selectedMeal, setSelectedMeal] = useState<typeof MEAL_TYPES[number]>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
-    if (!session?.user.id) return;
-    setIsSaving(true);
-
-    try {
-      const { data, error } = await supabase
-        .from('food_logs')
-        .insert({
-          user_id: session.user.id,
-          image_url: imageStorageUrl,
-          food_name: result.food_name,
+  // The AI proposes items; the user confirms them. Legacy cached scans have no
+  // items array, so fall back to a single row built from the top-level totals.
+  const [items, setItems] = useState<FoodItem[]>(() =>
+    result.items?.length
+      ? result.items
+      : [{
+          name: result.food_name,
+          quantity: 1,
+          unit: result.portion_g > 0 ? 'g' : 'plate',
+          grams: result.portion_g || 100,
           calories: result.calories,
           protein_g: result.protein_g,
           carbs_g: result.carbs_g,
           fat_g: result.fat_g,
           fiber_g: result.fiber_g,
-          meal_type: selectedMeal,
-          raw_ai_response: result,
-          logged_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+        }],
+  );
+
+  // Totals are always derived from the edited items — never the original scan.
+  const totals = sumItems(items);
+
+  const handleSave = async () => {
+    if (!session?.user.id) return;
+    if (items.length === 0) {
+      Alert.alert('Nothing to log', 'Add at least one item before logging this meal.');
+      return;
+    }
+    setIsSaving(true);
+
+    try {
+      // One row per item: History, the macro charts and the Excel export all
+      // gain per-food granularity for free, with no schema change.
+      const loggedAt = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('food_logs')
+        .insert(
+          items.map((it) => ({
+            user_id: session.user.id,
+            image_url: imageStorageUrl,
+            food_name: it.name,
+            calories: it.calories,
+            protein_g: it.protein_g,
+            carbs_g: it.carbs_g,
+            fat_g: it.fat_g,
+            fiber_g: it.fiber_g,
+            meal_type: selectedMeal,
+            raw_ai_response: { ...result, logged_item: it, edited: true },
+            logged_at: loggedAt,
+          })),
+        )
+        .select();
 
       if (error) throw error;
 
@@ -142,7 +174,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           .eq('id', session.user.id);
       }
 
-      addLog(data);
+      (data ?? []).forEach(addLog);
       await fetchProfile();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -175,7 +207,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           <View style={styles.nameRow}>
             <Text style={[styles.foodName, { color: theme.textPrimary }]}>{result.food_name}</Text>
             <View style={styles.calBlock}>
-              <Text style={[styles.calories, { color: theme.primary }]}>{result.calories}</Text>
+              <Text style={[styles.calories, { color: theme.primary }]}>{totals.calories}</Text>
               <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>KCAL</Text>
             </View>
           </View>
@@ -187,7 +219,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
               <Ionicons name="scale-outline" size={14} color={theme.textMuted} />
               <Text style={[styles.portionText, { color: theme.textSecondary }]}>
                 Based on {result.portion_desc || 'the visible portion'}
-                {result.portion_g > 0 ? ` · ~${Math.round(result.portion_g)}g` : ''}
+                {totals.grams > 0 ? ` · ~${totals.grams}g` : ''}
               </Text>
             </View>
           )}
@@ -195,6 +227,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
           {!!result.notes && (
             <Text style={[styles.notesText, { color: theme.textMuted }]}>{result.notes}</Text>
           )}
+
+          {/* Editable item list — AI proposes, user confirms */}
+          <ScanItemsEditor items={items} onChange={setItems} />
 
           {/* Meal type chips */}
           <View style={styles.mealChips}>
@@ -223,10 +258,10 @@ export function ScanResultScreen({ navigation, route }: Props) {
           {/* Macro rows — Pro Feature */}
           <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full Nutrition Analysis" borderRadius={12}>
             <View style={styles.macroList}>
-              <NutrientRow label="Protein" value={result.protein_g} color={theme.protein} />
-              <NutrientRow label="Carbs"   value={result.carbs_g}   color={theme.carbs} />
-              <NutrientRow label="Fat"     value={result.fat_g}     color={theme.fat} />
-              <NutrientRow label="Fiber"   value={result.fiber_g}   color={theme.fiber} />
+              <NutrientRow label="Protein" value={totals.protein_g} color={theme.protein} />
+              <NutrientRow label="Carbs"   value={totals.carbs_g}   color={theme.carbs} />
+              <NutrientRow label="Fat"     value={totals.fat_g}     color={theme.fat} />
+              <NutrientRow label="Fiber"   value={totals.fiber_g}   color={theme.fiber} />
             </View>
           </ProGate>
         </View>
@@ -254,7 +289,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           buttonColor={theme.primary}
           icon="check"
         >
-          Log This Meal
+          {items.length > 1 ? `Log ${items.length} items` : 'Log This Meal'}
         </Button>
       </View>
 

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai';
 import type {
   CalorieBreakdown,
+  FoodItem,
   FoodScanResult,
   ScanLimitError,
   DailyLimitError,
@@ -22,10 +23,27 @@ const genAIKey = process.env.GEMINI_API_KEY;
 if (!genAIKey) throw new Error('GEMINI_API_KEY must be set in environment');
 
 // ─── Response Schema (enforced by Gemini — removes schema tokens from prompt) ─
+const ITEM_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    name:      { type: SchemaType.STRING },
+    quantity:  { type: SchemaType.NUMBER },
+    unit:      { type: SchemaType.STRING, format: 'enum', enum: ['katori', 'roti', 'cup', 'piece', 'tbsp', 'tsp', 'glass', 'plate', 'slice', 'g'] },
+    grams:     { type: SchemaType.NUMBER },
+    calories:  { type: SchemaType.NUMBER },
+    protein_g: { type: SchemaType.NUMBER },
+    carbs_g:   { type: SchemaType.NUMBER },
+    fat_g:     { type: SchemaType.NUMBER },
+    fiber_g:   { type: SchemaType.NUMBER },
+  },
+  required: ['name', 'quantity', 'unit', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g'],
+};
+
 const RESPONSE_SCHEMA: Schema = {
   type: SchemaType.OBJECT,
   properties: {
     food_name:    { type: SchemaType.STRING },
+    items:        { type: SchemaType.ARRAY, items: ITEM_SCHEMA },
     portion_g:    { type: SchemaType.NUMBER },
     portion_desc: { type: SchemaType.STRING },
     calories:     { type: SchemaType.NUMBER },
@@ -36,7 +54,7 @@ const RESPONSE_SCHEMA: Schema = {
     confidence:   { type: SchemaType.STRING, format: 'enum', enum: ['high', 'medium', 'low'] },
     notes:        { type: SchemaType.STRING },
   },
-  required: ['food_name', 'portion_g', 'portion_desc', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'confidence', 'notes'],
+  required: ['food_name', 'items', 'portion_g', 'portion_desc', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'confidence', 'notes'],
 };
 
 const genai = new GoogleGenerativeAI(genAIKey);
@@ -115,19 +133,26 @@ const PRO_DAILY_SCAN_LIMIT = 20;
 const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
 
 TASK
-Estimate the nutrition of the food visible in the photo, for the WHOLE portion shown.
+Break the meal in the photo into its distinct food items (like a nutritionist
+itemising a thali), then estimate nutrition per item.
 
 METHOD — follow in order:
-1. Identify each distinct food item on the plate.
-2. Estimate the weight of each item in grams. Use these anchors for scale:
+1. List each DISTINCT food as its own entry in "items" — dal, rice, each bread
+   type, sabzi, curd, salad, sweets, drinks all separate. Never merge a plate
+   into one item unless it truly is a single dish.
+2. For each item pick the most natural household unit
+   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g)
+   and the quantity visible (use 0.5 steps: 0.5, 1, 1.5, 2 …).
+3. Estimate each item's weight in grams. Anchors:
    • 1 roti / chapati ≈ 40 g · 1 paratha ≈ 70 g · 1 slice bread ≈ 25 g
    • 1 katori / small bowl ≈ 180 g · 1 cup cooked rice ≈ 150 g
    • 1 idli ≈ 50 g · 1 plain dosa ≈ 100 g · 1 samosa ≈ 60 g
-   • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g
+   • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g · 1 glass ≈ 250 ml
    • A standard Indian dinner plate is 26–28 cm across — use it to judge scale.
-3. Apply per-100 g nutrition for each item, then sum across the plate.
-4. Report the total weight in portion_g and describe it in portion_desc
-   (e.g. "1 medium katori", "2 rotis + 1 katori dal").
+4. Compute nutrition PER ITEM (for its quantity), then:
+   • food_name = short meal summary, e.g. "Dal, rice & 2 rotis"
+   • portion_g = total grams · portion_desc = e.g. "1 katori dal + 1 cup rice + 2 rotis"
+   • top-level calories/macros = the SUM of all items.
 
 CALIBRATION — typical values for one standard serving:
 • Dal (1 katori, 180 g, medium thickness): 140 kcal · P 9 · C 20 · F 3 · Fib 5
@@ -268,6 +293,7 @@ export async function analyzeFoodPhoto(imageBase64: string, mimeType: string, de
 function fallbackBreakdown(reason: string): CalorieBreakdown {
   return {
     food_name: 'Unknown food',
+    items: [],
     calories: 0,
     protein_g: 0,
     carbs_g: 0,
@@ -280,16 +306,50 @@ function fallbackBreakdown(reason: string): CalorieBreakdown {
   };
 }
 
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.max(v, 0) : 0);
+
+function validateItems(raw: unknown): FoodItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((it): FoodItem | null => {
+      const r = it as Record<string, unknown>;
+      if (typeof r['name'] !== 'string' || !r['name']) return null;
+      return {
+        name: r['name'],
+        quantity: num(r['quantity']) || 1,
+        unit: typeof r['unit'] === 'string' && r['unit'] ? r['unit'] : 'piece',
+        grams: Math.round(num(r['grams'])),
+        calories: Math.round(num(r['calories'])),
+        protein_g: Math.round(num(r['protein_g']) * 10) / 10,
+        carbs_g: Math.round(num(r['carbs_g']) * 10) / 10,
+        fat_g: Math.round(num(r['fat_g']) * 10) / 10,
+        fiber_g: Math.round(num(r['fiber_g']) * 10) / 10,
+      };
+    })
+    .filter((it): it is FoodItem => it !== null && it.calories > 0);
+}
+
 function validateBreakdown(raw: unknown): CalorieBreakdown {
   const r = raw as Record<string, unknown>;
+  const items = validateItems(r['items']);
+
+  // With items present, totals are OUR arithmetic, not the model's — LLMs get
+  // sums wrong often enough that the header must be derived, never trusted.
+  const sum = (f: (i: FoodItem) => number): number =>
+    Math.round(items.reduce((s, i) => s + f(i), 0) * 10) / 10;
+
+  const hasItems = items.length > 0;
   return {
     food_name: typeof r['food_name'] === 'string' ? r['food_name'] : 'Unknown food',
-    calories: typeof r['calories'] === 'number' ? r['calories'] : 0,
-    protein_g: typeof r['protein_g'] === 'number' ? r['protein_g'] : 0,
-    carbs_g: typeof r['carbs_g'] === 'number' ? r['carbs_g'] : 0,
-    fat_g: typeof r['fat_g'] === 'number' ? r['fat_g'] : 0,
-    fiber_g: typeof r['fiber_g'] === 'number' ? r['fiber_g'] : 0,
-    portion_g: typeof r['portion_g'] === 'number' && r['portion_g'] > 0 ? Math.round(r['portion_g']) : 0,
+    items,
+    calories: hasItems ? Math.round(items.reduce((s, i) => s + i.calories, 0)) : num(r['calories']),
+    protein_g: hasItems ? sum((i) => i.protein_g) : num(r['protein_g']),
+    carbs_g: hasItems ? sum((i) => i.carbs_g) : num(r['carbs_g']),
+    fat_g: hasItems ? sum((i) => i.fat_g) : num(r['fat_g']),
+    fiber_g: hasItems ? sum((i) => i.fiber_g) : num(r['fiber_g']),
+    portion_g: hasItems
+      ? items.reduce((s, i) => s + i.grams, 0)
+      : Math.round(num(r['portion_g'])),
     portion_desc: typeof r['portion_desc'] === 'string' ? r['portion_desc'] : '',
     confidence:
       r['confidence'] === 'high' || r['confidence'] === 'medium' || r['confidence'] === 'low'

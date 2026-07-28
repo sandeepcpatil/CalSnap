@@ -7,8 +7,32 @@ export interface AuthenticatedUser {
 
 // ─── Food / Scan ──────────────────────────────────────────────────────────────
 
+/** One identified food on the plate — the unit of editing in the app. */
+export interface FoodItem {
+  /** Dish name, e.g. "Dal fry". */
+  name: string;
+  /** Count of `unit`, e.g. 1.5 (katori) or 2 (roti). */
+  quantity: number;
+  /** Household measure: katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g */
+  unit: string;
+  /** Estimated weight of THIS item in grams (for quantity × unit shown). */
+  grams: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
 export interface CalorieBreakdown {
   food_name: string;
+  /**
+   * Per-item breakdown (MyFitnessPal-style). Users edit quantities, remove
+   * wrong items, and add missed ones before logging. Top-level totals always
+   * equal the sum of items (recomputed server-side). Empty for legacy cached
+   * scans — the app falls back to single-dish display.
+   */
+  items: FoodItem[];
   calories: number;
   protein_g: number;
   carbs_g: number;

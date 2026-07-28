@@ -87,11 +87,38 @@ export function PaywallModal({ visible, onDismiss }: Props) {
   const selectedPkg =
     selectedPlan === "annual" ? (annualPkg ?? monthlyPkg) : (monthlyPkg ?? annualPkg);
 
-  // Savings %: (monthly × 12 − annual) / (monthly × 12)
+  // ── Annual vs monthly value ──────────────────────────────────────────────
+  // A percentage alone is abstract; people decide on the rupee amount. Show
+  // both, plus the effective per-month price so the two plans are comparable
+  // on the same unit.
+  const canCompare = !!monthlyPkg && !!annualPkg && monthlyPkg.product.price > 0;
+  const yearAtMonthlyRate = canCompare ? monthlyPkg!.product.price * 12 : 0;
+  const savingsAmount = canCompare ? yearAtMonthlyRate - annualPkg!.product.price : 0;
   const savingsPct =
-    monthlyPkg && annualPkg && monthlyPkg.product.price > 0
-      ? Math.round((1 - annualPkg.product.price / (monthlyPkg.product.price * 12)) * 100)
+    canCompare && savingsAmount > 0
+      ? Math.round((savingsAmount / yearAtMonthlyRate) * 100)
       : null;
+
+  /** Format a raw amount in the store's own currency (₹, $, …). */
+  const money = (amount: number, pkg: PurchasesPackage): string => {
+    const code = pkg.product.currencyCode;
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: code,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      // Older RN/Hermes builds ship without full ICU. Reuse the symbol the
+      // store already gave us (e.g. "₹1,299.00" → "₹") so the amount still
+      // reads as money.
+      const symbol = pkg.product.priceString.match(/^[^\d]*/)?.[0]?.trim() ?? '';
+      return `${symbol}${Math.round(amount).toLocaleString()}`;
+    }
+  };
+
+  const annualPerMonth =
+    annualPkg ? money(annualPkg.product.price / 12, annualPkg) : null;
 
   // Push the fresh entitlement to the backend so the server-side scan gate
   // unlocks immediately, then refresh the local profile.
@@ -228,7 +255,9 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             >
               {/* Best Value badge */}
               <View style={styles.bestValueBadge}>
-                <Text style={styles.bestValueText}>Best Value</Text>
+                <Text style={styles.bestValueText}>
+                  {savingsPct !== null ? `SAVE ${savingsPct}%` : 'BEST VALUE'}
+                </Text>
               </View>
               <View style={styles.planRow}>
                 <View>
@@ -237,8 +266,24 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                     <Text style={styles.planPrice}>{annualPkg?.product.priceString ?? "—"}</Text>
                     <Text style={styles.planPriceSub}> / yr</Text>
                   </View>
-                  {savingsPct !== null && savingsPct > 0 && (
-                    <Text style={styles.savingsLabel}>Save {savingsPct}% compared to monthly</Text>
+
+                  {/* Same unit as the monthly card, so the two are comparable at a glance */}
+                  {!!annualPerMonth && (
+                    <Text style={styles.perMonthLabel}>
+                      Just {annualPerMonth} / mo · billed yearly
+                    </Text>
+                  )}
+
+                  {/* The rupee amount is what people actually decide on */}
+                  {savingsPct !== null && annualPkg && (
+                    <Text style={styles.savingsLabel}>
+                      You save {money(savingsAmount, annualPkg)} a year
+                    </Text>
+                  )}
+                  {savingsPct !== null && monthlyPkg && (
+                    <Text style={styles.compareLabel}>
+                      vs {money(yearAtMonthlyRate, monthlyPkg)} paying monthly
+                    </Text>
                   )}
                 </View>
                 <View style={[styles.radioOuter, selectedPlan === "annual" && { borderColor: C.primary, backgroundColor: C.primary }]}>
@@ -284,7 +329,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
                 : isLoading
                 ? "Processing…"
                 : selectedPkg
-                ? `Subscribe · ${selectedPkg.product.priceString}`
+                ? `Subscribe · ${selectedPkg.product.priceString}${selectedPlan === "annual" ? "/yr" : "/mo"}`
                 : "Plans unavailable"}
             </Text>
           </TouchableOpacity>
@@ -387,7 +432,9 @@ const styles = StyleSheet.create({
   planPriceRow: { flexDirection: 'row', alignItems: 'baseline' },
   planPrice: { fontSize: 26, fontWeight: '800', color: C.onSurface },
   planPriceSub: { fontSize: 14, color: C.onSurfaceVar },
-  savingsLabel: { fontSize: 12, fontWeight: '600', color: C.primary, marginTop: 4 },
+  perMonthLabel: { fontSize: 13, fontWeight: '700', color: C.onSurface, marginTop: 4 },
+  savingsLabel:  { fontSize: 13, fontWeight: '800', color: C.primary, marginTop: 4 },
+  compareLabel:  { fontSize: 12, fontWeight: '500', color: C.outline, marginTop: 2, textDecorationLine: 'line-through' },
   radioOuter: {
     width: 24, height: 24, borderRadius: 12,
     borderWidth: 2, borderColor: C.outline,

@@ -32,8 +32,24 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
   return data as T;
 }
 
+/** One identified food on the plate — the unit the user edits before logging. */
+export interface FoodItem {
+  name: string;
+  quantity: number;
+  /** katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g */
+  unit: string;
+  grams: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
 export interface FoodAnalysisResult {
   food_name: string;
+  /** Per-item breakdown. Empty for legacy cached scans — UI falls back to a single row. */
+  items: FoodItem[];
   calories: number;
   protein_g: number;
   carbs_g: number;
