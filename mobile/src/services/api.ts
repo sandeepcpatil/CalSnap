@@ -44,6 +44,10 @@ export interface FoodItem {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /** 'database' when macros came from the foods table, 'ai' when estimated. */
+  source?: 'database' | 'ai';
+  /** Canonical food matched in the database, when source is 'database'. */
+  matched_name?: string;
 }
 
 export interface FoodAnalysisResult {

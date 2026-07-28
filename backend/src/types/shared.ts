@@ -22,6 +22,10 @@ export interface FoodItem {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /** Where the macros came from: the `foods` table or the model's estimate. */
+  source?: 'database' | 'ai';
+  /** Canonical name matched in the foods table, when source is 'database'. */
+  matched_name?: string;
 }
 
 export interface CalorieBreakdown {

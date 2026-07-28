@@ -53,7 +53,12 @@ export function ScanItemsEditor({ items, onChange }: Props) {
           activeOpacity={0.75}
         >
           <View style={styles.rowMain}>
-            <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+            <View style={styles.rowNameLine}>
+              <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+              {item.source === 'database' && (
+                <Ionicons name="checkmark-circle" size={13} color={T.success} />
+              )}
+            </View>
             <Text style={styles.rowMeta}>
               {formatQty(item.quantity)} {item.unit}{item.unit !== 'g' ? ` · ${item.grams}g` : ''}
               {'  ·  '}P {item.protein_g}g · C {item.carbs_g}g · F {item.fat_g}g
@@ -282,6 +287,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 14,
   },
   rowMain: { flex: 1, gap: 3 },
+  rowNameLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   rowName: { fontSize: 15, fontWeight: '700', color: T.textPrimary },
   rowMeta: { fontSize: 12, color: T.textSecondary },
   rowKcal: { fontSize: 16, fontWeight: '800', color: T.textPrimary, fontVariant: ['tabular-nums'] },

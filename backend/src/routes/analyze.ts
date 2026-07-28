@@ -14,6 +14,7 @@ import type {
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 import { computeHealthScore } from '../lib/healthScore';
+import { enrichItems, totalsOf } from '../lib/foodLookup';
 
 const router: ExpressRouter = Router();
 
@@ -518,9 +519,21 @@ router.post(
 
       // ── Gemini Vision call ────────────────────────────────────────────────
       const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
-      const result = await analyzeFoodPhoto(base64, mimeType, userDescription);
+      const aiResult = await analyzeFoodPhoto(base64, mimeType, userDescription);
 
-      console.log(`[Gemini] hash=${imageHash} user=${req.user!.id} food=${result.food_name}`);
+      // ── Tier 3: swap AI-recalled macros for database values where we can ──
+      // Gemini keeps the jobs it's good at (identify the dish, estimate grams);
+      // the numbers come from `foods` so they're reproducible and correctable.
+      const enriched = await enrichItems(aiResult.items);
+      const result: CalorieBreakdown = enriched.length
+        ? { ...aiResult, items: enriched, ...totalsOf(enriched) }
+        : aiResult;
+
+      const dbHits = enriched.filter((i) => i.source === 'database').length;
+      console.log(
+        `[Gemini] hash=${imageHash} user=${req.user!.id} food=${result.food_name} ` +
+        `items=${enriched.length} db_hits=${dbHits}/${enriched.length}`,
+      );
 
       if (result.confidence === 'low' && result.calories === 0) {
         // The AI couldn't identify the food — do not bill a scan
