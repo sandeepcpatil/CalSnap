@@ -108,6 +108,50 @@ function buildDays(count: number): DayData[] {
 
 const buildLast7 = (): DayData[] => buildDays(7);
 
+interface MealGroup {
+  key: string;
+  mealType: string;
+  time: string;         // "7:30 PM"
+  calories: number;
+  logs: FoodLog[];      // 1 item = simple row; 2+ = expandable meal
+}
+
+/**
+ * Collapse a day's rows into meals. Rows sharing a `meal_id` (a single scan of
+ * a multi-item plate) become one group; everything else is its own group. So a
+ * thali reads as "Dinner · 5 items" instead of five identical thumbnails.
+ */
+function groupLogsIntoMeals(logs: FoodLog[]): MealGroup[] {
+  const byMeal = new Map<string, FoodLog[]>();
+  logs.forEach((log) => {
+    // Ungrouped rows (no meal_id, or legacy) each get a unique key.
+    const key = log.meal_id ?? `single-${log.id}`;
+    const arr = byMeal.get(key);
+    if (arr) arr.push(log);
+    else byMeal.set(key, [log]);
+  });
+
+  return Array.from(byMeal.entries())
+    .map(([key, rows]) => {
+      const first = rows[0];
+      const time = new Date(first.logged_at).toLocaleTimeString('en-IN', {
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      });
+      return {
+        key,
+        mealType: first.meal_type ?? 'snack',
+        time,
+        calories: Math.round(rows.reduce((s, l) => s + (l.calories || 0), 0)),
+        logs: rows,
+      };
+    })
+    .sort((a, b) => a.logs[0].logged_at.localeCompare(b.logs[0].logged_at));
+}
+
+const MEAL_TYPE_LABEL: Record<string, string> = {
+  breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack',
+};
+
 /** Fill a range of empty DayData with logs grouped by day. Immutable. */
 function fillDays(days: DayData[], byDay: Record<string, { logs: FoodLog[] }>): DayData[] {
   return days.map((d) => {
@@ -126,6 +170,7 @@ export function HistoryScreen() {
   const [listDays, setListDays] = useState<DayData[]>(buildLast7());
   const [historyRange, setHistoryRange] = useState<RangeDays>(7);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [exportBusyKey, setExportBusyKey] = useState<ExportRangeKey | null>(null);
   const [avgCalories, setAvgCalories] = useState(0);
@@ -159,7 +204,7 @@ export function HistoryScreen() {
 
     const { data } = await supabase
       .from('food_logs')
-      .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id')
+      .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id, meal_id')
       .eq('user_id', session.user.id)
       .gte('logged_at', startISO)
       .order('logged_at', { ascending: true });
@@ -205,6 +250,15 @@ export function HistoryScreen() {
     setExpandedDate((prev) => (prev === date ? null : date));
   };
 
+  const toggleMeal = (key: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedMeals((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
   // Export queries Supabase directly for the chosen window, independent of what's
   // currently loaded on screen — so "Last month" works even in the 7-day view.
   const runExport = async (key: ExportRangeKey) => {
@@ -214,7 +268,7 @@ export function HistoryScreen() {
       const range = resolveExportRange(key);
       const { data, error } = await supabase
         .from('food_logs')
-        .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id')
+        .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id, meal_id')
         .eq('user_id', session.user.id)
         .gte('logged_at', `${range.startDate}T00:00:00.000Z`)
         .lte('logged_at', `${range.endDate}T23:59:59.999Z`)
@@ -411,15 +465,52 @@ export function HistoryScreen() {
                     <View style={styles.expandDivider} />
                     {day.logs.length > 0 ? (
                       <>
-                        {day.logs.map((log, li) => {
-                          const mealInfo = MEAL_ICONS[log.meal_type ?? 'snack'] ?? MEAL_ICONS.snack;
+                        {groupLogsIntoMeals(day.logs).map((meal) => {
+                          const mealInfo = MEAL_ICONS[meal.mealType] ?? MEAL_ICONS.snack;
+                          const isMulti = meal.logs.length > 1;
+                          const mealOpen = expandedMeals.has(meal.key);
                           return (
-                            <View key={log.id ?? li} style={styles.logItem}>
-                              <View style={styles.logLeft}>
-                                <Ionicons name={mealInfo.icon} size={18} color={mealInfo.color} />
-                                <Text style={styles.logName} numberOfLines={1}>{log.food_name}</Text>
-                              </View>
-                              <Text style={styles.logCal}>{Math.round(log.calories)} kcal</Text>
+                            <View key={meal.key} style={styles.mealBlock}>
+                              {/* Meal header — a single food shows its own name;
+                                  a multi-item scan shows "Dinner · 5 items". */}
+                              <TouchableOpacity
+                                style={styles.logItem}
+                                onPress={isMulti ? () => toggleMeal(meal.key) : undefined}
+                                activeOpacity={isMulti ? 0.7 : 1}
+                                disabled={!isMulti}
+                              >
+                                <View style={styles.logLeft}>
+                                  <Ionicons name={mealInfo.icon} size={18} color={mealInfo.color} />
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.logName} numberOfLines={1}>
+                                      {isMulti
+                                        ? `${MEAL_TYPE_LABEL[meal.mealType] ?? 'Meal'} · ${meal.logs.length} items`
+                                        : meal.logs[0].food_name}
+                                    </Text>
+                                    <Text style={styles.mealTime}>{meal.time}</Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.logCal}>{meal.calories.toLocaleString()} kcal</Text>
+                                {isMulti && (
+                                  <Ionicons
+                                    name={mealOpen ? 'chevron-up' : 'chevron-down'}
+                                    size={15}
+                                    color={C.outline}
+                                  />
+                                )}
+                              </TouchableOpacity>
+
+                              {/* Item breakdown — only for multi-item meals when opened */}
+                              {isMulti && mealOpen && (
+                                <View style={styles.mealItems}>
+                                  {meal.logs.map((log, li) => (
+                                    <View key={log.id ?? li} style={styles.subItem}>
+                                      <Text style={styles.subItemName} numberOfLines={1}>{log.food_name}</Text>
+                                      <Text style={styles.subItemCal}>{Math.round(log.calories)} kcal</Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              )}
                             </View>
                           );
                         })}
@@ -596,7 +687,17 @@ const styles = StyleSheet.create({
   expandedBody:  { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
   expandDivider: { height: 1, backgroundColor: T.divider, marginBottom: 4 },
 
-  logItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  mealBlock: { gap: 6 },
+  mealTime:  { fontSize: 11, color: C.outline, fontWeight: '600', marginTop: 1 },
+  mealItems: {
+    marginLeft: 28, marginBottom: 4, gap: 6,
+    paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: C.glassBorder,
+  },
+  subItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  subItemName: { flex: 1, fontSize: 13, color: C.onSurfaceVar },
+  subItemCal:  { fontSize: 12, fontWeight: '600', color: C.outline, letterSpacing: 0.3 },
+
+  logItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   logLeft:  { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   logName:  { fontSize: 14, color: C.onSurface, flex: 1 },
   logCal:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.outline },

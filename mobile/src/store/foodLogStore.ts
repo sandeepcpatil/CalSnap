@@ -13,6 +13,7 @@ export interface FoodLog {
   fat_g: number;
   fiber_g: number;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null;
+  meal_id?: string | null;
   logged_at: string;
 }
 

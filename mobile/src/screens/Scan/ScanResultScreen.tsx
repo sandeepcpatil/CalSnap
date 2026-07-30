@@ -140,15 +140,19 @@ export function ScanResultScreen({ navigation, route }: Props) {
     setIsSaving(true);
 
     try {
-      // One row per item: History, the macro charts and the Excel export all
-      // gain per-food granularity for free, with no schema change.
+      // One row per item — History, macro charts and export gain per-food
+      // granularity. A shared meal_id lets History regroup them into one card
+      // ("Dinner · 5 items") so the day view stays clean. Only meals with 2+
+      // items are grouped; a single item logs ungrouped like a manual entry.
       const loggedAt = new Date().toISOString();
+      const mealId = items.length > 1 ? (globalThis.crypto?.randomUUID?.() ?? `${session.user.id}-${Date.now()}`) : null;
       const { data, error } = await supabase
         .from('food_logs')
         .insert(
           items.map((it) => ({
             user_id: session.user.id,
             image_url: imageStorageUrl,
+            meal_id: mealId,
             food_name: it.name,
             calories: it.calories,
             protein_g: it.protein_g,
