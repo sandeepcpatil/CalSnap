@@ -43,21 +43,45 @@ export function VoiceModePanel({ onSubmit, analyzing, onListeningChange }: Props
   const [partial, setPartial] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Android's SpeechRecognizer is built for short commands: it ends the session
+   * after ~2s of silence, which cut people off mid-sentence while they thought
+   * about the next item. Extending the silence extras is unreliable across
+   * devices, so instead we treat "speech ended" as a segment boundary and
+   * immediately restart, accumulating text until the user actually taps stop.
+   */
+  const keepListening = useRef(false);
+  /** Text from completed segments; the live partial is appended for display. */
+  const finalized = useRef('');
+
   // One Animated.Value per bar — driven by real mic amplitude, not a canned loop.
   const bars = useRef(Array.from({ length: BARS }, () => new Animated.Value(0.15))).current;
   const barCursor = useRef(0);
+  const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => { onListeningChange?.(listening); }, [listening, onListeningChange]);
 
   useEffect(() => {
     Voice.onSpeechStart = () => { setListening(true); setError(null); };
-    Voice.onSpeechEnd = () => setListening(false);
+
+    // A segment ended — restart unless the user asked to stop.
+    Voice.onSpeechEnd = () => {
+      if (keepListening.current) restart();
+      else setListening(false);
+    };
 
     Voice.onSpeechPartialResults = (e: SpeechResultsEvent) => {
       if (e.value?.length) setPartial(e.value[0] ?? '');
     };
+
+    // Append, never replace: each restart returns only that segment's words.
     Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      if (e.value?.length) { setTranscript(e.value[0] ?? ''); setPartial(''); }
+      const text = e.value?.[0]?.trim();
+      if (text) {
+        finalized.current = finalized.current ? `${finalized.current} ${text}` : text;
+        setTranscript(finalized.current);
+      }
+      setPartial('');
     };
 
     // Amplitude → the next bar in a rolling window, so the waveform scrolls
@@ -78,35 +102,74 @@ export function VoiceModePanel({ onSubmit, analyzing, onListeningChange }: Props
     };
 
     Voice.onSpeechError = (e: SpeechErrorEvent) => {
-      setListening(false);
       setPartial('');
       const code = e.error?.code ?? '';
-      // 6 = speech timeout, 7 = no match. Both are ordinary silence.
-      if (code === '7' || code === '6') setError(null);
-      else setError('Could not hear that clearly. Try again.');
+      // 6 = speech timeout, 7 = no match. Both just mean "a quiet moment" —
+      // keep the session alive so a pause mid-sentence isn't the end of it.
+      if (code === '7' || code === '6') {
+        if (keepListening.current) { restart(); return; }
+        setListening(false);
+        return;
+      }
+      keepListening.current = false;
+      setListening(false);
+      setError('Could not hear that clearly. Tap the mic to try again.');
     };
 
-    return () => { Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {}); };
+    return () => {
+      keepListening.current = false;
+      Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {});
+    };
   }, [bars]);
+
+  /** Begin a new recognition segment without clearing what's already captured. */
+  const restart = () => {
+    // Small gap so the recognizer fully releases before re-acquiring the mic.
+    setTimeout(() => {
+      if (!keepListening.current) return;
+      Voice.start('en-IN').catch(() => {
+        keepListening.current = false;
+        setListening(false);
+      });
+    }, 150);
+  };
 
   const start = async () => {
     try {
-      setError(null); setPartial('');
+      setError(null);
+      setPartial('');
+      finalized.current = '';
+      setTranscript('');
+      keepListening.current = true;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await Voice.start('en-IN'); // better on Indian dish names than en-US
+      setListening(true);
     } catch {
+      keepListening.current = false;
       setError('Microphone unavailable. Check permissions in Settings.');
       setListening(false);
     }
   };
 
   const stop = async () => {
+    // Set first: onSpeechEnd fires during stop() and must not restart.
+    keepListening.current = false;
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); await Voice.stop(); } catch { /* already stopped */ }
     setListening(false);
-    setPartial((p) => { if (p) setTranscript((t) => (t ? `${t} ${p}` : p)); return ''; });
+    // Keep any unresolved words rather than discarding them.
+    setPartial((p) => {
+      if (p) {
+        finalized.current = finalized.current ? `${finalized.current} ${p}` : p;
+        setTranscript(finalized.current);
+      }
+      return '';
+    });
   };
 
-  const reset = () => { setTranscript(''); setPartial(''); setError(null); };
+  const reset = () => {
+    finalized.current = '';
+    setTranscript(''); setPartial(''); setError(null);
+  };
 
   const shown = [transcript, partial].filter(Boolean).join(' ').trim();
   const hasText = shown.length >= 3;
@@ -132,18 +195,29 @@ export function VoiceModePanel({ onSubmit, analyzing, onListeningChange }: Props
           ))}
         </View>
 
-        <ScrollView style={styles.liveBox} contentContainerStyle={styles.liveInner}>
-          <Text style={styles.liveText}>
-            {transcript}
-            {!!partial && <Text style={styles.livePartial}>{transcript ? ' ' : ''}{partial}…</Text>}
-            {!shown && <Text style={styles.livePartial}>Listening…</Text>}
-          </Text>
+        {/* Open text, not a boxed field — the words are the hero here, and a
+            bordered container made long dictation feel cramped. */}
+        <ScrollView
+          style={styles.liveScroll}
+          contentContainerStyle={styles.liveInner}
+          ref={(r) => { scrollRef.current = r; }}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          showsVerticalScrollIndicator={false}
+        >
+          {shown ? (
+            <Text style={styles.liveText}>
+              {transcript}
+              {!!partial && <Text style={styles.livePartial}>{transcript ? ' ' : ''}{partial}</Text>}
+            </Text>
+          ) : (
+            <Text style={styles.liveWaiting}>Go ahead, I'm listening…</Text>
+          )}
         </ScrollView>
 
         <TouchableOpacity style={styles.stopBtn} onPress={stop} activeOpacity={0.85}>
           <Ionicons name="stop" size={26} color={T.textOnPrimary} />
         </TouchableOpacity>
-        <Text style={styles.helper}>Tap to stop</Text>
+        <Text style={styles.helper}>Tap when you're done · pauses are fine</Text>
       </View>
     );
   }
@@ -154,7 +228,7 @@ export function VoiceModePanel({ onSubmit, analyzing, onListeningChange }: Props
       {hasText ? (
         <>
           <Text style={styles.stateLabel}>WE HEARD</Text>
-          <ScrollView style={styles.liveBox} contentContainerStyle={styles.liveInner}>
+          <ScrollView style={styles.liveScroll} contentContainerStyle={styles.liveInner} showsVerticalScrollIndicator={false}>
             <Text style={styles.liveText}>“{shown}”</Text>
           </ScrollView>
           {!!error && <Text style={styles.error}>{error}</Text>}
@@ -232,15 +306,15 @@ const styles = StyleSheet.create({
   },
   bar: { width: 4, borderRadius: 2, backgroundColor: T.primary },
 
-  liveBox: {
-    alignSelf: 'stretch', maxHeight: 150,
-    backgroundColor: T.glass, borderRadius: 14,
-    borderWidth: 1, borderColor: T.border,
+  liveScroll: { alignSelf: 'stretch', maxHeight: 190 },
+  liveInner: { paddingVertical: 8, justifyContent: 'center', flexGrow: 1 },
+  liveText: {
+    fontSize: 21, lineHeight: 30, color: T.textPrimary,
+    fontWeight: '600', textAlign: 'center', letterSpacing: -0.2,
   },
-  liveInner: { padding: 16 },
-  liveText: { fontSize: 17, lineHeight: 25, color: T.textPrimary, fontWeight: '500' },
   /** Unresolved words are dimmed so mishearings are visible before submitting. */
-  livePartial: { color: T.textMuted },
+  livePartial: { color: T.textMuted, fontWeight: '500' },
+  liveWaiting: { fontSize: 16, color: T.textMuted, textAlign: 'center', fontStyle: 'italic' },
 
   error: { fontSize: 13, color: T.error, fontWeight: '600', textAlign: 'center' },
 
