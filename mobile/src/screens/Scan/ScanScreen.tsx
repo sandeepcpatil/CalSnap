@@ -21,10 +21,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
 import { supabase } from '../../services/supabase';
-import { analyzeFood, analyzeLabel } from '../../services/api';
+import { analyzeFood, analyzeLabel, analyzeText } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { VoiceModePanel } from '../../components/VoiceModePanel';
 import { T } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
@@ -203,7 +204,7 @@ const analyzeStyles = StyleSheet.create({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ScanMode = 'meal' | 'label';
+type ScanMode = 'meal' | 'label' | 'voice';
 
 export function ScanScreen({ navigation }: Props) {
   const { session } = useAuthStore();
@@ -213,6 +214,8 @@ export function ScanScreen({ navigation }: Props) {
   const [scanMode, setScanMode] = useState<ScanMode>('meal');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [voiceAnalyzing, setVoiceAnalyzing] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const handleCapture = async () => {
@@ -314,6 +317,25 @@ export function ScanScreen({ navigation }: Props) {
     }
   };
 
+  /** Log by description — no image, so no upload; straight to the text endpoint. */
+  const processVoiceText = async (text: string) => {
+    setVoiceAnalyzing(true);
+    try {
+      const { result } = await analyzeText(text, session!.access_token);
+      consumeScan();
+      navigation.navigate('ScanResult', {
+        // No photo for a spoken log — the result screen handles a missing image.
+        imageUri: '',
+        imageStorageUrl: '',
+        result,
+      });
+    } catch (err: any) {
+      handleScanError(err);
+    } finally {
+      setVoiceAnalyzing(false);
+    }
+  };
+
   const processLabelPhoto = async (rawUri: string) => {
     setIsAnalyzing(true);
     try {
@@ -373,7 +395,12 @@ export function ScanScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraType} />
+      {/* Camera is unmounted in VOICE mode — no torch, no battery drain. */}
+      {scanMode === 'voice' ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
+      ) : (
+        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraType} />
+      )}
 
       {/* Full-screen analyzing overlay — scans over the photo just taken */}
       {isAnalyzing && <AnalyzingOverlay imageUri={pendingUri} />}
@@ -412,7 +439,16 @@ export function ScanScreen({ navigation }: Props) {
             </TouchableOpacity>
           )}
 
-          {/* Viewfinder frame */}
+          {/* Viewfinder (camera modes) or the voice panel */}
+        {scanMode === 'voice' ? (
+          <View style={styles.viewfinderWrap}>
+            <VoiceModePanel
+              onSubmit={processVoiceText}
+              analyzing={voiceAnalyzing}
+              onListeningChange={setVoiceListening}
+            />
+          </View>
+        ) : (
         <View style={styles.viewfinderWrap}>
           <View style={styles.viewfinder}>
             <View style={[styles.corner, styles.cornerTL]} />
@@ -426,9 +462,15 @@ export function ScanScreen({ navigation }: Props) {
             </Text>
           </View>
 
-          {/* Mode toggle: Meal | Label */}
+        </View>
+        )}
+
+        {/* Mode toggle — outside the viewfinder branch so VOICE can be exited.
+            Hidden while listening to keep focus on the transcript. */}
+        {!voiceListening && (
+          <View style={styles.modeToggleWrap}>
           <View style={styles.modeToggle}>
-            {(['meal', 'label'] as const).map((mode) => {
+            {(['meal', 'label', 'voice'] as const).map((mode) => {
               const active = scanMode === mode;
               return (
                 <TouchableOpacity
@@ -442,20 +484,22 @@ export function ScanScreen({ navigation }: Props) {
                   activeOpacity={0.8}
                 >
                   <Ionicons
-                    name={mode === 'meal' ? 'restaurant-outline' : 'barcode-outline'}
+                    name={mode === 'meal' ? 'restaurant-outline' : mode === 'label' ? 'barcode-outline' : 'mic-outline'}
                     size={14}
                     color={active ? T.textOnPrimary : T.textSecondary}
                   />
                   <Text style={[styles.modePillText, active && styles.modePillTextActive]}>
-                    {mode === 'meal' ? 'MEAL' : 'LABEL'}
+                    {mode === 'meal' ? 'MEAL' : mode === 'label' ? 'LABEL' : 'VOICE'}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-        </View>
+          </View>
+        )}
 
-        {/* Bottom controls */}
+        {/* Bottom controls — camera modes only */}
+        {scanMode !== 'voice' && (
         <View style={styles.bottomBar}>
           <TouchableOpacity onPress={handlePickFromLibrary} style={styles.sideButton} disabled={isAnalyzing}>
             <View style={styles.glassBtn}>
@@ -463,6 +507,7 @@ export function ScanScreen({ navigation }: Props) {
             </View>
             <Text style={styles.sideLabel}>Gallery</Text>
           </TouchableOpacity>
+
 
           <TouchableOpacity onPress={handleCapture} style={styles.captureButton} disabled={isAnalyzing}>
             <View style={[styles.captureInner, isAnalyzing && { opacity: 0.4 }]} />
@@ -479,7 +524,9 @@ export function ScanScreen({ navigation }: Props) {
             <Text style={styles.sideLabel}>Flip</Text>
           </TouchableOpacity>
         </View>
+        )}
       </SafeAreaView>
+
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
 
@@ -582,6 +629,7 @@ const styles = StyleSheet.create({
   },
   hint: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
+  modeToggleWrap: { alignItems: 'center', paddingBottom: 12 },
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -611,6 +659,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   sideButton: { alignItems: 'center', gap: 6 },
+  proDot: {
+    position: 'absolute', top: -2, right: -2,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: T.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
   sideLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' },
   captureButton: {
     width: 84,

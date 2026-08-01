@@ -155,7 +155,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
         .insert(
           items.map((it) => ({
             user_id: session.user.id,
-            image_url: imageStorageUrl,
+            image_url: imageStorageUrl || null,
             meal_id: mealId,
             // food_name is NOT NULL and the name field is user-editable, so a
             // cleared field must not write an empty row.
@@ -203,9 +203,19 @@ export function ScanResultScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero image with AI badge */}
+        {/* Hero — a spoken log has no photo, so show a compact banner instead
+            of a blank 1:1 image block. */}
         <View style={styles.heroWrap}>
-          <Image source={{ uri: imageUri }} style={styles.foodImage} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.foodImage} />
+          ) : (
+            <View style={[styles.voiceHero, { backgroundColor: theme.surface, borderColor: theme.borderColor }]}>
+              <Ionicons name="mic" size={26} color={theme.primary} />
+              <Text style={[styles.voiceHeroText, { color: theme.textSecondary }]}>
+                Logged by voice
+              </Text>
+            </View>
+          )}
           <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'EE' }]}>
             <Ionicons name="checkmark-circle" size={14} color="#fff" />
             <Text style={styles.aiBadgeText}>
@@ -317,6 +327,12 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 120 },
   heroWrap: { position: 'relative' },
   foodImage: { width: '100%', aspectRatio: 1, resizeMode: 'cover' },
+  voiceHero: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    marginHorizontal: 16, marginTop: 12,
+    paddingVertical: 22, borderRadius: 20, borderWidth: 1,
+  },
+  voiceHeroText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
   aiBadge: {
     position: 'absolute',
     top: 14,

@@ -74,6 +74,18 @@ export async function analyzeFood(imageUrl: string, token: string, description?:
   }, token);
 }
 
+/**
+ * Log a meal from a spoken or typed description.
+ * Returns the same shape as `analyzeFood`, so the result renders on the normal
+ * editable-items screen with no special casing.
+ */
+export async function analyzeText(description: string, token: string): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
+  return apiFetch('/api/analyze-text', {
+    method: 'POST',
+    body: JSON.stringify({ description }),
+  }, token);
+}
+
 // ─── Label scan (packaged food) ──────────────────────────────────────────────
 
 /** Nutrition values normalised to per 100 g (or 100 ml for drinks). */

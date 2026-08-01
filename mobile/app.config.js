@@ -74,6 +74,13 @@ module.exports = {
       },
     ],
     [
+      '@react-native-voice/voice',
+      {
+        microphonePermission: 'CalSnap uses the microphone so you can log a meal by speaking.',
+        speechRecognitionPermission: 'CalSnap converts your speech to text so you can log a meal without typing.',
+      },
+    ],
+    [
       '@react-native-google-signin/google-signin',
       {
         // iOS reversed client ID (com.googleusercontent.apps.XXXX). Required for

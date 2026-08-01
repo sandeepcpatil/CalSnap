@@ -131,6 +131,31 @@ const PRO_DAILY_SCAN_LIMIT = 20;
 // a realistic range; removing them to save tokens is what caused portion drift.
 // They cost ~350 input tokens and are the cheapest accuracy we can buy.
 
+// Shared prompt blocks — photo and text analysis MUST use the same anchors.
+// Keeping two copies is how they drift apart, which is exactly the failure that
+// produced unrealistic portions before.
+
+const WEIGHT_ANCHORS = `Anchors:
+   • 1 roti / chapati ≈ 40 g · 1 paratha ≈ 70 g · 1 slice bread ≈ 25 g
+   • 1 katori / small bowl ≈ 180 g · 1 cup cooked rice ≈ 150 g
+   • 1 idli ≈ 50 g · 1 plain dosa ≈ 100 g · 1 samosa ≈ 60 g
+   • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g · 1 glass ≈ 250 ml
+   • A standard Indian dinner plate is 26–28 cm across — use it to judge scale.`;
+
+const CALIBRATION = `CALIBRATION — typical values for one standard serving:
+• Dal (1 katori, 180 g, medium thickness): 140 kcal · P 9 · C 20 · F 3 · Fib 5
+  (thin/watery dal ≈ 90 kcal, P 6 · thick dal fry with ghee ≈ 200 kcal, P 11)
+• Plain cooked rice (1 cup, 150 g): 200 kcal · P 4 · C 45 · F 0.5 · Fib 1
+• Roti (1, 40 g): 120 kcal · P 3 · C 25 · F 0.5 · Fib 3
+• Mixed veg sabzi (1 katori, 150 g): 130 kcal · P 3 · C 12 · F 8 · Fib 4
+• Paneer butter masala (1 katori, 180 g): 350 kcal · P 12 · C 12 · F 28 · Fib 2
+• Chicken curry (1 katori, 180 g): 280 kcal · P 22 · C 8 · F 18 · Fib 1
+• Curd / dahi (1 katori, 150 g): 90 kcal · P 5 · C 7 · F 5 · Fib 0
+• Idli (2 pieces): 130 kcal · P 4 · C 27 · F 0.5 · Fib 1
+• Plain dosa (1): 170 kcal · P 4 · C 30 · F 4 · Fib 1.5
+• Poha (1 plate, 180 g): 250 kcal · P 5 · C 45 · F 6 · Fib 3
+• Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2`;
+
 const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
 
 TASK
@@ -144,30 +169,13 @@ METHOD — follow in order:
 2. For each item pick the most natural household unit
    (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g)
    and the quantity visible (use 0.5 steps: 0.5, 1, 1.5, 2 …).
-3. Estimate each item's weight in grams. Anchors:
-   • 1 roti / chapati ≈ 40 g · 1 paratha ≈ 70 g · 1 slice bread ≈ 25 g
-   • 1 katori / small bowl ≈ 180 g · 1 cup cooked rice ≈ 150 g
-   • 1 idli ≈ 50 g · 1 plain dosa ≈ 100 g · 1 samosa ≈ 60 g
-   • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g · 1 glass ≈ 250 ml
-   • A standard Indian dinner plate is 26–28 cm across — use it to judge scale.
+3. Estimate each item's weight in grams. ${WEIGHT_ANCHORS}
 4. Compute nutrition PER ITEM (for its quantity), then:
    • food_name = short meal summary, e.g. "Dal, rice & 2 rotis"
    • portion_g = total grams · portion_desc = e.g. "1 katori dal + 1 cup rice + 2 rotis"
    • top-level calories/macros = the SUM of all items.
 
-CALIBRATION — typical values for one standard serving:
-• Dal (1 katori, 180 g, medium thickness): 140 kcal · P 9 · C 20 · F 3 · Fib 5
-  (thin/watery dal ≈ 90 kcal, P 6 · thick dal fry with ghee ≈ 200 kcal, P 11)
-• Plain cooked rice (1 cup, 150 g): 200 kcal · P 4 · C 45 · F 0.5 · Fib 1
-• Roti (1, 40 g): 120 kcal · P 3 · C 25 · F 0.5 · Fib 3
-• Mixed veg sabzi (1 katori, 150 g): 130 kcal · P 3 · C 12 · F 8 · Fib 4
-• Paneer butter masala (1 katori, 180 g): 350 kcal · P 12 · C 12 · F 28 · Fib 2
-• Chicken curry (1 katori, 180 g): 280 kcal · P 22 · C 8 · F 18 · Fib 1
-• Curd / dahi (1 katori, 150 g): 90 kcal · P 5 · C 7 · F 5 · Fib 0
-• Idli (2 pieces): 130 kcal · P 4 · C 27 · F 0.5 · Fib 1
-• Plain dosa (1): 170 kcal · P 4 · C 30 · F 4 · Fib 1.5
-• Poha (1 plate, 180 g): 250 kcal · P 5 · C 45 · F 6 · Fib 3
-• Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2
+${CALIBRATION}
 
 RULES
 - Indian gravies usually carry more oil than they look — do not under-estimate fat.
@@ -178,6 +186,62 @@ RULES
 - If no food is identifiable, set calories to 0, confidence "low", and say why in notes.
 - Keep notes to one short sentence naming the main assumption you made
   (e.g. "Assumed a medium katori of moderately thick dal").`;
+
+// ─── Text (spoken / typed) description prompt ────────────────────────────────
+// Reuses the same anchors and calibration as the photo path — only the input
+// differs. The user's own words are ground truth for quantities, which makes
+// this MORE reliable than a photo for portions: nobody has to guess bowl depth.
+
+const TEXT_SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
+
+TASK
+The user described a meal in their own words (often dictated by voice, so expect
+casual phrasing and speech-to-text quirks). Break it into distinct food items
+and estimate nutrition per item.
+
+METHOD — follow in order:
+1. List each DISTINCT food mentioned as its own entry in "items".
+2. Use the quantities the USER STATED as ground truth — "2 rotis" means exactly
+   2 rotis. Only estimate when they were vague.
+3. For vague amounts ("some dal", "a bowl of rice", "dal chawal") assume ONE
+   standard serving — never a large one.
+4. Pick the natural household unit
+   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g).
+   If they gave grams ("200g curd"), use unit "g" with quantity = the grams.
+5. Estimate each item's weight in grams. ${WEIGHT_ANCHORS}
+6. Compute nutrition PER ITEM, then:
+   • food_name = short meal summary, e.g. "Dal, rice & 2 rotis"
+   • portion_g = total grams · portion_desc = what you assumed
+   • top-level calories/macros = the SUM of all items.
+
+${CALIBRATION}
+
+RULES
+- Indian gravies usually carry more oil than they sound — do not under-estimate fat.
+- Ignore filler words and any text unrelated to food.
+- confidence: "high" when foods AND quantities were stated clearly;
+  "medium" when foods are clear but amounts were vague;
+  "low" when the description is too unclear to interpret.
+- If the text describes no food at all, return an empty items array, calories 0,
+  confidence "low", and say so in notes.
+- notes: one short sentence naming the main assumption you made.`;
+
+/** Analyse a free-text meal description. Cheaper than the photo path — no image tokens. */
+export async function analyzeFoodText(description: string): Promise<CalorieBreakdown> {
+  const geminiResult = await model.generateContent([
+    TEXT_SYSTEM_PROMPT,
+    `The user said: "${description}"`,
+  ]);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(geminiResult.response.text());
+  } catch {
+    console.warn('[analyzeFoodText] Non-JSON response, returning fallback.');
+    return fallbackBreakdown('Could not understand that description');
+  }
+  return validateBreakdown(parsed);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -558,6 +622,65 @@ router.post(
 
       // ── Increment scan count ──────────────────────────────────────────────
       await supabase.rpc('increment_scan_count', { user_id: req.user!.id });
+
+      const responseBody: FoodScanResult = { result, cached: false };
+      res.json(responseBody);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/analyze-text
+ * Body: { description: string }
+ *
+ * Log a meal by describing it — typed, or dictated with the device keyboard's
+ * own microphone (no speech dependency needed on our side).
+ *
+ * Shares everything with the photo path: the same scan gate, the same items
+ * schema, and the same `foods` table enrichment, so the client can render the
+ * result on the existing editable-items screen with no special casing.
+ */
+router.post(
+  '/analyze-text',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { description } = req.body as { description?: unknown };
+
+      if (typeof description !== 'string' || description.trim().length < 3) {
+        res.status(400).json({ error: 'Please describe what you ate.' });
+        return;
+      }
+      // Cap the input so a pasted essay can't inflate token cost.
+      const text = description.trim().slice(0, 500);
+
+      // Same fair-use ceiling as photo scans — never trust the client.
+      if (!(await enforceScanGate(req, res))) return;
+
+      const aiResult = await analyzeFoodText(text);
+
+      if (aiResult.items.length === 0 || aiResult.calories === 0) {
+        // Nothing recognisable — do not bill a scan.
+        res.status(422).json({
+          error: aiResult.notes || "We couldn't find any food in that description.",
+        });
+        return;
+      }
+
+      // Tier 3: database macros replace the model's recall where we have a match.
+      const enriched = await enrichItems(aiResult.items);
+      const result: CalorieBreakdown = enriched.length
+        ? { ...aiResult, items: enriched, ...totalsOf(enriched) }
+        : aiResult;
+
+      await supabase.rpc('increment_scan_count', { user_id: req.user!.id });
+
+      const dbHits = enriched.filter((i) => i.source === 'database').length;
+      console.log(
+        `[Gemini/text] user=${req.user!.id} items=${enriched.length} db_hits=${dbHits}/${enriched.length}`,
+      );
 
       const responseBody: FoodScanResult = { result, cached: false };
       res.json(responseBody);
