@@ -103,21 +103,43 @@ export function ScanItemsEditor({ items, onChange }: Props) {
                   {editing.calories} kcal · {editing.grams}g
                 </Text>
 
-                <Text style={styles.fieldLabel}>QUANTITY</Text>
-                <View style={styles.chipRow}>
-                  {QTY_STEPS.map((q) => (
-                    <TouchableOpacity
-                      key={q}
-                      style={[styles.chip, editing.quantity === q && styles.chipActive]}
-                      onPress={() => updateItem(editIndex, q, editing.unit)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.chipText, editing.quantity === q && styles.chipTextActive]}>
-                        {formatQty(q)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                {/* With "g" the quantity IS the weight, so multiplier chips
+                    (0.5–3) would mean "1 gram of dal". Type the grams instead. */}
+                {editing.unit === 'g' ? (
+                  <>
+                    <Text style={styles.fieldLabel}>WEIGHT (GRAMS)</Text>
+                    <TextInput
+                      style={styles.nameInput}
+                      value={String(editing.quantity)}
+                      onChangeText={(v) => {
+                        const grams = Math.max(0, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0);
+                        updateItem(editIndex, grams, 'g');
+                      }}
+                      keyboardType="number-pad"
+                      selectTextOnFocus
+                      placeholder="180"
+                      placeholderTextColor={T.textMuted}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.fieldLabel}>QUANTITY</Text>
+                    <View style={styles.chipRow}>
+                      {QTY_STEPS.map((q) => (
+                        <TouchableOpacity
+                          key={q}
+                          style={[styles.chip, editing.quantity === q && styles.chipActive]}
+                          onPress={() => updateItem(editIndex, q, editing.unit)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.chipText, editing.quantity === q && styles.chipTextActive]}>
+                            {formatQty(q)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
 
                 <Text style={styles.fieldLabel}>UNIT</Text>
                 <View style={styles.chipRow}>
@@ -125,10 +147,16 @@ export function ScanItemsEditor({ items, onChange }: Props) {
                     <TouchableOpacity
                       key={u}
                       style={[styles.chip, editing.unit === u && styles.chipActive]}
-                      onPress={() => updateItem(editIndex, editing.quantity, u)}
+                      onPress={() =>
+                        // Switching to grams: carry the current weight across,
+                        // so "1 katori" becomes "180 g", not "1 g".
+                        updateItem(editIndex, u === 'g' ? editing.grams : editing.quantity, u)
+                      }
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.chipText, editing.unit === u && styles.chipTextActive]}>{u}</Text>
+                      <Text style={[styles.chipText, editing.unit === u && styles.chipTextActive]}>
+                        {u === 'g' ? 'grams' : u}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -156,6 +184,10 @@ export function ScanItemsEditor({ items, onChange }: Props) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onChange([...items, item]);
           setAddOpen(false);
+          // Open the portion editor for the item just added: picking a food
+          // and setting its amount is one intent, so it shouldn't take a
+          // second trip through the list to change "1 katori" to "200 g".
+          setEditIndex(items.length);
         }}
       />
     </View>

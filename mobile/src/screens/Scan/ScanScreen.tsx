@@ -4,12 +4,8 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
-  Modal,
   Animated,
   Easing,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Image,
   Dimensions,
 } from 'react-native';
@@ -217,8 +213,6 @@ export function ScanScreen({ navigation }: Props) {
   const [scanMode, setScanMode] = useState<ScanMode>('meal');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
-  const [description, setDescription] = useState('');
-  const [showDescModal, setShowDescModal] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const handleCapture = async () => {
@@ -226,15 +220,11 @@ export function ScanScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
     if (photo?.uri) {
-      if (scanMode === 'label') {
-        // Labels don't need a description — straight to analysis.
-        setPendingUri(photo.uri);
-        processLabelPhoto(photo.uri);
-      } else {
-        setPendingUri(photo.uri);
-        setDescription('');
-        setShowDescModal(true);
-      }
+      setPendingUri(photo.uri);
+      // Straight to analysis — items are corrected on the result screen, which
+      // is more direct than guessing what to describe before seeing the result.
+      if (scanMode === 'label') processLabelPhoto(photo.uri);
+      else processPhoto(photo.uri);
     }
   };
 
@@ -245,14 +235,10 @@ export function ScanScreen({ navigation }: Props) {
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]) {
-      if (scanMode === 'label') {
-        setPendingUri(result.assets[0].uri);
-        processLabelPhoto(result.assets[0].uri);
-      } else {
-        setPendingUri(result.assets[0].uri);
-        setDescription('');
-        setShowDescModal(true);
-      }
+      const uri = result.assets[0].uri;
+      setPendingUri(uri);
+      if (scanMode === 'label') processLabelPhoto(uri);
+      else processPhoto(uri);
     }
   };
 
@@ -305,14 +291,13 @@ export function ScanScreen({ navigation }: Props) {
     }
   };
 
-  const processPhoto = async (rawUri: string, userDescription: string) => {
-    setShowDescModal(false);
+  const processPhoto = async (rawUri: string) => {
     setIsAnalyzing(true);
     try {
       const { compressedUri, signedUrl } = await uploadAndSign(rawUri);
 
       // Call backend (server enforces scan count gate)
-      const { result } = await analyzeFood(signedUrl, session!.access_token, userDescription || undefined);
+      const { result } = await analyzeFood(signedUrl, session!.access_token);
 
       // Optimistically decrement the local "scans left" badge (server is authoritative).
       consumeScan();
@@ -412,7 +397,7 @@ export function ScanScreen({ navigation }: Props) {
             onPress={() =>
               Alert.alert(
                 'How to scan',
-                'Point your camera at a plate of food and tap the shutter, or pick a photo from your gallery. Add an optional description to help the AI with hidden ingredients.',
+                'Point your camera at a plate of food and tap the shutter, or pick a photo from your gallery. After scanning you can edit each item, fix quantities, or add anything we missed.',
               )
             }
           >
@@ -498,42 +483,6 @@ export function ScanScreen({ navigation }: Props) {
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
 
-      {/* Description modal — shown after photo is taken, before analysis */}
-      <Modal visible={showDescModal} transparent animationType="slide" onRequestClose={() => setShowDescModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={descStyles.backdrop}>
-          <View style={descStyles.sheet}>
-            <Text style={descStyles.title}>Anything to add?</Text>
-            <Text style={descStyles.subtitle}>
-              Help AI understand hidden ingredients (e.g. "peanut butter between two slices of bread")
-            </Text>
-            <TextInput
-              style={descStyles.input}
-              placeholder="e.g. 2 rotis with dal, extra ghee on top…"
-              placeholderTextColor={T.textMuted}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              maxLength={300}
-              autoFocus
-            />
-            <View style={descStyles.row}>
-              <TouchableOpacity
-                style={descStyles.skipBtn}
-                onPress={() => processPhoto(pendingUri!, '')}
-              >
-                <Text style={descStyles.skipText}>Skip</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={descStyles.analyzeBtn}
-                onPress={() => processPhoto(pendingUri!, description)}
-              >
-                <Ionicons name="sparkles" size={16} color="#fff" />
-                <Text style={descStyles.analyzeText}>Analyze</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -610,21 +559,21 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 40,
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.85)',
+    // No border here on purpose — the four corner brackets ARE the frame. A
+    // full outline boxed in the whole camera view and fought with the subject.
     position: 'relative',
   },
   corner: {
     position: 'absolute',
-    width: 32,
-    height: 32,
-    borderColor: '#fff',
-    borderWidth: 4,
+    width: 36,
+    height: 36,
+    borderColor: T.primary,
+    borderWidth: 3,
   },
-  cornerTL: { top: -2, left: -2, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 40 },
-  cornerTR: { top: -2, right: -2, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 40 },
-  cornerBL: { bottom: -2, left: -2, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 40 },
-  cornerBR: { bottom: -2, right: -2, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 40 },
+  cornerTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 40 },
+  cornerTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 40 },
+  cornerBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 40 },
+  cornerBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 40 },
   hintWrap: {
     backgroundColor: 'rgba(0,0,0,0.45)',
     paddingHorizontal: 24,
@@ -675,74 +624,3 @@ const styles = StyleSheet.create({
   captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff' },
 });
 
-const descStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: T.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 40,
-    gap: 14,
-    borderTopWidth: 1,
-    borderColor: 'rgba(77,208,216,0.2)',
-  },
-  title: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  input: {
-    backgroundColor: T.surface2,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(77,208,216,0.3)',
-    color: '#fff',
-    fontSize: 15,
-    padding: 14,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-  },
-  skipBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: T.glassBorder,
-    alignItems: 'center',
-  },
-  skipText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  analyzeBtn: {
-    flex: 2,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: T.primaryDeep,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  analyzeText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-});

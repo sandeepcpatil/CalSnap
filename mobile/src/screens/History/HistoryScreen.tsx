@@ -21,6 +21,7 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { ExportRangeModal } from '../../components/ExportRangeModal';
+import { StreakCard } from '../../components/StreakCard';
 import { T } from '../../theme';
 import {
   exportHistoryToExcel,
@@ -311,6 +312,10 @@ export function HistoryScreen() {
           <Text style={styles.title}>History</Text>
           <Text style={styles.subtitle}>Your metabolic journey over the last 7 days.</Text>
         </View>
+
+        {/* Streak — the most motivating element, so it earns the first screenful.
+            Reads as "here's your consistency → here's your week in detail." */}
+        {!!session?.user.id && <StreakCard userId={session.user.id} />}
 
         {/* Weekly Insights Bar Chart */}
         <View style={styles.chartCard}>

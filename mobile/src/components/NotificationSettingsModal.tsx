@@ -45,7 +45,8 @@ interface Props {
 }
 
 export function NotificationSettingsModal({ visible, onDismiss }: Props) {
-  const { reminders, toggleReminder, setReminderTime } = useNotificationStore();
+  const { reminders, toggleReminder, setReminderTime, streakReminderEnabled, toggleStreakReminder } =
+    useNotificationStore();
 
   const handleToggle = async (mealType: MealType) => {
     const result = await toggleReminder(mealType);
@@ -62,6 +63,23 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
       );
     } else {
       Alert.alert('Could not set reminder', 'Something went wrong scheduling this reminder. Please try again.');
+    }
+  };
+
+  const handleStreakToggle = async () => {
+    const result = await toggleStreakReminder();
+    if (result.ok) return;
+    if (result.reason === 'permission_denied') {
+      Alert.alert(
+        'Notifications are turned off',
+        'To get streak reminders, allow notifications for CalSnap in your device settings.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
+    } else {
+      Alert.alert('Could not update', 'Something went wrong. Please try again.');
     }
   };
 
@@ -88,7 +106,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
             <TouchableOpacity onPress={onDismiss} style={styles.backBtn} activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={22} color={C.primary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Meal Reminders</Text>
+            <Text style={styles.headerTitle}>Reminders</Text>
             <View style={{ width: 36 }} />
           </View>
         </SafeAreaView>
@@ -101,6 +119,28 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
           <Text style={styles.hint}>
             Set daily reminders for each meal. CalSnap will notify you so you never forget to log.
           </Text>
+
+          {/* Streak nudge — on by default, but switchable so nobody has to
+              disable every CalSnap notification just to silence this one. */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.mealIcon, { backgroundColor: T.warning + '22' }]}>
+                <Ionicons name="flame-outline" size={20} color={T.warning} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mealLabel}>Streak reminder</Text>
+                <Text style={styles.streakSub}>
+                  8:00 PM, only on days you haven’t logged
+                </Text>
+              </View>
+              <Switch
+                value={streakReminderEnabled}
+                onValueChange={handleStreakToggle}
+                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
+                thumbColor={streakReminderEnabled ? C.primary : C.outline}
+              />
+            </View>
+          </View>
 
           {MEALS.map((meal) => {
             const config = reminders[meal.type];
@@ -235,5 +275,6 @@ const styles = StyleSheet.create({
   },
   timeNumber: { fontSize: 22, fontWeight: '700', color: C.onSurface, minWidth: 36, textAlign: 'center' },
   timeSep: { fontSize: 24, fontWeight: '700', color: C.outline, marginBottom: 4 },
+  streakSub: { fontSize: 12, color: C.onSurfaceVar, marginTop: 2 },
   stepHint: { fontSize: 11, color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
 });

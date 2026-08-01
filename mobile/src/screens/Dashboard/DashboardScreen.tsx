@@ -25,6 +25,7 @@ import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
 import { buildSmartAlerts } from '../../utils/alerts';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { useNotificationStore } from '../../store/notificationStore';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
@@ -65,6 +66,14 @@ export function DashboardScreen() {
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
+
+  // Re-arm the streak nudge whenever today's logs change. Home is the landing
+  // screen, so this keeps the reminder accurate without a background job — and
+  // it's the only place that reliably knows whether today has been logged.
+  useEffect(() => {
+    if (!session?.user.id) return;
+    useNotificationStore.getState().refreshStreakReminder(todayLogs.length > 0);
+  }, [session?.user.id, todayLogs.length]);
 
   const calorieGoal  = profile?.daily_calorie_goal ?? 2000;
   const proteinGoal  = profile?.daily_protein_goal ?? 80;

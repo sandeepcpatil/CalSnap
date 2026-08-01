@@ -5,6 +5,8 @@ import {
   requestNotificationPermission,
   scheduleMealReminder,
   cancelMealReminder,
+  scheduleStreakReminders,
+  cancelStreakReminders,
   type MealType,
 } from '../services/notifications';
 
@@ -23,10 +25,20 @@ export interface ToggleResult {
 interface NotificationState {
   permissionGranted: boolean;
   reminders: Record<MealType, ReminderConfig>;
+  /**
+   * Streak nudge. Defaults ON so it works without configuration, but a toggle
+   * exists deliberately: without one, an annoyed user's only option is to
+   * disable ALL notifications at the OS level — which would silently kill the
+   * meal reminders too.
+   */
+  streakReminderEnabled: boolean;
 
   requestPermission: () => Promise<boolean>;
   toggleReminder: (mealType: MealType) => Promise<ToggleResult>;
   setReminderTime: (mealType: MealType, hour: number, minute: number) => Promise<void>;
+  toggleStreakReminder: () => Promise<ToggleResult>;
+  /** Re-arm the streak nudge; call after logging a meal. */
+  refreshStreakReminder: (loggedToday: boolean) => Promise<void>;
 }
 
 const DEFAULTS: Record<MealType, ReminderConfig> = {
@@ -41,6 +53,7 @@ export const useNotificationStore = create<NotificationState>()(
     (set, get) => ({
       permissionGranted: false,
       reminders: DEFAULTS,
+      streakReminderEnabled: true,
 
       requestPermission: async () => {
         const granted = await requestNotificationPermission();
@@ -76,6 +89,33 @@ export const useNotificationStore = create<NotificationState>()(
         }
 
         return { ok: true };
+      },
+
+      toggleStreakReminder: async () => {
+        const enabled = !get().streakReminderEnabled;
+        if (enabled) {
+          const granted = await requestNotificationPermission();
+          set({ permissionGranted: granted });
+          if (!granted) return { ok: false, reason: 'permission_denied' };
+        }
+        set({ streakReminderEnabled: enabled });
+        try {
+          if (enabled) await scheduleStreakReminders({ enabled: true, loggedToday: false });
+          else await cancelStreakReminders();
+        } catch {
+          set({ streakReminderEnabled: !enabled });
+          return { ok: false, reason: 'schedule_failed' };
+        }
+        return { ok: true };
+      },
+
+      refreshStreakReminder: async (loggedToday) => {
+        if (!get().streakReminderEnabled || !get().permissionGranted) return;
+        try {
+          await scheduleStreakReminders({ enabled: true, loggedToday });
+        } catch {
+          // Non-fatal — the nudge re-arms on the next log.
+        }
       },
 
       setReminderTime: async (mealType, hour, minute) => {

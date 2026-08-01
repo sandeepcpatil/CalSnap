@@ -25,6 +25,8 @@ import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { ScanItemsEditor } from '../../components/ScanItemsEditor';
 import { sumItems } from '../../utils/foodItems';
+import { uuidv4 } from '../../utils/uuid';
+import { useNotificationStore } from '../../store/notificationStore';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -145,7 +147,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
       // ("Dinner · 5 items") so the day view stays clean. Only meals with 2+
       // items are grouped; a single item logs ungrouped like a manual entry.
       const loggedAt = new Date().toISOString();
-      const mealId = items.length > 1 ? (globalThis.crypto?.randomUUID?.() ?? `${session.user.id}-${Date.now()}`) : null;
+      // Must be a real UUID — `meal_id` is a uuid column. Generated in pure JS
+      // so no native module (and therefore no rebuild) is required.
+      const mealId = items.length > 1 ? uuidv4() : null;
       const { data, error } = await supabase
         .from('food_logs')
         .insert(
@@ -153,7 +157,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
             user_id: session.user.id,
             image_url: imageStorageUrl,
             meal_id: mealId,
-            food_name: it.name,
+            // food_name is NOT NULL and the name field is user-editable, so a
+            // cleared field must not write an empty row.
+            food_name: it.name.trim() || 'Food item',
             calories: it.calories,
             protein_g: it.protein_g,
             carbs_g: it.carbs_g,
@@ -180,6 +186,10 @@ export function ScanResultScreen({ navigation, route }: Props) {
 
       (data ?? []).forEach(addLog);
       await fetchProfile();
+
+      // Logged today — push tonight's streak nudge to tomorrow so it only ever
+      // fires on days the user actually hasn't logged.
+      useNotificationStore.getState().refreshStreakReminder(true);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.getParent()?.navigate('Home');

@@ -80,3 +80,67 @@ export async function cancelMealReminder(mealType: MealType): Promise<void> {
 export async function scheduleAllReminders(reminders: MealReminder[]): Promise<void> {
   await Promise.all(reminders.map(scheduleMealReminder));
 }
+
+// ─── Streak reminder ─────────────────────────────────────────────────────────
+/**
+ * A single evening nudge that fires only on days with no log.
+ *
+ * A DAILY repeating trigger can't skip one occurrence, so instead we arm a
+ * short run of one-off DATE notifications and re-arm them whenever we learn the
+ * user has logged. Seven days of runway means the reminder keeps working even
+ * if they don't open the app for a while.
+ *
+ * Copy is about the logging habit, never about eating — this must not read as
+ * pressure around food.
+ */
+const STREAK_DAYS_AHEAD = 7;
+const STREAK_IDS = Array.from({ length: STREAK_DAYS_AHEAD }, (_, i) => `streak-reminder-${i}`);
+
+export const STREAK_REMINDER_HOUR = 20; // 8 PM
+export const STREAK_REMINDER_MINUTE = 0;
+
+export async function cancelStreakReminders(): Promise<void> {
+  await Promise.all(
+    STREAK_IDS.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})),
+  );
+}
+
+/**
+ * Re-arm the streak reminders.
+ * `loggedToday` skips tonight's nudge — call this right after a meal is saved.
+ */
+export async function scheduleStreakReminders(opts: {
+  enabled: boolean;
+  loggedToday: boolean;
+}): Promise<void> {
+  await cancelStreakReminders();
+  if (!opts.enabled) return;
+
+  const now = new Date();
+  let scheduled = 0;
+
+  for (let offset = 0; offset < STREAK_DAYS_AHEAD + 1 && scheduled < STREAK_DAYS_AHEAD; offset++) {
+    const when = new Date(now);
+    when.setDate(now.getDate() + offset);
+    when.setHours(STREAK_REMINDER_HOUR, STREAK_REMINDER_MINUTE, 0, 0);
+
+    // Skip tonight if they've already logged, or if 8 PM has passed.
+    if (when <= now) continue;
+    if (offset === 0 && opts.loggedToday) continue;
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: STREAK_IDS[scheduled],
+      content: {
+        title: '🔥 Keep your streak alive',
+        body: "You haven't logged a meal today — a quick scan keeps your streak going.",
+        sound: 'default',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: when,
+        channelId: 'meal-reminders',
+      },
+    }).catch(() => {});
+    scheduled += 1;
+  }
+}
