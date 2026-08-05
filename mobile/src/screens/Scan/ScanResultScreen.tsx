@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
+import type { RootStackParamList } from '../../navigation/RootNavigator';
 import type { FoodItem } from '../../services/api';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
@@ -25,7 +26,7 @@ import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { ScanItemsEditor } from '../../components/ScanItemsEditor';
 import { sumItems } from '../../utils/foodItems';
-import { uuidv4 } from '../../utils/uuid';
+import { logFoodItems } from '../../services/foodLogs';
 import { useNotificationStore } from '../../store/notificationStore';
 
 type Props = {
@@ -143,36 +144,14 @@ export function ScanResultScreen({ navigation, route }: Props) {
 
     try {
       // One row per item — History, macro charts and export gain per-food
-      // granularity. A shared meal_id lets History regroup them into one card
-      // ("Dinner · 5 items") so the day view stays clean. Only meals with 2+
-      // items are grouped; a single item logs ungrouped like a manual entry.
-      const loggedAt = new Date().toISOString();
-      // Must be a real UUID — `meal_id` is a uuid column. Generated in pure JS
-      // so no native module (and therefore no rebuild) is required.
-      const mealId = items.length > 1 ? uuidv4() : null;
-      const { data, error } = await supabase
-        .from('food_logs')
-        .insert(
-          items.map((it) => ({
-            user_id: session.user.id,
-            image_url: imageStorageUrl || null,
-            meal_id: mealId,
-            // food_name is NOT NULL and the name field is user-editable, so a
-            // cleared field must not write an empty row.
-            food_name: it.name.trim() || 'Food item',
-            calories: it.calories,
-            protein_g: it.protein_g,
-            carbs_g: it.carbs_g,
-            fat_g: it.fat_g,
-            fiber_g: it.fiber_g,
-            meal_type: selectedMeal,
-            raw_ai_response: { ...result, logged_item: it, edited: true },
-            logged_at: loggedAt,
-          })),
-        )
-        .select();
-
-      if (error) throw error;
+      // granularity. See `logFoodItems`, which every logging path shares.
+      const data = await logFoodItems({
+        userId: session.user.id,
+        items,
+        mealType: selectedMeal,
+        imageUrl: imageStorageUrl,
+        source: { ...result, edited: true },
+      });
 
       // Increment scan_count
       try {
@@ -184,7 +163,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
           .eq('id', session.user.id);
       }
 
-      (data ?? []).forEach(addLog);
+      data.forEach(addLog);
       await fetchProfile();
 
       // Logged today — push tonight's streak nudge to tomorrow so it only ever
@@ -192,7 +171,13 @@ export function ScanResultScreen({ navigation, route }: Props) {
       useNotificationStore.getState().refreshStreakReminder(true);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.getParent()?.navigate('Home');
+      // Pop the whole Scan stack off the root navigator and land on Home, so
+      // the day's updated ring is the first thing seen. Popping the parent
+      // unmounts this screen too — otherwise re-opening the camera would show
+      // the meal that was just logged.
+      navigation
+        .getParent<NativeStackNavigationProp<RootStackParamList>>()
+        ?.navigate('Main', { screen: 'Home' });
     } catch (err: any) {
       Alert.alert('Save failed', err.message ?? 'Please try again.');
     } finally {

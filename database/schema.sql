@@ -241,3 +241,14 @@ $$;
 -- Storage policy (allow authenticated users to upload their own files):
 -- INSERT policy: (auth.uid()::text = (storage.foldername(name))[1])
 -- SELECT policy: (auth.uid()::text = (storage.foldername(name))[1])
+
+-- ---------------------------------------------------------------
+-- 12. Incremental migrations
+-- ---------------------------------------------------------------
+-- Everything above is the base schema. Changes made after launch live
+-- in database/migrations/ and must be run in order on an existing
+-- database. Each one is idempotent, so a fresh install can simply run
+-- this file and then every migration file in numeric order.
+--
+--   001_water_logs.sql — water_logs table + profiles hydration columns
+--   002_saved_meals.sql — saved_meals table (named, re-loggable combos)

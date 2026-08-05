@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../services/supabase';
 import { getDailyQuote } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import type { FoodLog } from '../../store/foodLogStore';
+import { normalizeLog, type FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
@@ -213,7 +213,7 @@ export function HistoryScreen() {
     if (!data) return;
 
     const byDay: Record<string, { logs: FoodLog[] }> = {};
-    (data as FoodLog[]).forEach((log) => {
+    (data as FoodLog[]).map(normalizeLog).forEach((log) => {
       const day = log.logged_at.slice(0, 10);
       if (!byDay[day]) byDay[day] = { logs: [] };
       byDay[day].logs.push(log);
@@ -276,7 +276,7 @@ export function HistoryScreen() {
         .order('logged_at', { ascending: true });
       if (error) throw error;
 
-      const days = groupLogsByDay((data as FoodLog[]) ?? []);
+      const days = groupLogsByDay(((data as FoodLog[]) ?? []).map(normalizeLog));
       const ok = await exportHistoryToExcel(days);
       if (ok) {
         setExportPickerOpen(false);

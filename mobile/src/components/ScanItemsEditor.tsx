@@ -7,22 +7,24 @@ import * as Haptics from 'expo-haptics';
 import type { FoodItem } from '../services/api';
 import { fetchRecentFoods } from '../services/recentFoods';
 import { useAuthStore } from '../store/authStore';
-import { UNITS, rescaleItem, gramsFor, COMMON_FOODS, itemFromFood } from '../utils/foodItems';
+import { UNITS, rescaleItem, gramsFor, stepFor, COMMON_FOODS, itemFromFood } from '../utils/foodItems';
 import { T } from '../theme';
 
 interface Props {
   items: FoodItem[];
   onChange: (items: FoodItem[]) => void;
+  /** Section heading. The scan result says "detected"; a meal builder doesn't. */
+  heading?: string;
+  /** Copy on the add button, for the same reason. */
+  addLabel?: string;
 }
-
-const QTY_STEPS = [0.5, 1, 1.5, 2, 3];
 
 /**
  * Per-item editor for a scanned meal. The AI proposes the items; the user
  * confirms. Editing one item never affects the others, so a wrong estimate for
  * the rice can't corrupt a correct one for the dal.
  */
-export function ScanItemsEditor({ items, onChange }: Props) {
+export function ScanItemsEditor({ items, onChange, heading = 'ITEMS DETECTED', addLabel = 'Add anything we missed' }: Props) {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -41,7 +43,7 @@ export function ScanItemsEditor({ items, onChange }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.headRow}>
-        <Text style={styles.head}>ITEMS DETECTED</Text>
+        <Text style={styles.head}>{heading}</Text>
         <Text style={styles.headCount}>{items.length}</Text>
       </View>
 
@@ -75,7 +77,7 @@ export function ScanItemsEditor({ items, onChange }: Props) {
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setAddOpen(true)} activeOpacity={0.8}>
         <Ionicons name="add-circle-outline" size={18} color={T.primary} />
-        <Text style={styles.addText}>Add anything we missed</Text>
+        <Text style={styles.addText}>{addLabel}</Text>
       </TouchableOpacity>
 
       {/* ── Edit sheet ─────────────────────────────────────────────────────── */}
@@ -124,19 +126,47 @@ export function ScanItemsEditor({ items, onChange }: Props) {
                 ) : (
                   <>
                     <Text style={styles.fieldLabel}>QUANTITY</Text>
-                    <View style={styles.chipRow}>
-                      {QTY_STEPS.map((q) => (
-                        <TouchableOpacity
-                          key={q}
-                          style={[styles.chip, editing.quantity === q && styles.chipActive]}
-                          onPress={() => updateItem(editIndex, q, editing.unit)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[styles.chipText, editing.quantity === q && styles.chipTextActive]}>
-                            {formatQty(q)}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                    {/* A stepper, not fixed chips — you can't know in advance
+                        whether someone ate 2 boiled eggs or 5. The number is
+                        editable too, so large counts don't need many taps. */}
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const step = stepFor(editing.unit);
+                          const next = Math.max(step, Math.round((editing.quantity - step) * 100) / 100);
+                          updateItem(editIndex, next, editing.unit);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Decrease quantity"
+                      >
+                        <Ionicons name="remove" size={22} color={T.primary} />
+                      </TouchableOpacity>
+
+                      <TextInput
+                        style={styles.stepValue}
+                        value={formatQty(editing.quantity)}
+                        onChangeText={(v) => {
+                          // Allow a decimal point for half servings.
+                          const n = parseFloat(v.replace(/[^0-9.]/g, ''));
+                          updateItem(editIndex, Number.isFinite(n) && n > 0 ? n : 0, editing.unit);
+                        }}
+                        keyboardType="decimal-pad"
+                        selectTextOnFocus
+                        textAlign="center"
+                      />
+
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const step = stepFor(editing.unit);
+                          updateItem(editIndex, Math.round((editing.quantity + step) * 100) / 100, editing.unit);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Increase quantity"
+                      >
+                        <Ionicons name="add" size={22} color={T.primary} />
+                      </TouchableOpacity>
                     </View>
                   </>
                 )}
@@ -179,15 +209,19 @@ export function ScanItemsEditor({ items, onChange }: Props) {
       {/* ── Add item sheet ─────────────────────────────────────────────────── */}
       <AddItemSheet
         visible={addOpen}
-        onClose={() => setAddOpen(false)}
         onAdd={(item) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onChange([...items, item]);
+        }}
+        onDone={(addedCount) => {
           setAddOpen(false);
-          // Open the portion editor for the item just added: picking a food
-          // and setting its amount is one intent, so it shouldn't take a
-          // second trip through the list to change "1 katori" to "200 g".
-          setEditIndex(items.length);
+          // Picking a food and setting its amount is one intent, so a single
+          // addition goes straight to the portion editor. Several additions
+          // don't — there'd be no way to say which one you meant, and the rows
+          // are one tap away in the list behind.
+          // `items` already includes the addition by the time Done is tapped,
+          // so the new row is the last index — not `items.length`.
+          if (addedCount === 1) setEditIndex(items.length - 1);
         }}
       />
     </View>
@@ -196,12 +230,41 @@ export function ScanItemsEditor({ items, onChange }: Props) {
 
 // ── Add item ─────────────────────────────────────────────────────────────────
 
-function AddItemSheet({
-  visible, onClose, onAdd,
-}: { visible: boolean; onClose: () => void; onAdd: (item: FoodItem) => void }) {
+interface AddItemSheetProps {
+  visible: boolean;
+  onAdd: (item: FoodItem) => void;
+  /** Closes the sheet, told how many foods were added this time round. */
+  onDone: (addedCount: number) => void;
+}
+
+/**
+ * Stays open across additions. A thali is four or five things, and closing
+ * after every pick meant re-opening the sheet and re-typing the search for each
+ * one — so the common case was the slowest.
+ */
+function AddItemSheet({ visible, onAdd, onDone }: AddItemSheetProps) {
   const { session } = useAuthStore();
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState<FoodItem[] | null>(null);
+  /** Name → times added in this session, for the row's "✓ ×2" badge. */
+  const [added, setAdded] = useState<Record<string, number>>({});
+
+  // A fresh open starts a fresh basket; the counts describe this visit only.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setAdded({});
+      setQuery('');
+    }
+  }
+
+  const addedTotal = Object.values(added).reduce((sum, n) => sum + n, 0);
+
+  const handlePick = (name: string, item: FoodItem) => {
+    setAdded((prev) => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }));
+    onAdd(item);
+  };
 
   // Load the user's own history the first time the sheet opens — people repeat
   // meals, so this out-performs any generic food list.
@@ -220,12 +283,19 @@ function AddItemSheet({
   const nothingFound = recentMatches.length === 0 && commonMatches.length === 0;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => onDone(addedTotal)}>
+      <Pressable style={styles.backdrop} onPress={() => onDone(addedTotal)} />
       <View style={styles.sheetWrap} pointerEvents="box-none">
         <SafeAreaView edges={['bottom']} style={[styles.sheet, { maxHeight: '85%' }]}>
           <View style={styles.grabber} />
-          <Text style={styles.sheetTitle}>Add item</Text>
+          <View style={styles.sheetTitleRow}>
+            <Text style={styles.sheetTitle}>Add items</Text>
+            {addedTotal > 0 && (
+              <Text style={styles.sheetCount}>
+                {addedTotal} added
+              </Text>
+            )}
+          </View>
           <TextInput
             style={styles.search}
             placeholder="Search your foods…"
@@ -249,7 +319,7 @@ function AddItemSheet({
                   <TouchableOpacity
                     key={`recent-${f.name}-${i}`}
                     style={styles.addRow}
-                    onPress={() => onAdd(f)}
+                    onPress={() => handlePick(`recent-${f.name}`, f)}
                     activeOpacity={0.75}
                   >
                     <Ionicons name="time-outline" size={16} color={T.textMuted} />
@@ -259,7 +329,7 @@ function AddItemSheet({
                         {f.quantity} {f.unit} · {f.calories} kcal
                       </Text>
                     </View>
-                    <Ionicons name="add" size={20} color={T.primary} />
+                    <AddedBadge count={added[`recent-${f.name}`] ?? 0} />
                   </TouchableOpacity>
                 ))}
               </>
@@ -273,7 +343,7 @@ function AddItemSheet({
                   <TouchableOpacity
                     key={`common-${f.name}`}
                     style={styles.addRow}
-                    onPress={() => onAdd(itemFromFood(f, 1, f.unit))}
+                    onPress={() => handlePick(`common-${f.name}`, itemFromFood(f, 1, f.unit))}
                     activeOpacity={0.75}
                   >
                     <Ionicons name="nutrition-outline" size={16} color={T.textMuted} />
@@ -283,7 +353,7 @@ function AddItemSheet({
                         1 {f.unit} · {Math.round((f.kcal * gramsFor(1, f.unit)) / 100)} kcal
                       </Text>
                     </View>
-                    <Ionicons name="add" size={20} color={T.primary} />
+                    <AddedBadge count={added[`common-${f.name}`] ?? 0} />
                   </TouchableOpacity>
                 ))}
               </>
@@ -295,12 +365,36 @@ function AddItemSheet({
               </Text>
             )}
           </ScrollView>
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.7}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+          {addedTotal > 0 ? (
+            <TouchableOpacity
+              style={styles.doneAddBtn}
+              onPress={() => onDone(addedTotal)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="checkmark" size={17} color={T.textOnPrimary} />
+              <Text style={styles.doneAddText}>
+                Done · {addedTotal} item{addedTotal === 1 ? '' : 's'} added
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => onDone(0)} activeOpacity={0.7}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
         </SafeAreaView>
       </View>
     </Modal>
+  );
+}
+
+/** Trailing control on an add row: a plain "+", or a tick with a repeat count. */
+function AddedBadge({ count }: { count: number }) {
+  if (count === 0) return <Ionicons name="add" size={20} color={T.primary} />;
+  return (
+    <View style={styles.addedBadge}>
+      <Ionicons name="checkmark" size={13} color={T.textOnPrimary} />
+      {count > 1 && <Text style={styles.addedBadgeCount}>×{count}</Text>}
+    </View>
   );
 }
 
@@ -343,10 +437,33 @@ const styles = StyleSheet.create({
   },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.border, marginBottom: 8 },
   sheetTitle: { fontSize: 20, fontWeight: '800', color: T.textPrimary },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  sheetCount: { fontSize: 13, fontWeight: '700', color: T.primary },
+  addedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 7,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: T.primary,
+  },
+  addedBadgeCount: { fontSize: 11, fontWeight: '800', color: T.textOnPrimary },
   sheetSub: { fontSize: 13, color: T.textSecondary, marginTop: -4 },
 
   fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: T.textMuted, marginTop: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepBtn: {
+    width: 48, height: 48, borderRadius: 12,
+    backgroundColor: T.surface2, borderWidth: 1, borderColor: T.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepValue: {
+    flex: 1, height: 48, borderRadius: 12,
+    backgroundColor: T.surface2, borderWidth: 1, borderColor: T.border,
+    color: T.textPrimary, fontSize: 20, fontWeight: '800',
+  },
   chip: {
     paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10,
     backgroundColor: T.surface2, borderWidth: 1, borderColor: T.border,
@@ -390,4 +507,15 @@ const styles = StyleSheet.create({
   },
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },
   cancelText: { fontSize: 15, fontWeight: '700', color: T.textMuted },
+  doneAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: T.primary,
+    marginTop: 10,
+  },
+  doneAddText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.2 },
 });

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
+import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
@@ -127,7 +128,13 @@ export function LabelResultScreen({ navigation, route }: Props) {
       addLog(data);
       await fetchProfile();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.getParent()?.navigate('Home');
+      // Pop the whole Scan stack off the root navigator and land on Home, so
+      // the day's updated ring is the first thing seen. Popping the parent
+      // unmounts this screen too — otherwise re-opening the camera would show
+      // the meal that was just logged.
+      navigation
+        .getParent<NativeStackNavigationProp<RootStackParamList>>()
+        ?.navigate('Main', { screen: 'Home' });
     } catch (err: unknown) {
       Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {

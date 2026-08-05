@@ -13,9 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore, FoodLog } from '../../store/foodLogStore';
+import { useWaterStore } from '../../store/waterStore';
 import { CalorieRing } from '../../components/CalorieRing';
+import { WaterCard } from '../../components/WaterCard';
 import { MacroBar } from '../../components/MacroBar';
 import { MacroDonut } from '../../components/MacroDonut';
 import { MealSection } from '../../components/MealSection';
@@ -25,8 +28,10 @@ import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
 import { buildSmartAlerts } from '../../utils/alerts';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
+import { useConfirmExit } from '../../hooks/useConfirmExit';
 import { useNotificationStore } from '../../store/notificationStore';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
+import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { T } from '../../theme';
@@ -55,11 +60,20 @@ export function DashboardScreen() {
   const { theme } = useTheme();
   const { isSubscribed, isOnTrial, trialDaysLeft, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+  // Water is a root-stack screen, not a tab, so it is reached through the parent.
+  const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const [alertsOpen, setAlertsOpen] = useState(false);
+
+  // Home is the root of the back stack, so a single stray press would otherwise
+  // close the app outright.
+  useConfirmExit();
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
       fetchLogsForDate(session.user.id, selectedDate);
+      // Water lives in its own table but shares this screen's refresh control —
+      // pulling down must not leave the hydration card stale.
+      useWaterStore.getState().fetchForDate(session.user.id, selectedDate);
     }
   }, [session?.user.id, selectedDate]);
 
@@ -183,6 +197,10 @@ export function DashboardScreen() {
         <View style={styles.glassCard}>
           <CalorieRing consumed={totals.calories} goal={calorieGoal} />
         </View>
+
+        {/* ── Water ── high on the page on purpose: it's logged more often than
+            meals, and burying it behind the hub would be too slow. ── */}
+        <WaterCard onOpen={() => rootNavigation?.navigate('Water')} />
 
         {/* ── Macro Targets Card (Pro) ── */}
         <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macro Breakdown" borderRadius={20}>

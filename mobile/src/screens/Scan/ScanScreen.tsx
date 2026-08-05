@@ -19,7 +19,8 @@ import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ScanStackParamList } from '../../navigation/ScanNavigator';
+import { useFocusEffect } from '@react-navigation/native';
+import { ScanStackParamList, type ScanMode } from '../../navigation/ScanNavigator';
 import { supabase } from '../../services/supabase';
 import { analyzeFood, analyzeLabel, analyzeText } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -28,7 +29,10 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { VoiceModePanel } from '../../components/VoiceModePanel';
 import { T } from '../../theme';
 
-type Props = { navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'> };
+type Props = {
+  navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'>;
+  route: { params?: { mode?: ScanMode } };
+};
 
 // ─── Analyzing overlay ───────────────────────────────────────────────────────
 // Shows the user's actual photo with a scanning beam sweeping over it and a
@@ -204,19 +208,31 @@ const analyzeStyles = StyleSheet.create({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ScanMode = 'meal' | 'label' | 'voice';
-
-export function ScanScreen({ navigation }: Props) {
+export function ScanScreen({ navigation, route }: Props) {
   const { session } = useAuthStore();
   const { canScan, scansRemaining, isSubscribed, paywallVisible, showPaywall, dismissPaywall, consumeScan } = useSubscriptionGate();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
-  const [scanMode, setScanMode] = useState<ScanMode>('meal');
+  const requestedMode = route.params?.mode ?? 'meal';
+  const [scanMode, setScanMode] = useState<ScanMode>(requestedMode);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
   const [voiceAnalyzing, setVoiceAnalyzing] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+
+  // The Scan tab stays mounted, so a previous session's photo / transcript would
+  // still be on screen when the user comes back. Reset to a clean state each
+  // time the tab regains focus, in whichever mode the log hub asked for —
+  // re-mounting the voice panel is also what clears its transcript.
+  useFocusEffect(
+    React.useCallback(() => {
+      setPendingUri(null);
+      setScanMode(requestedMode);
+      setVoiceListening(false);
+      setVoiceAnalyzing(false);
+    }, [requestedMode]),
+  );
 
   const handleCapture = async () => {
     if (!canScan) { showPaywall(); return; }
@@ -362,7 +378,7 @@ export function ScanScreen({ navigation }: Props) {
           {/* Close */}
           <TouchableOpacity
             style={styles.permissionClose}
-            onPress={() => navigation.getParent()?.navigate('Home')}
+            onPress={() => navigation.getParent()?.goBack()}
             activeOpacity={0.7}
           >
             <Ionicons name="close" size={24} color={T.textSecondary} />
@@ -412,7 +428,7 @@ export function ScanScreen({ navigation }: Props) {
           <TouchableOpacity
             style={styles.glassBtn}
             disabled={isAnalyzing}
-            onPress={() => navigation.getParent()?.navigate('Home')}
+            onPress={() => navigation.getParent()?.goBack()}
           >
             <Ionicons name="close" size={22} color="#fff" />
           </TouchableOpacity>

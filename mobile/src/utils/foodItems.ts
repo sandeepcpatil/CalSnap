@@ -1,6 +1,21 @@
 import type { FoodItem } from '../services/api';
 
 /**
+ * Coerce a possibly-stringy nutrition value to a real number.
+ *
+ * Postgres `numeric`/`DECIMAL` columns (protein_g, carbs_g, fat_g, fiber_g)
+ * come back from PostgREST as JSON *strings* — "22.8", not 22.8. Multiplying a
+ * string coerces it, so scaling limped along, but any *addition* concatenates
+ * ("22.8" + "19.5" → "22.819.5" → NaN), and `NaN || 0` then shows up as 0. So
+ * every macro that might have crossed the DB boundary is funnelled through here
+ * before arithmetic.
+ */
+export function num(value: unknown): number {
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
  * Household measures → grams. These mirror the anchors in the backend scan
  * prompt, so an item keeps the same weight whether the AI produced it or the
  * user picked it manually.
@@ -25,6 +40,18 @@ export function gramsFor(quantity: number, unit: string): number {
   return Math.round(quantity * (UNIT_GRAMS[unit] ?? 100));
 }
 
+/** Units you count whole — half a boiled egg isn't a normal way to log. */
+const COUNTABLE = new Set(['piece', 'roti', 'slice']);
+
+/**
+ * Step size for the quantity stepper. Countable things move in whole units;
+ * servings and spoons in halves, where "1.5 katori" is a real portion.
+ */
+export function stepFor(unit: string): number {
+  if (unit === 'g') return 10;
+  return COUNTABLE.has(unit) ? 1 : 0.5;
+}
+
 /**
  * Re-scale an item to a new quantity/unit, holding its nutrition *density*
  * constant. Editing one item never touches the others — that's the whole point
@@ -33,15 +60,15 @@ export function gramsFor(quantity: number, unit: string): number {
 export function rescaleItem(item: FoodItem, quantity: number, unit: string): FoodItem {
   const newGrams = gramsFor(quantity, unit);
   // Density from the original estimate; guard against a zero-gram item.
-  const base = item.grams > 0 ? item.grams : 1;
+  const base = num(item.grams) > 0 ? num(item.grams) : 1;
   const k = newGrams / base;
-  const r1 = (v: number) => Math.round(v * k * 10) / 10;
+  const r1 = (v: unknown) => Math.round(num(v) * k * 10) / 10;
   return {
     ...item,
     quantity,
     unit,
     grams: newGrams,
-    calories: Math.round(item.calories * k),
+    calories: Math.round(num(item.calories) * k),
     protein_g: r1(item.protein_g),
     carbs_g: r1(item.carbs_g),
     fat_g: r1(item.fat_g),
@@ -61,13 +88,15 @@ export interface ItemTotals {
 /** Sum a list of items. The header always shows this — never the AI's own arithmetic. */
 export function sumItems(items: readonly FoodItem[]): ItemTotals {
   const r1 = (v: number) => Math.round(v * 10) / 10;
+  // `num` on every field — items may have come straight from the DB, where the
+  // macros are strings and `+` would concatenate instead of add.
   return {
-    calories: Math.round(items.reduce((s, i) => s + i.calories, 0)),
-    protein_g: r1(items.reduce((s, i) => s + i.protein_g, 0)),
-    carbs_g: r1(items.reduce((s, i) => s + i.carbs_g, 0)),
-    fat_g: r1(items.reduce((s, i) => s + i.fat_g, 0)),
-    fiber_g: r1(items.reduce((s, i) => s + i.fiber_g, 0)),
-    grams: Math.round(items.reduce((s, i) => s + i.grams, 0)),
+    calories: Math.round(items.reduce((s, i) => s + num(i.calories), 0)),
+    protein_g: r1(items.reduce((s, i) => s + num(i.protein_g), 0)),
+    carbs_g: r1(items.reduce((s, i) => s + num(i.carbs_g), 0)),
+    fat_g: r1(items.reduce((s, i) => s + num(i.fat_g), 0)),
+    fiber_g: r1(items.reduce((s, i) => s + num(i.fiber_g), 0)),
+    grams: Math.round(items.reduce((s, i) => s + num(i.grams), 0)),
   };
 }
 
