@@ -33,24 +33,63 @@ export const MIN_CUSTOM_ML = 10;
 export const MAX_CUSTOM_ML = 5000;
 
 const FALLBACK_GOAL_ML = 3000;
-/** ml of water per kg of body weight — the common 30–40 ml/kg guidance. */
-const ML_PER_KG = 35;
+/**
+ * Base ml of water per kg of body weight. Sits at the lower end of the common
+ * 30–40 ml/kg guidance on purpose: ~20% of daily water comes from food (dal,
+ * curd, fruit, tea), and this target only counts what you *drink*.
+ */
+const BASE_ML_PER_KG = 32;
 const MIN_GOAL_ML = 1500;
 const MAX_GOAL_ML = 5000;
 
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+
 /**
- * The daily goal, in order of preference: what the user set, then a
- * weight-derived estimate, then 3 L.
- *
- * Deriving from weight matters more than it looks — a 50 kg and a 95 kg user
- * given the same 3 L target will both ignore it.
+ * How much more a body loses to sweat as activity rises. Anchored at 1.0 for a
+ * sedentary day; the top of the range adds ~40%, roughly the extra 0.5–1 L that
+ * a hard daily workout calls for.
  */
-export function waterGoalMl(explicitGoal: number | null | undefined, weightKg: number | null | undefined): number {
+const ACTIVITY_MULTIPLIER: Record<ActivityLevel, number> = {
+  sedentary: 1.0,
+  light: 1.1,
+  moderate: 1.2,
+  active: 1.3,
+  very_active: 1.4,
+};
+
+/** Round to the nearest 250 ml and clamp to a sane band. */
+function tidyGoal(ml: number): number {
+  return Math.min(MAX_GOAL_ML, Math.max(MIN_GOAL_ML, Math.round(ml / 250) * 250));
+}
+
+/**
+ * The recommended daily *drinking* goal from body weight and activity — the
+ * value used when the user hasn't set their own. `waterGoalMl` prefers an
+ * explicit goal over this.
+ *
+ * A 50 kg desk worker and a 95 kg athlete should not see the same number, and
+ * before this the activity half was ignored entirely.
+ */
+export function recommendedWaterMl(
+  weightKg: number | null | undefined,
+  activity: ActivityLevel | null | undefined,
+): number {
+  if (!weightKg || weightKg <= 0) return FALLBACK_GOAL_ML;
+  const mult = (activity && ACTIVITY_MULTIPLIER[activity]) || ACTIVITY_MULTIPLIER.sedentary;
+  return tidyGoal(weightKg * BASE_ML_PER_KG * mult);
+}
+
+/**
+ * The goal to show, in order of preference: what the user set, then the
+ * weight + activity recommendation, then 3 L.
+ */
+export function waterGoalMl(
+  explicitGoal: number | null | undefined,
+  weightKg: number | null | undefined,
+  activity?: ActivityLevel | null,
+): number {
   if (explicitGoal && explicitGoal > 0) return explicitGoal;
-  if (weightKg && weightKg > 0) {
-    return Math.min(MAX_GOAL_ML, Math.max(MIN_GOAL_ML, Math.round((weightKg * ML_PER_KG) / 250) * 250));
-  }
-  return FALLBACK_GOAL_ML;
+  return recommendedWaterMl(weightKg, activity);
 }
 
 /** "1.2 L" above a litre, "750 ml" below — never "0.75 L". */

@@ -24,7 +24,7 @@ export function useWater() {
 
   const userId = session?.user.id;
   const consumedMl = useMemo(() => totalMl(logs), [logs]);
-  const goalMl = waterGoalMl(profile?.daily_water_ml_goal, profile?.weight_kg);
+  const goalMl = waterGoalMl(profile?.daily_water_ml_goal, profile?.weight_kg, profile?.activity_level);
 
   const refresh = useCallback(() => {
     if (!userId) return;

@@ -9,6 +9,7 @@ import {
   glassesOf,
   MAX_CUSTOM_ML,
   MIN_CUSTOM_ML,
+  recommendedWaterMl,
   waterGoalMl,
   waterProgress,
 } from './water';
@@ -22,18 +23,27 @@ assert.strictEqual(formatMl(1200), '1.2 L');
 assert.strictEqual(formatMl(2000), '2 L');
 assert.strictEqual(formatMl(0), '0 ml');
 
-// ── waterGoalMl ─────────────────────────────────────────────────────────────
-// An explicit goal always wins, even an unusual one.
-assert.strictEqual(waterGoalMl(2500, 70), 2500);
-// Derived from weight at 35 ml/kg, rounded to the nearest 250 ml.
-assert.strictEqual(waterGoalMl(null, 70), 2500);  // 2450 → 2500
-assert.strictEqual(waterGoalMl(null, 50), 1750);
+// ── recommendedWaterMl — weight × 32 ml/kg × activity, rounded to 250 ml ─────
+// 74 kg sedentary: 74 × 32 × 1.0 = 2368 → 2250 (nearest 250 down).
+assert.strictEqual(recommendedWaterMl(74, 'sedentary'), 2250);
+// Same body, more activity drinks more: 74 × 32 × 1.2 = 2841 → 2750.
+assert.strictEqual(recommendedWaterMl(74, 'moderate'), 2750);
+// 74 × 32 × 1.4 = 3315 → 3250.
+assert.strictEqual(recommendedWaterMl(74, 'very_active'), 3250);
+// Missing activity is treated as sedentary, not a crash.
+assert.strictEqual(recommendedWaterMl(74, null), 2250);
+assert.strictEqual(recommendedWaterMl(74, undefined), 2250);
 // Clamped at both ends so an outlier weight can't produce a silly target.
-assert.strictEqual(waterGoalMl(null, 20), 1500);
-assert.strictEqual(waterGoalMl(null, 200), 5000);
+assert.strictEqual(recommendedWaterMl(20, 'sedentary'), 1500);
+assert.strictEqual(recommendedWaterMl(200, 'very_active'), 5000);
 // No weight on file (onboarding skipped) falls back to 3 L.
-assert.strictEqual(waterGoalMl(null, null), 3000);
-assert.strictEqual(waterGoalMl(0, 0), 3000);
+assert.strictEqual(recommendedWaterMl(null, 'moderate'), 3000);
+assert.strictEqual(recommendedWaterMl(0, null), 3000);
+
+// ── waterGoalMl — explicit goal wins, else the recommendation ────────────────
+assert.strictEqual(waterGoalMl(2500, 74, 'sedentary'), 2500); // manual override
+assert.strictEqual(waterGoalMl(null, 74, 'moderate'), 2750);  // falls through
+assert.strictEqual(waterGoalMl(0, 0, null), 3000);
 
 // ── waterProgress ───────────────────────────────────────────────────────────
 assert.strictEqual(waterProgress(1500, 3000), 0.5);

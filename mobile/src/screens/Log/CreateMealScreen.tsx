@@ -19,7 +19,8 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { ScanItemsEditor } from '../../components/ScanItemsEditor';
 import { sumItems } from '../../utils/foodItems';
 import { getMealTypeFromTime } from '../../utils/nutrition';
-import { logFoodItems } from '../../services/foodLogs';
+import { logFoodItems, type MealType } from '../../services/foodLogs';
+import { MealTypePicker } from '../../components/MealTypePicker';
 import {
   createSavedMeal,
   updateSavedMeal,
@@ -51,6 +52,7 @@ export function CreateMealScreen({ navigation, route }: Props) {
   const [name, setName] = useState(existing?.name ?? '');
   const [items, setItems] = useState<FoodItem[]>(existing?.items ?? []);
   const [busy, setBusy] = useState<'save' | 'log' | null>(null);
+  const [mealType, setMealType] = useState<MealType>(getMealTypeFromTime());
 
   const totals = sumItems(items);
   const userId = session?.user.id;
@@ -91,7 +93,7 @@ export function CreateMealScreen({ navigation, route }: Props) {
       const rows = await logFoodItems({
         userId,
         items,
-        mealType: getMealTypeFromTime(),
+        mealType,
         source: { origin: 'saved-meal', saved_meal_name: name.trim() },
       });
       rows.forEach(addLog);
@@ -192,6 +194,9 @@ export function CreateMealScreen({ navigation, route }: Props) {
               <Macro value={`${totals.fat_g}g`} label="FAT" color={T.fat} />
             </View>
           </View>
+
+          {/* Which meal "Save & log" writes to. Ignored by "Save only". */}
+          <MealTypePicker value={mealType} onChange={setMealType} />
 
           <View style={styles.actions}>
             {/* Two exits that matter: "Save only" for setting up ahead of time,

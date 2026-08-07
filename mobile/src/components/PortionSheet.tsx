@@ -14,38 +14,30 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { FoodItem } from '../services/api';
 import { UNITS, rescaleItem, stepFor } from '../utils/foodItems';
-import type { MealType } from '../services/foodLogs';
 import { T } from '../theme';
-
-const MEALS: readonly { key: MealType; label: string }[] = [
-  { key: 'breakfast', label: 'Breakfast' },
-  { key: 'lunch', label: 'Lunch' },
-  { key: 'dinner', label: 'Dinner' },
-  { key: 'snack', label: 'Snack' },
-];
 
 interface Props {
   visible: boolean;
-  /** The food to log, at the portion last used. Null closes the sheet. */
+  /** The food to adjust, at its current portion. Null closes the sheet. */
   item: FoodItem | null;
-  /** Pre-selected meal, normally inferred from the time of day. */
-  defaultMeal: MealType;
+  /** Label for the confirm button — "Add to meal", "Update", etc. */
+  confirmLabel?: string;
   busy?: boolean;
   onCancel: () => void;
-  onConfirm: (item: FoodItem, mealType: MealType) => void;
+  onConfirm: (item: FoodItem) => void;
 }
 
 /**
- * Adjust a portion before logging it.
+ * Adjust a portion.
  *
- * Shared by the re-log screen and anywhere else a single known food needs a
- * quantity before it hits the database. Nutrition is rescaled through
- * `rescaleItem`, which holds the food's *density* constant — so changing
- * "1 katori" to "2 katori" doubles the calories rather than guessing again.
+ * Deliberately does *not* decide the meal type or trigger the log — that lives
+ * in the cart, so it's chosen once for the whole meal rather than per item.
+ * This sheet only re-scales, via `rescaleItem`, which holds the food's density
+ * constant so "1 katori" → "2 katori" doubles the calories rather than
+ * re-guessing them.
  */
-export function PortionSheet({ visible, item, defaultMeal, busy, onCancel, onConfirm }: Props) {
+export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy, onCancel, onConfirm }: Props) {
   const [draft, setDraft] = useState<FoodItem | null>(item);
-  const [meal, setMeal] = useState<MealType>(defaultMeal);
   const [gramsText, setGramsText] = useState('');
   // Re-seed whenever a different food is opened; `item` is the identity here.
   const [seed, setSeed] = useState<FoodItem | null>(item);
@@ -53,7 +45,6 @@ export function PortionSheet({ visible, item, defaultMeal, busy, onCancel, onCon
   if (item !== seed) {
     setSeed(item);
     setDraft(item);
-    setMeal(defaultMeal);
     setGramsText(item ? String(item.grams) : '');
   }
 
@@ -162,30 +153,14 @@ export function PortionSheet({ visible, item, defaultMeal, busy, onCancel, onCon
             <Macro value={`${draft.fat_g}g`} label="FAT" color={T.fat} />
           </View>
 
-          <Text style={styles.label}>Log as</Text>
-          <View style={styles.mealRow}>
-            {MEALS.map((m) => {
-              const active = m.key === meal;
-              return (
-                <TouchableOpacity
-                  key={m.key}
-                  style={[styles.mealChip, active && styles.mealChipActive]}
-                  onPress={() => { Haptics.selectionAsync(); setMeal(m.key); }}
-                >
-                  <Text style={[styles.mealChipText, active && styles.mealChipTextActive]}>{m.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
           <TouchableOpacity
             style={[styles.cta, busy && styles.ctaDisabled]}
-            onPress={() => onConfirm(draft, meal)}
+            onPress={() => onConfirm(draft)}
             disabled={busy}
             activeOpacity={0.88}
           >
             <Ionicons name="checkmark" size={18} color={T.textOnPrimary} />
-            <Text style={styles.ctaText}>{busy ? 'Logging…' : `Log ${draft.calories} kcal`}</Text>
+            <Text style={styles.ctaText}>{confirmLabel} · {draft.calories} kcal</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -287,20 +262,6 @@ const styles = StyleSheet.create({
   macroValue: { fontSize: 16, fontWeight: '800' },
   macroValueBig: { fontSize: 26, letterSpacing: -0.8 },
   macroLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: T.textMuted },
-
-  mealRow: { flexDirection: 'row', gap: 8 },
-  mealChip: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 11,
-    alignItems: 'center',
-    backgroundColor: T.surface2,
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  mealChipActive: { backgroundColor: T.primaryTint, borderColor: 'rgba(133,211,218,0.45)' },
-  mealChipText: { fontSize: 12.5, fontWeight: '700', color: T.textSecondary },
-  mealChipTextActive: { color: T.primary },
 
   cta: {
     flexDirection: 'row',

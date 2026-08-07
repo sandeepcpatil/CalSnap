@@ -21,6 +21,7 @@ import {
   clampCustomMl,
   formatLogTime,
   formatMl,
+  recommendedWaterMl,
   MAX_CUSTOM_ML,
   MIN_CUSTOM_ML,
 } from '../../utils/water';
@@ -29,6 +30,11 @@ import { T } from '../../theme';
 interface Props {
   navigation: { goBack: () => void };
 }
+
+/** Round litre values offered as one-tap goal presets. */
+const GOAL_PRESETS_ML = [2000, 2500, 3000, 3500, 4000] as const;
+const MIN_GOAL_ML = 1000;
+const MAX_GOAL_ML = 6000;
 
 /**
  * The full hydration screen — reached from "More" in the log hub or the Home
@@ -44,7 +50,25 @@ export function WaterScreen({ navigation }: Props) {
   /** Set when the sheet is opened to (re)define "My bottle" rather than log once. */
   const [savingVessel, setSavingVessel] = useState(false);
 
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [goalText, setGoalText] = useState('');
+
   const myBottleMl = profile?.custom_vessel_ml ?? null;
+  const explicitGoal = profile?.daily_water_ml_goal ?? null;
+  const recommendedMl = recommendedWaterMl(profile?.weight_kg, profile?.activity_level);
+
+  const setGoal = async (ml: number | null) => {
+    setGoalOpen(false);
+    setGoalText('');
+    // null clears the override, so the goal reverts to the weight+activity value.
+    await updateProfile({ daily_water_ml_goal: ml });
+  };
+
+  const submitGoalCustom = async () => {
+    const parsed = Number(goalText);
+    if (!Number.isFinite(parsed) || parsed < MIN_GOAL_ML) return;
+    await setGoal(Math.min(MAX_GOAL_ML, Math.round(parsed)));
+  };
 
   const openCustom = (asVessel: boolean) => {
     setSavingVessel(asVessel);
@@ -86,6 +110,21 @@ export function WaterScreen({ navigation }: Props) {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <WaterRing consumedMl={consumedMl} goalMl={goalMl} size={196} />
+
+        <TouchableOpacity
+          style={styles.goalBtn}
+          onPress={() => { setGoalText(''); setGoalOpen(true); }}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Daily goal ${formatMl(goalMl)}. Tap to change.`}
+        >
+          <Ionicons name="flag-outline" size={15} color={T.primary} />
+          <Text style={styles.goalBtnText}>
+            Daily goal · {formatMl(goalMl)}
+            {explicitGoal ? '' : '  ·  auto'}
+          </Text>
+          <Ionicons name="create-outline" size={16} color={T.textMuted} />
+        </TouchableOpacity>
 
         <Text style={styles.sectionLabel}>Add a drink</Text>
         <View style={styles.vesselRow}>
@@ -228,6 +267,76 @@ export function WaterScreen({ navigation }: Props) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Daily goal */}
+      <Modal visible={goalOpen} transparent animationType="fade" onRequestClose={() => setGoalOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setGoalOpen(false)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Daily water goal</Text>
+            <Text style={styles.modalHint}>
+              Based on your weight and activity, we suggest {formatMl(recommendedMl)}. You also
+              get water from food and tea, so this counts only what you drink.
+            </Text>
+
+            <View style={styles.goalChips}>
+              {/* Auto reverts to the weight + activity recommendation. */}
+              <TouchableOpacity
+                style={[styles.goalChip, explicitGoal === null && styles.goalChipActive]}
+                onPress={() => setGoal(null)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.goalChipText, explicitGoal === null && styles.goalChipTextActive]}>
+                  Auto ({formatMl(recommendedMl)})
+                </Text>
+              </TouchableOpacity>
+
+              {GOAL_PRESETS_ML.map((ml) => {
+                const active = explicitGoal === ml;
+                return (
+                  <TouchableOpacity
+                    key={ml}
+                    style={[styles.goalChip, active && styles.goalChipActive]}
+                    onPress={() => setGoal(ml)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.goalChipText, active && styles.goalChipTextActive]}>{formatMl(ml)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.modalHint}>Or set your own</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                value={goalText}
+                onChangeText={(t) => setGoalText(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                placeholder={String(recommendedMl)}
+                placeholderTextColor={T.textMuted}
+                style={styles.input}
+                maxLength={4}
+                onSubmitEditing={submitGoalCustom}
+                returnKeyType="done"
+              />
+              <Text style={styles.inputUnit}>ml</Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setGoalOpen(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirm, !goalText && styles.modalConfirmDisabled]}
+                onPress={submitGoalCustom}
+                disabled={!goalText}
+              >
+                <Text style={styles.modalConfirmText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -246,6 +355,34 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.2 },
 
   scroll: { paddingHorizontal: 16, paddingTop: 12, gap: 16 },
+
+  goalBtn: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 50,
+    backgroundColor: T.surface2,
+    borderWidth: 1,
+    borderColor: T.border,
+    marginTop: -4,
+  },
+  goalBtnText: { fontSize: 13, fontWeight: '700', color: T.textSecondary },
+
+  goalChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  goalChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 50,
+    backgroundColor: T.surface2,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  goalChipActive: { backgroundColor: T.primary, borderColor: T.primary },
+  goalChipText: { fontSize: 13, fontWeight: '700', color: T.textSecondary },
+  goalChipTextActive: { color: T.textOnPrimary },
 
   sectionLabel: {
     fontSize: 11,

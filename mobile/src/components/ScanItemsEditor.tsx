@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import type { FoodItem } from '../services/api';
 import { fetchRecentFoods } from '../services/recentFoods';
+import { searchFoods, itemFromDbFood, sourceLabel, MIN_FOOD_QUERY, type FoodDbRow } from '../services/foodSearch';
 import { useAuthStore } from '../store/authStore';
 import { UNITS, rescaleItem, gramsFor, stepFor, COMMON_FOODS, itemFromFood } from '../utils/foodItems';
 import { T } from '../theme';
@@ -246,6 +247,8 @@ function AddItemSheet({ visible, onAdd, onDone }: AddItemSheetProps) {
   const { session } = useAuthStore();
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState<FoodItem[] | null>(null);
+  const [dbResults, setDbResults] = useState<FoodDbRow[]>([]);
+  const [dbSearching, setDbSearching] = useState(false);
   /** Name → times added in this session, for the row's "✓ ×2" badge. */
   const [added, setAdded] = useState<Record<string, number>>({});
 
@@ -256,6 +259,7 @@ function AddItemSheet({ visible, onAdd, onDone }: AddItemSheetProps) {
     if (visible) {
       setAdded({});
       setQuery('');
+      setDbResults([]);
     }
   }
 
@@ -278,9 +282,32 @@ function AddItemSheet({ visible, onAdd, onDone }: AddItemSheetProps) {
   }, [visible, recent, session?.user.id]);
 
   const q = query.trim().toLowerCase();
+
+  // Search the shared food database (IFCT + USDA) as the user types. Debounced
+  // so a five-letter word is one query, not five, and guarded against races so
+  // a slow early response can't overwrite a newer one.
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < MIN_FOOD_QUERY) { setDbResults([]); setDbSearching(false); return; }
+    let active = true;
+    setDbSearching(true);
+    const handle = setTimeout(() => {
+      searchFoods(term)
+        .then((rows) => { if (active) setDbResults(rows); })
+        .catch(() => { if (active) setDbResults([]); })
+        .finally(() => { if (active) setDbSearching(false); });
+    }, 280);
+    return () => { active = false; clearTimeout(handle); };
+  }, [query]);
+
   const recentMatches = (recent ?? []).filter((f) => f.name.toLowerCase().includes(q));
   const commonMatches = COMMON_FOODS.filter((f) => f.name.toLowerCase().includes(q));
-  const nothingFound = recentMatches.length === 0 && commonMatches.length === 0;
+  // The DB already covers most common foods, so hide any DB row whose name is
+  // already offered by the (curated, portion-aware) COMMON list above it.
+  const commonNames = new Set(commonMatches.map((f) => f.name.toLowerCase()));
+  const dbMatches = dbResults.filter((r) => !commonNames.has(r.name.toLowerCase()));
+  const nothingFound =
+    recentMatches.length === 0 && commonMatches.length === 0 && dbMatches.length === 0 && !dbSearching;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => onDone(addedTotal)}>
@@ -357,6 +384,38 @@ function AddItemSheet({ visible, onAdd, onDone }: AddItemSheetProps) {
                   </TouchableOpacity>
                 ))}
               </>
+            )}
+
+            {/* ── Food database — IFCT + USDA, searched as you type ── */}
+            {dbMatches.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>FOOD DATABASE</Text>
+                {dbMatches.map((r) => (
+                  <TouchableOpacity
+                    key={`db-${r.id}`}
+                    style={styles.addRow}
+                    onPress={() => handlePick(`db-${r.id}`, itemFromDbFood(r))}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="server-outline" size={16} color={T.textMuted} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName} numberOfLines={1}>{r.name}</Text>
+                      <Text style={styles.rowMeta}>
+                        {Math.round(r.energy_kcal)} kcal / 100 g · {sourceLabel(r.source)}
+                      </Text>
+                    </View>
+                    <AddedBadge count={added[`db-${r.id}`] ?? 0} />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+
+            {/* Searching the DB, and nothing local to show yet. */}
+            {dbSearching && dbMatches.length === 0 && q.length >= MIN_FOOD_QUERY && (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator animating size={14} color={T.primary} />
+                <Text style={styles.rowMeta}>Searching foods…</Text>
+              </View>
             )}
 
             {nothingFound && recent !== null && (

@@ -29,6 +29,14 @@ import {
   groupLogsByDay,
   type ExportRangeKey,
 } from '../../services/export';
+import {
+  bucketize,
+  granularityFor,
+  averageOverLoggedDays,
+  trendPct,
+  trendLabel,
+  type Bucket,
+} from '../../utils/historyStats';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -90,10 +98,14 @@ const RANGE_OPTIONS = [
 ] as const;
 type RangeDays = (typeof RANGE_OPTIONS)[number]['days'];
 
-function buildDays(count: number): DayData[] {
+/**
+ * `count` empty days ending `endOffset` days before today (0 = today).
+ * The offset lets us build the *prior* window for the trend comparison.
+ */
+function buildDays(count: number, endOffset = 0): DayData[] {
   return Array.from({ length: count }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - (count - 1 - i));
+    d.setDate(d.getDate() - endOffset - (count - 1 - i));
     const iso = d.toISOString().slice(0, 10);
     return {
       date: iso,
@@ -167,7 +179,7 @@ function fillDays(days: DayData[], byDay: Record<string, { logs: FoodLog[] }>): 
 export function HistoryScreen() {
   const { session } = useAuthStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
-  const [weekDays, setWeekDays] = useState<DayData[]>(buildLast7());
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [listDays, setListDays] = useState<DayData[]>(buildLast7());
   const [historyRange, setHistoryRange] = useState<RangeDays>(7);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -196,9 +208,9 @@ export function HistoryScreen() {
   const fetchWeekData = useCallback(async () => {
     if (!session?.user.id) return;
 
-    // Fetch enough to cover both the selected range and the 14 days the
-    // week-over-week trend needs.
-    const span = Math.max(historyRange, 14);
+    // Fetch two full ranges: the current window for the chart + list, and the
+    // window before it so the trend can compare like with like.
+    const span = historyRange * 2;
     const from = new Date();
     from.setDate(from.getDate() - (span - 1));
     const startISO = from.toISOString().slice(0, 10) + 'T00:00:00.000Z';
@@ -219,30 +231,17 @@ export function HistoryScreen() {
       byDay[day].logs.push(log);
     });
 
-    const last7 = fillDays(buildLast7(), byDay);
-    setWeekDays(last7);
-    setListDays(fillDays(buildDays(historyRange), byDay));
+    // Current range drives the chart, the average and the daily-logs list.
+    const currentDays = fillDays(buildDays(historyRange), byDay);
+    const priorDays = fillDays(buildDays(historyRange, historyRange), byDay);
 
-    const daysWithData = last7.filter((d) => d.calories > 0);
-    const avg = daysWithData.length > 0
-      ? Math.round(daysWithData.reduce((s, d) => s + d.calories, 0) / daysWithData.length)
-      : 0;
+    setListDays(currentDays);
+    setBuckets(bucketize(currentDays, granularityFor(historyRange), today));
+
+    const avg = averageOverLoggedDays(currentDays);
     setAvgCalories(avg);
-
-    const prev7 = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - 7 - i);
-      return d.toISOString().slice(0, 10);
-    });
-    const prevCals = prev7
-      .map((d) => (byDay[d]?.logs.reduce((s, l) => s + (l.calories || 0), 0)) || 0)
-      .filter((c) => c > 0);
-    const prevAvg = prevCals.length > 0 ? prevCals.reduce((s, c) => s + c, 0) / prevCals.length : 0;
-    if (prevAvg > 0 && avg > 0) {
-      const pct = Math.round(((avg - prevAvg) / prevAvg) * 100);
-      setTrend({ pct: Math.abs(pct), dir: pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral' });
-    }
-  }, [session?.user.id, historyRange]);
+    setTrend(trendPct(avg, averageOverLoggedDays(priorDays)));
+  }, [session?.user.id, historyRange, today]);
 
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
 
@@ -290,7 +289,16 @@ export function HistoryScreen() {
     }
   };
 
-  const maxCals = Math.max(...weekDays.map((d) => d.calories), 1);
+  const maxCals = Math.max(...buckets.map((b) => b.avgKcal), 1);
+  const isDaily = granularityFor(historyRange) === 'day';
+
+  // Month / 90-day are Pro. A free tap becomes an upsell rather than a dead chip.
+  const selectRange = (days: RangeDays) => {
+    if (days !== 7 && !isSubscribed) { showPaywall(); return; }
+    setHistoryRange(days);
+  };
+
+  const rangeNoun = historyRange === 7 ? '7 days' : historyRange === 30 ? '30 days' : '90 days';
 
   // Daily-logs list: free users see the 3 most recent days; Pro sees the whole
   // selected range (weeks show every day, longer ranges show only logged days
@@ -310,14 +318,34 @@ export function HistoryScreen() {
         {/* Header */}
         <View style={styles.headerSection}>
           <Text style={styles.title}>History</Text>
-          <Text style={styles.subtitle}>Your metabolic journey over the last 7 days.</Text>
+          <Text style={styles.subtitle}>Your metabolic journey over the last {rangeNoun}.</Text>
         </View>
 
-        {/* Streak — the most motivating element, so it earns the first screenful.
-            Reads as "here's your consistency → here's your week in detail." */}
+        {/* Streak — the most motivating element, so it earns the first screenful. */}
         {!!session?.user.id && <StreakCard userId={session.user.id} />}
 
-        {/* Weekly Insights Bar Chart */}
+        {/* Range selector — drives the whole analytics block below it. */}
+        <View style={styles.rangeRow}>
+          {RANGE_OPTIONS.map((opt) => {
+            const active = historyRange === opt.days;
+            const locked = opt.days !== 7 && !isSubscribed;
+            return (
+              <TouchableOpacity
+                key={opt.days}
+                style={[styles.rangeChip, active && styles.rangeChipActive]}
+                onPress={() => selectRange(opt.days)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                {locked && <Ionicons name="lock-closed" size={11} color={active ? T.textOnPrimary : C.outline} />}
+                <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Consumption chart — bars re-bucket by range: daily / weekly / monthly. */}
         <View style={styles.chartCard}>
           <View style={styles.chartTopRow}>
             <View style={{ gap: 4 }}>
@@ -330,7 +358,7 @@ export function HistoryScreen() {
               </View>
             </View>
             <View style={styles.chartTrendBlock}>
-              <Text style={styles.chartTrendLabel}>Week Trend</Text>
+              <Text style={styles.chartTrendLabel}>{trendLabel(historyRange)}</Text>
               {trend.pct > 0 ? (
                 <Text style={[styles.chartTrendValue, { color: trend.dir === 'up' ? C.error : T.mealSnack }]}>
                   {trend.dir === 'up' ? '+' : '-'}{trend.pct}% {trend.dir === 'up' ? 'up' : 'down'}
@@ -341,16 +369,22 @@ export function HistoryScreen() {
             </View>
           </View>
 
+          {/* Caption clarifies what one bar means when it isn't a single day. */}
+          {!isDaily && (
+            <Text style={styles.chartBarNote}>
+              Each bar is the average day of that {historyRange === 30 ? 'week' : 'month'}.
+            </Text>
+          )}
+
           <View style={styles.barChart}>
-            {weekDays.map((day) => {
-              const isToday = day.date === today;
-              const barH = day.calories > 0
-                ? Math.max(Math.round((day.calories / maxCals) * CHART_BAR_HEIGHT), 6)
+            {buckets.map((b) => {
+              const barH = b.avgKcal > 0
+                ? Math.max(Math.round((b.avgKcal / maxCals) * CHART_BAR_HEIGHT), 6)
                 : 0;
 
               return (
-                <View key={day.date} style={styles.barCol}>
-                  {isToday ? (
+                <View key={b.key} style={styles.barCol}>
+                  {isDaily && b.isCurrent ? (
                     <View style={styles.todayPill}>
                       <Text style={styles.todayPillText}>TODAY</Text>
                     </View>
@@ -358,7 +392,7 @@ export function HistoryScreen() {
                     <View style={styles.todayPillPlaceholder} />
                   )}
 
-                  <View style={[styles.barTrack, isToday && styles.barTrackToday, !day.calories && { opacity: 0.3 }]}>
+                  <View style={[styles.barTrack, b.isCurrent && styles.barTrackToday, !b.avgKcal && { opacity: 0.3 }]}>
                     {barH > 0 && (
                       <LinearGradient
                         colors={[T.primaryDeep, T.primary]}
@@ -369,12 +403,15 @@ export function HistoryScreen() {
                     )}
                   </View>
 
-                  <Text style={[
-                    styles.barLabel,
-                    isToday && { color: C.secondaryCont, fontWeight: '700' },
-                    !day.calories && { color: C.outlineVar },
-                  ]}>
-                    {day.dow}
+                  <Text
+                    style={[
+                      styles.barLabel,
+                      b.isCurrent && { color: C.secondaryCont, fontWeight: '700' },
+                      !b.avgKcal && { color: C.outlineVar },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {b.label}
                   </Text>
                 </View>
               );
@@ -398,25 +435,6 @@ export function HistoryScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Range selector — Pro only */}
-          {isSubscribed && (
-            <View style={styles.rangeRow}>
-              {RANGE_OPTIONS.map((opt) => {
-                const active = historyRange === opt.days;
-                return (
-                  <TouchableOpacity
-                    key={opt.days}
-                    style={[styles.rangeChip, active && styles.rangeChipActive]}
-                    onPress={() => setHistoryRange(opt.days)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
 
           {isSubscribed && historyRange !== 7 && (
             <Text style={styles.rangeCaption}>
@@ -638,7 +656,8 @@ const styles = StyleSheet.create({
     borderColor: T.border,
   },
   barFill:  { width: '100%', borderRadius: 8 },
-  barLabel: { fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 0.5 },
+  barLabel: { fontSize: 10.5, fontWeight: '700', color: C.outline, letterSpacing: 0.3 },
+  chartBarNote: { fontSize: 11.5, fontWeight: '500', color: C.onSurfaceVar, marginTop: -8 },
 
   logsSection:  { gap: 12, paddingHorizontal: 20 },
   sectionHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -649,15 +668,19 @@ const styles = StyleSheet.create({
   rangeRow: {
     flexDirection: 'row',
     gap: 8,
+    marginHorizontal: 20,
     backgroundColor: T.divider,
     borderRadius: 12,
     padding: 4,
   },
   rangeChip: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 4,
     paddingVertical: 8,
     borderRadius: 9,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   rangeChipActive: { backgroundColor: T.primaryTint },
   rangeChipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: C.outline },

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { fetchLoggableFoods, type LoggableFood } from '../../services/recentFood
 import { logFoodItems, type MealType } from '../../services/foodLogs';
 import { getMealTypeFromTime } from '../../utils/nutrition';
 import { PortionSheet } from '../../components/PortionSheet';
+import { MealTypePicker } from '../../components/MealTypePicker';
 import { fetchSavedMeals, touchSavedMeal, type SavedMeal } from '../../services/savedMeals';
 import { sumItems } from '../../utils/foodItems';
 import type { FoodItem } from '../../services/api';
@@ -40,11 +41,12 @@ function relativeDay(iso: string): string {
 }
 
 /**
- * Re-log something you've eaten before.
+ * Re-log foods you've eaten before, or log a saved meal.
  *
- * This is the fastest path in the app: one tap, no camera, no AI call — and
- * critically no scan quota, because the nutrition is already known. For anyone
- * eating the same dal and rice most nights this beats photographing it.
+ * Nothing logs on the first tap. Picks land in a cart, where you set the
+ * portions, remove mistakes and choose the meal (breakfast / lunch / …) once
+ * for the whole thing — then log it in one go. No camera, no AI, no scan quota,
+ * because the nutrition is already known.
  */
 export function FromHistoryScreen({ navigation }: Props) {
   const { session } = useAuthStore();
@@ -54,12 +56,18 @@ export function FromHistoryScreen({ navigation }: Props) {
   const [frequent, setFrequent] = useState<LoggableFood[]>([]);
   const [recent, setRecent] = useState<LoggableFood[]>([]);
   const [query, setQuery] = useState('');
-  const [busyName, setBusyName] = useState<string | null>(null);
-  const [sheetItem, setSheetItem] = useState<FoodItem | null>(null);
   const [tab, setTab] = useState<Tab>('foods');
   const [meals, setMeals] = useState<SavedMeal[]>([]);
   /** Bumped to force a reload after the meal builder saves something. */
   const [reloadKey, setReloadKey] = useState(0);
+
+  // ── The cart — the review step before anything is logged ──────────────────
+  const [cart, setCart] = useState<FoodItem[]>([]);
+  const [cartMeal, setCartMeal] = useState<MealType>(getMealTypeFromTime());
+  const [cartOpen, setCartOpen] = useState(false);
+  /** Index of the cart item being re-portioned, or null. */
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [logging, setLogging] = useState(false);
 
   const userId = session?.user.id;
 
@@ -93,55 +101,40 @@ export function FromHistoryScreen({ navigation }: Props) {
   // back into focus.
   useEffect(() => navigation.addListener('focus', () => setReloadKey((k) => k + 1)), [navigation]);
 
-  const commitLog = useCallback(
-    async (item: FoodItem, mealType: MealType) => {
-      if (!userId) return;
-      setBusyName(item.name);
-      try {
-        const rows = await logFoodItems({
-          userId,
-          items: [item],
-          mealType,
-          source: { origin: 're-log', edited: true },
-        });
-        rows.forEach(addLog);
-        useNotificationStore.getState().refreshStreakReminder(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setSheetItem(null);
-        navigation.goBack();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not log that. Please try again.');
-      } finally {
-        setBusyName(null);
-      }
-    },
-    [userId, addLog, navigation],
-  );
+  const addToCart = useCallback((items: FoodItem | FoodItem[]) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCart((prev) => [...prev, ...(Array.isArray(items) ? items : [items])]);
+  }, []);
 
-  const logSavedMeal = useCallback(
-    async (meal: SavedMeal) => {
-      if (!userId) return;
-      setBusyName(meal.id);
-      try {
-        const rows = await logFoodItems({
-          userId,
-          items: meal.items,
-          mealType: getMealTypeFromTime(),
-          source: { origin: 'saved-meal', saved_meal_name: meal.name },
-        });
-        rows.forEach(addLog);
-        touchSavedMeal(meal.id);
-        useNotificationStore.getState().refreshStreakReminder(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        navigation.goBack();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not log that. Please try again.');
-      } finally {
-        setBusyName(null);
-      }
-    },
-    [userId, addLog, navigation],
-  );
+  const removeFromCart = useCallback((index: number) => {
+    setCart((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Saved meals track their real usage for the "log this often" ranking. We
+  // remember which ones fed the cart so `last_used_at` is only bumped on an
+  // actual log, not on adding-then-cancelling.
+  const [pendingMealIds, setPendingMealIds] = useState<string[]>([]);
+
+  const logCart = useCallback(async () => {
+    if (!userId || cart.length === 0) return;
+    setLogging(true);
+    try {
+      const rows = await logFoodItems({
+        userId,
+        items: cart,
+        mealType: cartMeal,
+        source: { origin: 're-log' },
+      });
+      rows.forEach(addLog);
+      pendingMealIds.forEach(touchSavedMeal);
+      useNotificationStore.getState().refreshStreakReminder(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not log that. Please try again.');
+      setLogging(false);
+    }
+  }, [userId, cart, cartMeal, pendingMealIds, addLog, navigation]);
 
   // Searching collapses the two sections into one flat result list — a split
   // between "frequent" and "recent" is noise once you've typed a name.
@@ -154,69 +147,53 @@ export function FromHistoryScreen({ navigation }: Props) {
     () => (q ? meals.filter((m) => m.name.toLowerCase().includes(q)) : meals),
     [q, meals],
   );
+  const cartTotals = useMemo(() => sumItems(cart), [cart]);
 
   const renderRow = (food: LoggableFood, subtitle: string) => (
     <TouchableOpacity
       key={food.item.name}
       style={styles.row}
-      onPress={() => setSheetItem(food.item)}
+      onPress={() => addToCart(food.item)}
       activeOpacity={0.8}
       accessibilityRole="button"
-      accessibilityLabel={`${food.item.name}. Tap to adjust the portion before logging.`}
+      accessibilityLabel={`Add ${food.item.name} to your meal`}
     >
       <View style={styles.rowText}>
         <Text style={styles.rowName} numberOfLines={1}>{food.item.name}</Text>
         <Text style={styles.rowSub}>{food.item.calories} kcal · {subtitle}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.addBtn}
-        onPress={() => commitLog(food.item, getMealTypeFromTime())}
-        disabled={busyName === food.item.name}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityRole="button"
-        accessibilityLabel={`Log ${food.item.name} now`}
-      >
-        {busyName === food.item.name ? (
-          <ActivityIndicator size={14} color={T.textOnPrimary} />
-        ) : (
-          <Ionicons name="add" size={20} color={T.textOnPrimary} />
-        )}
-      </TouchableOpacity>
+      <View style={styles.addBtn}>
+        <Ionicons name="add" size={20} color={T.textOnPrimary} />
+      </View>
     </TouchableOpacity>
   );
 
   const renderMealRow = (meal: SavedMeal) => {
     const totals = sumItems(meal.items);
     return (
-      <TouchableOpacity
-        key={meal.id}
-        style={styles.row}
-        onPress={() => navigation.navigate('CreateMeal', { meal })}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel={`${meal.name}. Tap to edit this meal.`}
-      >
-        <View style={styles.rowText}>
+      <View key={meal.id} style={styles.row}>
+        <TouchableOpacity
+          style={styles.rowText}
+          onPress={() => navigation.navigate('CreateMeal', { meal })}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit the meal ${meal.name}`}
+        >
           <Text style={styles.rowName} numberOfLines={1}>{meal.name}</Text>
           <Text style={styles.rowSub} numberOfLines={1}>
             {totals.calories} kcal · {meal.items.map((i) => i.name).join(' · ')}
           </Text>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => logSavedMeal(meal)}
-          disabled={busyName === meal.id}
+          onPress={() => { addToCart(meal.items); setPendingMealIds((p) => [...p, meal.id]); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
-          accessibilityLabel={`Log ${meal.name} now`}
+          accessibilityLabel={`Add ${meal.name} to your meal`}
         >
-          {busyName === meal.id ? (
-            <ActivityIndicator size={14} color={T.textOnPrimary} />
-          ) : (
-            <Ionicons name="add" size={20} color={T.textOnPrimary} />
-          )}
+          <Ionicons name="add" size={20} color={T.textOnPrimary} />
         </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -364,16 +341,108 @@ export function FromHistoryScreen({ navigation }: Props) {
               {tab === 'meals' ? 'Saved meals never use a scan.' : 'Re-logging never uses a scan.'}
             </Text>
           </View>
+
+          {/* Room so the last row isn't hidden behind the cart bar. */}
+          {cart.length > 0 && <View style={{ height: 76 }} />}
         </ScrollView>
       )}
 
+      {/* ── Cart bar — tap to review before logging ── */}
+      {cart.length > 0 && !cartOpen && (
+        <TouchableOpacity
+          style={styles.cartBar}
+          onPress={() => setCartOpen(true)}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`Review your meal, ${cart.length} items, ${cartTotals.calories} kcal`}
+        >
+          <View style={styles.cartBarBadge}>
+            <Text style={styles.cartBarBadgeText}>{cart.length}</Text>
+          </View>
+          <Text style={styles.cartBarText}>
+            {cart.length} item{cart.length === 1 ? '' : 's'} · {cartTotals.calories} kcal
+          </Text>
+          <Text style={styles.cartBarCta}>Review</Text>
+          <Ionicons name="chevron-up" size={18} color={T.textOnPrimary} />
+        </TouchableOpacity>
+      )}
+
+      {/* ── Cart panel — the review/edit/log step (plain overlay, so the
+            PortionSheet modal can still open above it) ── */}
+      {cartOpen && (
+        <View style={styles.cartScrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCartOpen(false)} />
+          <SafeAreaView edges={['bottom']} style={styles.cartPanel}>
+            <View style={styles.cartGrab} />
+            <View style={styles.cartHead}>
+              <Text style={styles.cartTitle}>Your meal</Text>
+              <TouchableOpacity onPress={() => setCartOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="chevron-down" size={22} color={T.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.cartLabel}>Add to</Text>
+            <MealTypePicker value={cartMeal} onChange={setCartMeal} />
+
+            <ScrollView style={styles.cartList} keyboardShouldPersistTaps="handled">
+              {cart.map((it, i) => (
+                <View key={`${it.name}-${i}`} style={styles.cartItem}>
+                  <TouchableOpacity
+                    style={styles.cartItemMain}
+                    onPress={() => setEditIndex(i)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${it.name}, ${it.quantity} ${it.unit}`}
+                  >
+                    <Text style={styles.cartItemName} numberOfLines={1}>{it.name}</Text>
+                    <Text style={styles.cartItemMeta}>
+                      {it.quantity} {it.unit} · {it.calories} kcal
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => removeFromCart(i)}
+                    style={styles.cartRemove}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${it.name}`}
+                  >
+                    <Ionicons name="close" size={18} color={T.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.logBtn, logging && styles.logBtnDisabled]}
+              onPress={logCart}
+              disabled={logging}
+              activeOpacity={0.88}
+            >
+              {logging ? (
+                <ActivityIndicator size={16} color={T.textOnPrimary} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={18} color={T.textOnPrimary} />
+                  <Text style={styles.logBtnText}>
+                    Log {cart.length} item{cart.length === 1 ? '' : 's'} · {cartTotals.calories} kcal
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {/* Re-portion a cart item. Renders above the cart panel. */}
       <PortionSheet
-        visible={sheetItem !== null}
-        item={sheetItem}
-        defaultMeal={getMealTypeFromTime()}
-        busy={busyName !== null}
-        onCancel={() => setSheetItem(null)}
-        onConfirm={commitLog}
+        visible={editIndex !== null}
+        item={editIndex !== null ? cart[editIndex] : null}
+        confirmLabel="Update"
+        onCancel={() => setEditIndex(null)}
+        onConfirm={(item) => {
+          setCart((prev) => prev.map((it, i) => (i === editIndex ? item : it)));
+          setEditIndex(null);
+        }}
       />
     </SafeAreaView>
   );
@@ -497,4 +566,88 @@ const styles = StyleSheet.create({
 
   note: { flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center', marginTop: 8 },
   noteText: { fontSize: 12, fontWeight: '600', color: T.textMuted },
+
+  /* Cart bar */
+  cartBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 54,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: T.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  cartBarBadge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,54,58,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBarBadgeText: { fontSize: 13, fontWeight: '800', color: T.textOnPrimary },
+  cartBarText: { flex: 1, fontSize: 14.5, fontWeight: '800', color: T.textOnPrimary },
+  cartBarCta: { fontSize: 14, fontWeight: '800', color: T.textOnPrimary, opacity: 0.9 },
+
+  /* Cart panel */
+  cartScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: T.overlay, justifyContent: 'flex-end', zIndex: 20 },
+  cartPanel: {
+    backgroundColor: T.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 10,
+    maxHeight: '80%',
+  },
+  cartGrab: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.surfaceOffset, marginBottom: 4 },
+  cartHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cartTitle: { fontSize: 18, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
+  cartLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: T.textMuted,
+    marginTop: 2,
+  },
+  cartList: { marginTop: 4 },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: T.divider,
+  },
+  cartItemMain: { flex: 1, gap: 2 },
+  cartItemName: { fontSize: 14.5, fontWeight: '700', color: T.textPrimary },
+  cartItemMeta: { fontSize: 12, fontWeight: '600', color: T.textMuted },
+  cartRemove: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+
+  logBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 52,
+    borderRadius: 15,
+    backgroundColor: T.primary,
+    marginTop: 4,
+  },
+  logBtnDisabled: { opacity: 0.6 },
+  logBtnText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.2 },
 });
