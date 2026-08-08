@@ -48,6 +48,9 @@ const MACRO_GDA: Record<string, number> = {
   Carbs:   260,
   Fat:     78,
   Fiber:   25,
+  Sugar:   50,
+  'Sat Fat': 20,
+  Sodium:  2300, // mg
 };
 
 const MACRO_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -55,9 +58,12 @@ const MACRO_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Carbs:   'restaurant-outline',
   Fat:     'water-outline',
   Fiber:   'leaf-outline',
+  Sugar:   'cube-outline',
+  'Sat Fat': 'flame-outline',
+  Sodium:  'egg-outline',
 };
 
-function NutrientRow({ label, value, color }: { label: string; value: number; color: string }) {
+function NutrientRow({ label, value, color, unit = 'g' }: { label: string; value: number; color: string; unit?: string }) {
   const { theme } = useTheme();
   const gdaPct = Math.round((value / (MACRO_GDA[label] ?? 100)) * 100);
   // Natural reading order: icon → name → amount → share of daily intake.
@@ -68,7 +74,7 @@ function NutrientRow({ label, value, color }: { label: string; value: number; co
       </View>
       <Text style={[rowStyles.macroLabel, { color: theme.textPrimary }]}>{label}</Text>
       <Text style={[rowStyles.amount, { color: theme.textPrimary }]}>
-        {Math.round(value)}<Text style={[rowStyles.unit, { color: theme.textSecondary }]}>g</Text>
+        {Math.round(value)}<Text style={[rowStyles.unit, { color: theme.textSecondary }]}>{unit}</Text>
       </Text>
       <Text style={[rowStyles.gdaLabel, { color: theme.textMuted }]}>{gdaPct}% GDA</Text>
     </View>
@@ -128,6 +134,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
           carbs_g: result.carbs_g,
           fat_g: result.fat_g,
           fiber_g: result.fiber_g,
+          sodium_mg: result.sodium_mg ?? 0,
+          sugar_g: result.sugar_g ?? 0,
+          sat_fat_g: result.sat_fat_g ?? 0,
         }],
   );
 
@@ -168,7 +177,10 @@ export function ScanResultScreen({ navigation, route }: Props) {
 
       // Logged today — push tonight's streak nudge to tomorrow so it only ever
       // fires on days the user actually hasn't logged.
-      useNotificationStore.getState().refreshStreakReminder(true);
+      const notif = useNotificationStore.getState();
+      void notif.refreshStreakReminder(true);
+      // First log ever → offer to turn on reminders (self-gates to once).
+      void notif.promptForRemindersOnce();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Pop the whole Scan stack off the root navigator and land on Home, so
@@ -271,6 +283,9 @@ export function ScanResultScreen({ navigation, route }: Props) {
               <NutrientRow label="Carbs"   value={totals.carbs_g}   color={theme.carbs} />
               <NutrientRow label="Fat"     value={totals.fat_g}     color={theme.fat} />
               <NutrientRow label="Fiber"   value={totals.fiber_g}   color={theme.fiber} />
+              <NutrientRow label="Sugar"   value={totals.sugar_g}   color={theme.carbs} />
+              <NutrientRow label="Sat Fat" value={totals.sat_fat_g} color={theme.fat} />
+              <NutrientRow label="Sodium"  value={totals.sodium_mg} color={theme.warning} unit="mg" />
             </View>
           </ProGate>
         </View>

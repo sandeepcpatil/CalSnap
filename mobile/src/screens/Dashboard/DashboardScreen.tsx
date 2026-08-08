@@ -30,6 +30,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { useConfirmExit } from '../../hooks/useConfirmExit';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useRecapStore } from '../../store/recapStore';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
@@ -67,6 +68,14 @@ export function DashboardScreen() {
   // Home is the root of the back stack, so a single stray press would otherwise
   // close the app outright.
   useConfirmExit();
+
+  // Pull the weekly recap once so the bell can flag an unread review. The server
+  // generates it at most once a week, so this is a cheap cached read after that.
+  const recapUnread = useRecapStore((s) => (s.recap ? s.recap.week_start !== s.seenWeek : false));
+  const fetchRecap = useRecapStore((s) => s.fetch);
+  useEffect(() => {
+    if (session?.access_token) fetchRecap(session.access_token);
+  }, [session?.access_token, fetchRecap]);
 
   const loadLogs = useCallback(() => {
     if (session?.user.id) {
@@ -166,9 +175,9 @@ export function DashboardScreen() {
               accessibilityLabel="Open alerts"
             >
               <Ionicons name="notifications-outline" size={22} color={C.onSurfaceVar} />
-              {alerts.length > 0 && (
+              {alerts.length + (recapUnread ? 1 : 0) > 0 && (
                 <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>{alerts.length}</Text>
+                  <Text style={styles.bellBadgeText}>{alerts.length + (recapUnread ? 1 : 0)}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -201,6 +210,29 @@ export function DashboardScreen() {
         {/* ── Water ── high on the page on purpose: it's logged more often than
             meals, and burying it behind the hub would be too slow. ── */}
         <WaterCard onOpen={() => rootNavigation?.navigate('Water')} />
+
+        {/* ── Nutrition Coach (beta) ── hidden unless profiles.chat_beta is on. */}
+        {profile?.chat_beta && (
+          <TouchableOpacity
+            style={styles.coachCard}
+            onPress={() => rootNavigation?.navigate('Coach')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Open your nutrition coach"
+          >
+            <View style={styles.coachIcon}>
+              <Ionicons name="chatbubbles" size={19} color={C.primary} />
+            </View>
+            <View style={styles.coachText}>
+              <View style={styles.coachTitleRow}>
+                <Text style={styles.coachTitle}>Ask your coach</Text>
+                <View style={styles.coachBeta}><Text style={styles.coachBetaText}>BETA</Text></View>
+              </View>
+              <Text style={styles.coachSub}>Questions about your food, answered from your logs</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={17} color={C.outline} />
+          </TouchableOpacity>
+        )}
 
         {/* ── Macro Targets Card (Pro) ── */}
         <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macro Breakdown" borderRadius={20}>
@@ -245,7 +277,7 @@ export function DashboardScreen() {
       </ScrollView>
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
-      <AlertsModal visible={alertsOpen} onClose={() => setAlertsOpen(false)} alerts={alerts} />
+      <AlertsModal visible={alertsOpen} onClose={() => setAlertsOpen(false)} alerts={alerts} onUpgrade={showPaywall} />
     </View>
   );
 }
@@ -351,6 +383,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+
+  /* Coach entry card */
+  coachCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: C.insightBg,
+    borderWidth: 1,
+    borderColor: 'rgba(133,211,218,0.30)',
+  },
+  coachIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(1,105,111,0.35)',
+  },
+  coachText: { flex: 1, gap: 2 },
+  coachTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  coachTitle: { fontSize: 15, fontWeight: '800', color: C.onSurface },
+  coachBeta: { paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5, backgroundColor: 'rgba(133,211,218,0.22)' },
+  coachBetaText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6, color: C.primary },
+  coachSub: { fontSize: 12, fontWeight: '600', color: C.outline },
 
   /* Section header */
   sectionHeader: {

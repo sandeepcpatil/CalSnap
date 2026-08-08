@@ -22,6 +22,10 @@ export interface FoodItem {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /** Sodium in milligrams. Real from the foods table / label; estimated for photos. */
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   /** Where the macros came from: the `foods` table or the model's estimate. */
   source?: 'database' | 'ai';
   /** Canonical name matched in the foods table, when source is 'database'. */
@@ -42,6 +46,9 @@ export interface CalorieBreakdown {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   /**
    * Total estimated weight of the food in grams. Surfaced in the UI so the
    * user can sanity-check the assumption behind the numbers — portion size is

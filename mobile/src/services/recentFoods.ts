@@ -23,6 +23,9 @@ interface LogRow {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   raw_ai_response: unknown;
   logged_at: string;
 }
@@ -40,7 +43,7 @@ export async function fetchRecentFoods(userId: string, limit = 25): Promise<Food
   // daily would otherwise fill the list with one food.
   const { data, error } = await supabase
     .from('food_logs')
-    .select('food_name, calories, protein_g, carbs_g, fat_g, fiber_g, raw_ai_response, logged_at')
+    .select('food_name, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg, sugar_g, sat_fat_g, raw_ai_response, logged_at')
     .eq('user_id', userId)
     .order('logged_at', { ascending: false })
     .limit(150);
@@ -73,6 +76,9 @@ export async function fetchRecentFoods(userId: string, limit = 25): Promise<Food
       carbs_g: num(row.carbs_g),
       fat_g: num(row.fat_g),
       fiber_g: num(row.fiber_g),
+      sodium_mg: num(row.sodium_mg),
+      sugar_g: num(row.sugar_g),
+      sat_fat_g: num(row.sat_fat_g),
     });
 
     if (out.length >= limit) break;
@@ -114,7 +120,7 @@ export async function fetchLoggableFoods(userId: string): Promise<LoggableFoods>
 
   const { data, error } = await supabase
     .from('food_logs')
-    .select('food_name, calories, protein_g, carbs_g, fat_g, fiber_g, raw_ai_response, logged_at')
+    .select('food_name, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg, sugar_g, sat_fat_g, raw_ai_response, logged_at')
     .eq('user_id', userId)
     .gte('logged_at', since)
     .order('logged_at', { ascending: false })
@@ -157,6 +163,9 @@ export async function fetchLoggableFoods(userId: string): Promise<LoggableFoods>
         carbs_g: num(row.carbs_g),
         fat_g: num(row.fat_g),
         fiber_g: num(row.fiber_g),
+        sodium_mg: num(row.sodium_mg),
+        sugar_g: num(row.sugar_g),
+        sat_fat_g: num(row.sat_fat_g),
       },
     });
   }

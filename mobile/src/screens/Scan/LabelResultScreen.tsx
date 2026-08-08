@@ -116,6 +116,10 @@ export function LabelResultScreen({ navigation, route }: Props) {
           carbs_g: Math.round(per_100g.carbs_g * factor * 10) / 10,
           fat_g: Math.round(per_100g.total_fat_g * factor * 10) / 10,
           fiber_g: Math.round(per_100g.fiber_g * factor * 10) / 10,
+          // Real values off the label / barcode — no estimation needed here.
+          sugar_g: Math.round(per_100g.sugar_g * factor * 10) / 10,
+          sat_fat_g: Math.round(per_100g.sat_fat_g * factor * 10) / 10,
+          sodium_mg: Math.round(per_100g.sodium_mg * factor),
           meal_type: getMealTypeFromTime(),
           raw_ai_response: result,
           logged_at: new Date().toISOString(),
@@ -167,7 +171,13 @@ export function LabelResultScreen({ navigation, route }: Props) {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Product row */}
         <View style={styles.productRow}>
-          <Image source={{ uri: imageUri }} style={styles.productImg} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.productImg} />
+          ) : (
+            <View style={[styles.productImg, styles.productImgFallback]}>
+              <Ionicons name="fast-food-outline" size={26} color={T.textMuted} />
+            </View>
+          )}
           <View style={styles.productInfo}>
             <Text style={styles.productName} numberOfLines={2}>{result.product_name}</Text>
             {!!result.brand && <Text style={styles.productBrand}>{result.brand}</Text>}
@@ -295,6 +305,7 @@ const styles = StyleSheet.create({
 
   productRow: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   productImg: { width: 72, height: 72, borderRadius: 14, backgroundColor: C.glass },
+  productImgFallback: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },
   productInfo: { flex: 1, gap: 3 },
   productName: { fontSize: 18, fontWeight: '800', color: C.onSurface, lineHeight: 23 },
   productBrand: { fontSize: 13, color: C.onSurfaceVar, fontWeight: '600' },

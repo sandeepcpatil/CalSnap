@@ -7,6 +7,8 @@ import { AuthScreen } from '../screens/Auth/AuthScreen';
 import { OnboardingNavigator } from './OnboardingNavigator';
 import { AppLoading } from '../components/AppLoading';
 import { WaterScreen } from '../screens/Water/WaterScreen';
+import { WeightScreen } from '../screens/Weight/WeightScreen';
+import { CoachScreen } from '../screens/Coach/CoachScreen';
 import { LogNavigator } from './LogNavigator';
 import { ScanNavigator, type ScanMode } from './ScanNavigator';
 
@@ -22,9 +24,12 @@ export type RootStackParamList = {
   Scan: { mode: ScanMode };
   /** Full hydration screen — pushed over the tabs from the log hub or Home. */
   Water: undefined;
+  /** Weight history, trend and goal — pushed from Profile. */
+  Weight: undefined;
+  /** AI nutrition coach (beta) — gated on profiles.chat_beta. */
+  Coach: undefined;
   /** Re-log a past food, or build and log a saved meal. */
   LogFromHistory: undefined;
-
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -99,6 +104,8 @@ export function RootNavigator() {
             options={{ animation: 'slide_from_bottom' }}
           />
           <Stack.Screen name="Water" component={WaterScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Weight" component={WeightScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Coach" component={CoachScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen
             name="LogFromHistory"
             component={LogNavigator}

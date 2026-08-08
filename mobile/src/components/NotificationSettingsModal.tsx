@@ -45,8 +45,12 @@ interface Props {
 }
 
 export function NotificationSettingsModal({ visible, onDismiss }: Props) {
-  const { reminders, toggleReminder, setReminderTime, streakReminderEnabled, toggleStreakReminder } =
-    useNotificationStore();
+  const {
+    reminders, toggleReminder, setReminderTime,
+    streakReminderEnabled, toggleStreakReminder,
+    waterReminderEnabled, toggleWaterReminder,
+    weighInReminderEnabled, toggleWeighInReminder,
+  } = useNotificationStore();
 
   const handleToggle = async (mealType: MealType) => {
     const result = await toggleReminder(mealType);
@@ -66,13 +70,13 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
     }
   };
 
-  const handleStreakToggle = async () => {
-    const result = await toggleStreakReminder();
+  const handleTogglePreset = async (toggle: () => Promise<{ ok: boolean; reason?: string }>, what: string) => {
+    const result = await toggle();
     if (result.ok) return;
     if (result.reason === 'permission_denied') {
       Alert.alert(
         'Notifications are turned off',
-        'To get streak reminders, allow notifications for CalSnap in your device settings.',
+        `To get ${what}, allow notifications for CalSnap in your device settings.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -82,6 +86,9 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
       Alert.alert('Could not update', 'Something went wrong. Please try again.');
     }
   };
+  const handleStreakToggle = () => handleTogglePreset(toggleStreakReminder, 'streak reminders');
+  const handleWaterToggle = () => handleTogglePreset(toggleWaterReminder, 'water reminders');
+  const handleWeighInToggle = () => handleTogglePreset(toggleWeighInReminder, 'weigh-in reminders');
 
   const adjustHour   = (mealType: MealType, delta: number) => {
     const r = reminders[mealType];
@@ -117,7 +124,8 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.hint}>
-            Set daily reminders for each meal. CalSnap will notify you so you never forget to log.
+            Gentle nudges so you never forget to log. Meal reminders skip a meal you've already
+            logged, and water reminders stop once you hit your goal for the day.
           </Text>
 
           {/* Streak nudge — on by default, but switchable so nobody has to
@@ -138,6 +146,48 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
                 onValueChange={handleStreakToggle}
                 trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
                 thumbColor={streakReminderEnabled ? C.primary : C.outline}
+              />
+            </View>
+          </View>
+
+          {/* Water — paced through the day, stops once the goal is met. */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.mealIcon, { backgroundColor: T.primary + '22' }]}>
+                <Ionicons name="water-outline" size={20} color={T.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mealLabel}>Water reminder</Text>
+                <Text style={styles.streakSub}>
+                  A few nudges a day, only until you hit your goal
+                </Text>
+              </View>
+              <Switch
+                value={waterReminderEnabled}
+                onValueChange={handleWaterToggle}
+                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
+                thumbColor={waterReminderEnabled ? C.primary : C.outline}
+              />
+            </View>
+          </View>
+
+          {/* Weekly weigh-in — anchored to your last weigh-in. */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.mealIcon, { backgroundColor: T.protein + '22' }]}>
+                <Ionicons name="scale-outline" size={20} color={T.protein} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mealLabel}>Weigh-in reminder</Text>
+                <Text style={styles.streakSub}>
+                  Weekly nudge, skipped the week you've already weighed in
+                </Text>
+              </View>
+              <Switch
+                value={weighInReminderEnabled}
+                onValueChange={handleWeighInToggle}
+                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
+                thumbColor={weighInReminderEnabled ? C.primary : C.outline}
               />
             </View>
           </View>

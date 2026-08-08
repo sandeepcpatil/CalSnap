@@ -22,6 +22,10 @@ export interface Profile {
   daily_water_ml_goal: number | null;
   /** The user's own reusable bottle, saved once and offered as a one-tap vessel. */
   custom_vessel_ml: number | null;
+  /** Optional goal weight, so weight tracking can show an ETA. */
+  target_weight_kg: number | null;
+  /** Beta access to the AI nutrition coach. */
+  chat_beta: boolean;
   scan_count: number;
   daily_scan_count: number;
   daily_scan_reset_at: string;

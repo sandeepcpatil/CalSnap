@@ -17,6 +17,9 @@ export interface FoodDbRow {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sugar_g: number;
+  sat_fat_g: number;
+  sodium_mg: number;
 }
 
 /** Below two characters the ranked search is noise, so we don't call it. */
@@ -49,6 +52,9 @@ export async function searchFoods(query: string, limit = 20): Promise<FoodDbRow[
     carbs_g: num(r.carbs_g),
     fat_g: num(r.fat_g),
     fiber_g: num(r.fiber_g),
+    sugar_g: num(r.sugar_g),
+    sat_fat_g: num(r.sat_fat_g),
+    sodium_mg: num(r.sodium_mg),
   }));
 }
 
@@ -69,6 +75,9 @@ export function itemFromDbFood(row: FoodDbRow): FoodItem {
       c: row.carbs_g,
       f: row.fat_g,
       fib: row.fiber_g,
+      sug: row.sugar_g,
+      sat: row.sat_fat_g,
+      na: row.sodium_mg,
     },
     quantity,
     unit,

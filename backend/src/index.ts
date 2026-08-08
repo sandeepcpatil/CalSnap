@@ -11,6 +11,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import analyzeRouter from './routes/analyze';
+import barcodeRouter from './routes/barcode';
+import recapRouter from './routes/recap';
+import chatRouter from './routes/chat';
 import subscriptionRouter from './routes/subscription';
 import adminRouter from './routes/admin';
 import contentRouter from './routes/content';
@@ -49,6 +52,9 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.use('/api', analyzeRouter);
+app.use('/api', barcodeRouter);
+app.use('/api', recapRouter);
+app.use('/api', chatRouter);
 app.use('/api', contentRouter);
 app.use('/api/subscription', subscriptionRouter);
 app.use('/api/admin', adminRouter);

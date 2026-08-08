@@ -252,3 +252,8 @@ $$;
 --
 --   001_water_logs.sql — water_logs table + profiles hydration columns
 --   002_saved_meals.sql — saved_meals table (named, re-loggable combos)
+--   003_weight_logs.sql — weight_logs table + profiles.target_weight_kg
+--   004_barcode_cache.sql — barcode_cache table (Open Food Facts write-through)
+--   005_recaps.sql — recaps table (weekly "your week in review", Pro)
+--   006_food_log_micros.sql — food_logs sodium_mg, sugar_g, sat_fat_g
+--   007_chat.sql — chat_messages table + profiles.chat_beta (AI coach, beta)

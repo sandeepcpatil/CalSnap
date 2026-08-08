@@ -36,8 +36,11 @@ const ITEM_SCHEMA: Schema = {
     carbs_g:   { type: SchemaType.NUMBER },
     fat_g:     { type: SchemaType.NUMBER },
     fiber_g:   { type: SchemaType.NUMBER },
+    sugar_g:   { type: SchemaType.NUMBER },
+    sat_fat_g: { type: SchemaType.NUMBER },
+    sodium_mg: { type: SchemaType.NUMBER },
   },
-  required: ['name', 'quantity', 'unit', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g'],
+  required: ['name', 'quantity', 'unit', 'grams', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sugar_g', 'sat_fat_g', 'sodium_mg'],
 };
 
 const RESPONSE_SCHEMA: Schema = {
@@ -154,7 +157,15 @@ const CALIBRATION = `CALIBRATION — typical values for one standard serving:
 • Idli (2 pieces): 130 kcal · P 4 · C 27 · F 0.5 · Fib 1
 • Plain dosa (1): 170 kcal · P 4 · C 30 · F 4 · Fib 1.5
 • Poha (1 plate, 180 g): 250 kcal · P 5 · C 45 · F 6 · Fib 3
-• Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2`;
+• Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2
+
+Also estimate, per item:
+• sodium_mg — Indian home cooking is salted: assume ≈ 350–500 mg per savoury
+  katori/serving. Pickle, papad, namkeen, chutney, instant noodles and
+  restaurant/packaged food are far higher (800–1500+ mg). Sweets, fruit and
+  plain rice are low. When unsure, assume a normally-salted home portion.
+• sat_fat_g — high in ghee, butter, coconut, paneer, cream, and fried food.
+• sugar_g — from added sugar and naturally sweet items (fruit, sweets, chai).`;
 
 const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
 
@@ -364,6 +375,9 @@ function fallbackBreakdown(reason: string): CalorieBreakdown {
     carbs_g: 0,
     fat_g: 0,
     fiber_g: 0,
+    sodium_mg: 0,
+    sugar_g: 0,
+    sat_fat_g: 0,
     portion_g: 0,
     portion_desc: '',
     confidence: 'low',
@@ -389,6 +403,9 @@ function validateItems(raw: unknown): FoodItem[] {
         carbs_g: Math.round(num(r['carbs_g']) * 10) / 10,
         fat_g: Math.round(num(r['fat_g']) * 10) / 10,
         fiber_g: Math.round(num(r['fiber_g']) * 10) / 10,
+        sugar_g: Math.round(num(r['sugar_g']) * 10) / 10,
+        sat_fat_g: Math.round(num(r['sat_fat_g']) * 10) / 10,
+        sodium_mg: Math.round(num(r['sodium_mg'])),
       };
     })
     .filter((it): it is FoodItem => it !== null && it.calories > 0);
@@ -412,6 +429,9 @@ function validateBreakdown(raw: unknown): CalorieBreakdown {
     carbs_g: hasItems ? sum((i) => i.carbs_g) : num(r['carbs_g']),
     fat_g: hasItems ? sum((i) => i.fat_g) : num(r['fat_g']),
     fiber_g: hasItems ? sum((i) => i.fiber_g) : num(r['fiber_g']),
+    sugar_g: hasItems ? sum((i) => i.sugar_g) : num(r['sugar_g']),
+    sat_fat_g: hasItems ? sum((i) => i.sat_fat_g) : num(r['sat_fat_g']),
+    sodium_mg: hasItems ? Math.round(items.reduce((s, i) => s + i.sodium_mg, 0)) : num(r['sodium_mg']),
     portion_g: hasItems
       ? items.reduce((s, i) => s + i.grams, 0)
       : Math.round(num(r['portion_g'])),

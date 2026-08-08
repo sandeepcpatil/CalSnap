@@ -33,6 +33,9 @@ interface MatchRow {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sugar_g: number;
+  sat_fat_g: number;
+  sodium_mg: number;
   score: number;
 }
 
@@ -84,6 +87,11 @@ export async function enrichItems(items: FoodItem[]): Promise<EnrichedItem[]> {
       carbs_g: r1(m.carbs_g),
       fat_g: r1(m.fat_g),
       fiber_g: r1(m.fiber_g),
+      // Real sodium/sugar/sat-fat from the foods table — far better than the
+      // AI's guess, especially for salt, which is invisible in a photo.
+      sugar_g: r1(m.sugar_g),
+      sat_fat_g: r1(m.sat_fat_g),
+      sodium_mg: Math.round((m.sodium_mg ?? 0) * k),
       source: 'database',
       matched_name: m.name,
     };
@@ -99,5 +107,8 @@ export function totalsOf(items: readonly EnrichedItem[]) {
     carbs_g: r1(items.reduce((s, i) => s + i.carbs_g, 0)),
     fat_g: r1(items.reduce((s, i) => s + i.fat_g, 0)),
     fiber_g: r1(items.reduce((s, i) => s + i.fiber_g, 0)),
+    sugar_g: r1(items.reduce((s, i) => s + i.sugar_g, 0)),
+    sat_fat_g: r1(items.reduce((s, i) => s + i.sat_fat_g, 0)),
+    sodium_mg: Math.round(items.reduce((s, i) => s + i.sodium_mg, 0)),
   };
 }

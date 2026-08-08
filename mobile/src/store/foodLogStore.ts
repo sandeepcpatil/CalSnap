@@ -13,6 +13,9 @@ export interface FoodLog {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null;
   meal_id?: string | null;
   logged_at: string;
@@ -50,6 +53,9 @@ export function normalizeLog(row: FoodLog): FoodLog {
     carbs_g: num(row.carbs_g),
     fat_g: num(row.fat_g),
     fiber_g: num(row.fiber_g),
+    sodium_mg: num(row.sodium_mg),
+    sugar_g: num(row.sugar_g),
+    sat_fat_g: num(row.sat_fat_g),
   };
 }
 

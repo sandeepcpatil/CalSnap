@@ -6,7 +6,7 @@ import { LabelResultScreen } from '../screens/Scan/LabelResultScreen';
 import { FoodAnalysisResult, LabelScanData } from '../services/api';
 
 /** Which capture mode the scan screen opens in. */
-export type ScanMode = 'meal' | 'label' | 'voice';
+export type ScanMode = 'meal' | 'label' | 'voice' | 'barcode';
 
 export type ScanStackParamList = {
   /**

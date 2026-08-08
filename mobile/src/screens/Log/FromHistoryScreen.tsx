@@ -127,7 +127,10 @@ export function FromHistoryScreen({ navigation }: Props) {
       });
       rows.forEach(addLog);
       pendingMealIds.forEach(touchSavedMeal);
-      useNotificationStore.getState().refreshStreakReminder(true);
+      const notif = useNotificationStore.getState();
+      void notif.refreshStreakReminder(true);
+      // First log ever → offer to turn on reminders (self-gates to once).
+      void notif.promptForRemindersOnce();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
     } catch (err) {

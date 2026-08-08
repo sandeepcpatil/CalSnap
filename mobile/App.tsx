@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme, type Theme as NavTheme } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
@@ -6,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
+import { useNotificationStore } from './src/store/notificationStore';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useTheme } from './src/hooks/useTheme';
 import { configurePurchases, identifyUser } from './src/services/purchases';
@@ -61,6 +63,17 @@ function AppContent() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Re-arm reminders whenever the app comes to the foreground: this rolls the
+  // runway forward, fixes the day boundary, and reflects logs made elsewhere.
+  useEffect(() => {
+    const sync = () => { void useNotificationStore.getState().syncReminders(); };
+    sync();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+    return () => sub.remove();
   }, []);
 
   return (

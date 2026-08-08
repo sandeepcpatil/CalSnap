@@ -99,7 +99,10 @@ export function CreateMealScreen({ navigation, route }: Props) {
       rows.forEach(addLog);
       if (saved) touchSavedMeal(saved.id);
 
-      useNotificationStore.getState().refreshStreakReminder(true);
+      const notif = useNotificationStore.getState();
+      void notif.refreshStreakReminder(true);
+      // First log ever → offer to turn on reminders (self-gates to once).
+      void notif.promptForRemindersOnce();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
     } catch (err) {

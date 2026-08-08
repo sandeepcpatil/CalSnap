@@ -14,6 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { SUPPORT_EMAIL } from '../../content/legal';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
@@ -46,6 +49,8 @@ const C = {
 export function ProfileScreen() {
   const { profile, signOut } = useAuthStore();
   const { todayLogs } = useFoodLogStore();
+  // Weight lives on the root stack (over the tabs), reached through the parent.
+  const rootNav = useNavigation().getParent<NativeStackNavigationProp<RootStackParamList>>();
   const [showPaywall, setShowPaywall] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -65,17 +70,9 @@ export function ProfileScreen() {
   const proteinConsumed = todayLogs.reduce((s, l) => s + (l.protein_g || 0), 0);
   const proteinPct      = proteinGoal > 0 ? Math.min(proteinConsumed / proteinGoal, 1) : 0;
 
-  // Weight target logic
-  const weightTarget =
-    bodyGoal === 'lose_weight' ? weight - 5 :
-    bodyGoal === 'gain_muscle' ? weight + 5 :
-    weight;
-  const weightDelta  = Math.abs(weight - weightTarget);
-  const weightLabel  =
-    bodyGoal === 'lose_weight' ? `${weightDelta.toFixed(0)}kg to Target (${weightTarget.toFixed(0)}kg)` :
-    bodyGoal === 'gain_muscle' ? `${weightDelta.toFixed(0)}kg to Target (${weightTarget.toFixed(0)}kg)` :
-    'Maintaining';
-  const weightPct = bodyGoal === 'maintain' ? 1 : 0.6; // approximate progress indicator
+  // The card is now just an entry point into the weight-tracking screen, where
+  // the real trend and goal ETA live. A simple fill keeps it visually alive.
+  const weightPct = bodyGoal === 'maintain' ? 1 : 0.6;
 
   const handleContactSupport = async () => {
     const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -182,8 +179,14 @@ export function ProfileScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionLabel}>ACTIVE GOALS</Text>
           <View style={styles.goalsGrid}>
-            {/* Weight card */}
-            <View style={styles.goalCard}>
+            {/* Weight card → weight tracking screen */}
+            <TouchableOpacity
+              style={styles.goalCard}
+              onPress={() => rootNav?.navigate('Weight')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Open weight tracking"
+            >
               <View style={styles.goalCardTop}>
                 <Text style={styles.goalCardLabel}>Weight</Text>
                 <Ionicons name="scale-outline" size={20} color={C.primary} />
@@ -196,9 +199,12 @@ export function ProfileScreen() {
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { width: `${weightPct * 100}%`, backgroundColor: C.primary }]} />
                 </View>
-                <Text style={[styles.goalHint, { color: C.primary }]}>{weightLabel}</Text>
+                <View style={styles.goalHintRow}>
+                  <Text style={[styles.goalHint, { color: C.primary }]}>Track over time</Text>
+                  <Ionicons name="chevron-forward" size={13} color={C.primary} />
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
 
             {/* Protein card */}
             <View style={styles.goalCard}>
@@ -286,6 +292,10 @@ export function ProfileScreen() {
           <View style={styles.settingsList}>
             {([
               { icon: 'person-outline',           label: 'Edit Profile',        onPress: () => setShowEditProfile(true) },
+              // Beta-gated: hidden entirely unless profiles.chat_beta is on.
+              ...(profile?.chat_beta
+                ? [{ icon: 'chatbubbles-outline' as const, label: 'Nutrition Coach (Beta)', onPress: () => rootNav?.navigate('Coach') }]
+                : []),
               { icon: 'notifications-outline',    label: 'Notifications',       onPress: () => setShowNotifSettings(true) },
               { icon: 'chatbubble-ellipses-outline', label: 'Contact Support',  onPress: handleContactSupport },
               { icon: 'shield-checkmark-outline', label: 'Privacy Policy',      onPress: () => setLegalDoc('privacy') },
@@ -426,6 +436,7 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', borderRadius: 3 },
   goalHint: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, textTransform: 'uppercase' },
+  goalHintRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 
   /* CTA card */
   ctaCard: {

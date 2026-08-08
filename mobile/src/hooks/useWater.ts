@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store/authStore';
 import { useWaterStore, totalMl } from '../store/waterStore';
+import { useNotificationStore } from '../store/notificationStore';
 import { waterGoalMl } from '../utils/water';
 
 /**
@@ -41,6 +42,9 @@ export function useWater() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
         await addWater(userId, amountMl);
+        // Water changed — re-arm the paced reminders so they reflect the new
+        // total (and stop for the day once the goal is met).
+        void useNotificationStore.getState().syncReminders();
       } catch (err) {
         // The optimistic row has already been rolled back by the store, so the
         // ring is correct again — the user only needs to know why it moved.

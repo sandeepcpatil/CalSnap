@@ -44,6 +44,10 @@ export interface FoodItem {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  /** Sodium in mg. Real from the foods table / label; an estimate for photos. */
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   /** 'database' when macros came from the foods table, 'ai' when estimated. */
   source?: 'database' | 'ai';
   /** Canonical food matched in the database, when source is 'database'. */
@@ -59,6 +63,9 @@ export interface FoodAnalysisResult {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sodium_mg: number;
+  sugar_g: number;
+  sat_fat_g: number;
   /** Estimated total weight in grams. 0 when the AI (or an older cached scan) didn't report one. */
   portion_g: number;
   /** Human-readable portion, e.g. "1 medium katori". Empty when unknown. */
@@ -133,10 +140,101 @@ export async function analyzeLabel(imageUrl: string, token: string): Promise<{ r
 }
 
 /**
+ * Look up a packaged product by its barcode (Open Food Facts, write-through
+ * cached server-side). Returns the same shape as a label scan, so the result
+ * renders on the normal LabelResult screen. No AI, so it never uses a scan.
+ */
+export async function lookupBarcode(
+  code: string,
+  token: string,
+): Promise<{ result: LabelScanData; image_url: string | null; cached: boolean }> {
+  return apiFetch(`/api/barcode/${encodeURIComponent(code)}`, { method: 'GET' }, token);
+}
+
+/**
  * Ask the backend to re-read entitlements from RevenueCat and update the
  * user's profile immediately (so the server-side scan gate unlocks without
  * waiting for the async webhook). Call right after a successful purchase.
  */
+// ─── Weekly recap ────────────────────────────────────────────────────────────
+
+export interface RecapStats {
+  week_start: string;
+  week_end: string;
+  week_label: string;
+  days_logged: number;
+  avg_calories: number;
+  calorie_goal: number;
+  avg_protein: number;
+  protein_goal: number;
+  days_protein_low: number;
+  water_goal_ml: number;
+  days_water_goal_hit: number;
+  days_with_water: number;
+  weight_change_kg: number | null;
+  best_protein_day_kg: number | null;
+  avg_sodium_mg: number;
+  days_high_sodium: number;
+}
+
+export interface RecapContent {
+  headline: string;
+  summary: string;
+  insights: string[];
+  tip: string;
+  ai: boolean;
+}
+
+export interface WeeklyRecap {
+  week_start: string;
+  stats: RecapStats;
+  content: RecapContent;
+}
+
+/**
+ * The most recently completed week's review. `locked: true` means the user
+ * isn't Pro (show the upsell teaser); `recap: null` with `locked: false` would
+ * be unusual but is handled as "nothing to show yet".
+ */
+export async function getWeeklyRecap(token: string): Promise<{ locked: boolean; recap: WeeklyRecap | null }> {
+  return apiFetch('/api/recap', { method: 'GET' }, token);
+}
+
+// ─── Nutrition coach (chat) ──────────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface ChatHistory {
+  enabled: boolean;
+  messages: ChatMessage[];
+  used_today: number;
+  daily_limit: number;
+}
+
+export interface ChatReply {
+  reply: string;
+  used_today: number;
+  daily_limit: number;
+  /** True when the deterministic safety layer answered instead of the model. */
+  safety: boolean;
+}
+
+export async function getChatHistory(token: string): Promise<ChatHistory> {
+  return apiFetch('/api/chat/history', { method: 'GET' }, token);
+}
+
+export async function sendChatMessage(message: string, token: string): Promise<ChatReply> {
+  return apiFetch('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }, token);
+}
+
+export async function clearChatHistory(token: string): Promise<{ ok: boolean }> {
+  return apiFetch('/api/chat/history', { method: 'DELETE' }, token);
+}
+
 export async function syncSubscription(token: string) {
   return apiFetch<{
     isSubscribed: boolean;

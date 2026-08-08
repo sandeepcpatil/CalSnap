@@ -22,7 +22,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScanStackParamList, type ScanMode } from '../../navigation/ScanNavigator';
 import { supabase } from '../../services/supabase';
-import { analyzeFood, analyzeLabel, analyzeText } from '../../services/api';
+import { analyzeFood, analyzeLabel, analyzeText, lookupBarcode } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
@@ -220,6 +220,8 @@ export function ScanScreen({ navigation, route }: Props) {
   const [voiceAnalyzing, setVoiceAnalyzing] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  // Latch so the live barcode scanner fires the lookup once, not on every frame.
+  const barcodeLock = useRef(false);
 
   // The Scan tab stays mounted, so a previous session's photo / transcript would
   // still be on screen when the user comes back. Reset to a clean state each
@@ -231,8 +233,33 @@ export function ScanScreen({ navigation, route }: Props) {
       setScanMode(requestedMode);
       setVoiceListening(false);
       setVoiceAnalyzing(false);
+      barcodeLock.current = false;
     }, [requestedMode]),
   );
+
+  const handleBarcode = async (code: string) => {
+    if (barcodeLock.current) return;
+    barcodeLock.current = true;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setIsAnalyzing(true);
+    try {
+      const { result, image_url } = await lookupBarcode(code, session!.access_token);
+      const img = image_url ?? '';
+      // Reuse the label result screen — same shape, same log path (no scan used).
+      navigation.navigate('LabelResult', { imageUri: img, imageStorageUrl: img, result });
+    } catch (err: any) {
+      const notFound = err?.statusCode === 404;
+      Alert.alert(
+        notFound ? 'Product not found' : 'Lookup failed',
+        notFound
+          ? "This barcode isn't in the database yet. Try scanning the nutrition label instead."
+          : err?.message ?? 'Please try again.',
+        [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
+      );
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleCapture = async () => {
     if (!canScan) { showPaywall(); return; }
@@ -415,7 +442,16 @@ export function ScanScreen({ navigation, route }: Props) {
       {scanMode === 'voice' ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
       ) : (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={cameraType} />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={cameraType}
+          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
+          // Live scanning only in barcode mode, and only until one is captured.
+          onBarcodeScanned={
+            scanMode === 'barcode' && !isAnalyzing ? (r) => handleBarcode(r.data) : undefined
+          }
+        />
       )}
 
       {/* Full-screen analyzing overlay — scans over the photo just taken */}
@@ -448,8 +484,8 @@ export function ScanScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Scan counter badge for free users */}
-          {!isSubscribed && (
+        {/* Scan counter badge for free users. Barcode is free, so no counter. */}
+          {!isSubscribed && scanMode !== 'barcode' && (
             <TouchableOpacity onPress={showPaywall} style={styles.scanCountBadge}>
               <Text style={styles.scanCountText}>{scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today</Text>
             </TouchableOpacity>
@@ -474,10 +510,16 @@ export function ScanScreen({ navigation, route }: Props) {
           </View>
           <View style={styles.hintWrap}>
             <Text style={styles.hint}>
-              {scanMode === 'label' ? 'Point at the nutrition label' : 'Point at your food'}
+              {scanMode === 'label'
+                ? 'Point at the nutrition label'
+                : scanMode === 'barcode'
+                  ? 'Point at the barcode'
+                  : 'Point at your food'}
             </Text>
           </View>
-
+          {scanMode === 'barcode' && (
+            <Text style={styles.barcodeSub}>Holds still? It scans automatically — no scan used.</Text>
+          )}
         </View>
         )}
 
@@ -486,7 +528,12 @@ export function ScanScreen({ navigation, route }: Props) {
         {!voiceListening && (
           <View style={styles.modeToggleWrap}>
           <View style={styles.modeToggle}>
-            {(['meal', 'label', 'voice'] as const).map((mode) => {
+            {([
+              { mode: 'meal',    icon: 'restaurant-outline',    label: 'MEAL' },
+              { mode: 'barcode', icon: 'barcode-outline',       label: 'BARCODE' },
+              { mode: 'label',   icon: 'document-text-outline', label: 'LABEL' },
+              { mode: 'voice',   icon: 'mic-outline',           label: 'VOICE' },
+            ] as const).map(({ mode, icon, label }) => {
               const active = scanMode === mode;
               return (
                 <TouchableOpacity
@@ -499,14 +546,8 @@ export function ScanScreen({ navigation, route }: Props) {
                   disabled={isAnalyzing}
                   activeOpacity={0.8}
                 >
-                  <Ionicons
-                    name={mode === 'meal' ? 'restaurant-outline' : mode === 'label' ? 'barcode-outline' : 'mic-outline'}
-                    size={14}
-                    color={active ? T.textOnPrimary : T.textSecondary}
-                  />
-                  <Text style={[styles.modePillText, active && styles.modePillTextActive]}>
-                    {mode === 'meal' ? 'MEAL' : mode === 'label' ? 'LABEL' : 'VOICE'}
-                  </Text>
+                  <Ionicons name={icon} size={14} color={active ? T.textOnPrimary : T.textSecondary} />
+                  <Text style={[styles.modePillText, active && styles.modePillTextActive]}>{label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -514,8 +555,9 @@ export function ScanScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        {/* Bottom controls — camera modes only */}
-        {scanMode !== 'voice' && (
+        {/* Bottom controls — photo modes only. Barcode auto-detects; voice has
+            its own panel. */}
+        {scanMode !== 'voice' && scanMode !== 'barcode' && (
         <View style={styles.bottomBar}>
           <TouchableOpacity onPress={handlePickFromLibrary} style={styles.sideButton} disabled={isAnalyzing}>
             <View style={styles.glassBtn}>
@@ -645,27 +687,34 @@ const styles = StyleSheet.create({
   },
   hint: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
-  modeToggleWrap: { alignItems: 'center', paddingBottom: 12 },
+  modeToggleWrap: { alignItems: 'center', paddingBottom: 12, paddingHorizontal: 12 },
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 50,
     padding: 4,
-    gap: 4,
+    gap: 2,
     borderWidth: 1,
     borderColor: T.border,
   },
   modePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
+    gap: 5,
+    paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 50,
   },
   modePillActive: { backgroundColor: T.primary },
-  modePillText: { color: T.textSecondary, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  modePillText: { color: T.textSecondary, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6 },
   modePillTextActive: { color: T.textOnPrimary },
+  barcodeSub: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12.5,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+  },
 
   bottomBar: {
     flexDirection: 'row',
