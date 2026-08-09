@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { getUser, getUserLogs } from '../lib/adminApi';
 
 interface Profile {
   id: string;
@@ -38,24 +38,20 @@ export function UserDetail() {
 
   useEffect(() => {
     if (!userId) return;
-    supabase.from('profiles').select('*').eq('id', userId).single().then(({ data }) => {
-      setProfile(data);
-    });
+    // Via the backend: `profiles` RLS would hide every user but the admin.
+    getUser<Profile>(userId)
+      .then(({ user }) => setProfile(user))
+      .catch(() => setProfile(null));
   }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
-    const offset = (page - 1) * LIMIT;
-    supabase
-      .from('food_logs')
-      .select('id, food_name, calories, protein_g, carbs_g, fat_g, meal_type, logged_at, image_url', { count: 'exact' })
-      .eq('user_id', userId)
-      .order('logged_at', { ascending: false })
-      .range(offset, offset + LIMIT - 1)
-      .then(({ data, count }) => {
-        setLogs(data ?? []);
+    getUserLogs(userId, page, LIMIT)
+      .then(({ logs: rows, total: count }) => {
+        setLogs(rows as unknown as FoodLog[]);
         setTotal(count ?? 0);
-      });
+      })
+      .catch(() => { setLogs([]); setTotal(0); });
   }, [userId, page]);
 
   if (!profile) {
@@ -69,7 +65,7 @@ export function UserDetail() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center gap-4">
-        <Link to="/" className="text-teal hover:underline text-sm">← Back to Dashboard</Link>
+        <Link to="/admin" className="text-teal hover:underline text-sm">← Back to Dashboard</Link>
         <span className="text-gray-300">|</span>
         <h1 className="text-xl font-bold text-teal">User Detail</h1>
       </header>

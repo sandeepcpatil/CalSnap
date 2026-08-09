@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      // `/` is now the public marketing site, so send admins back to the
+      // dashboard rather than the landing page they just came from.
+      options: { redirectTo: `${window.location.origin}/admin` },
     });
   };
 

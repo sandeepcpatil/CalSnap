@@ -6,7 +6,7 @@ import {
   LineElement, Title, Tooltip, Legend,
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
-import { supabase } from '../lib/supabase';
+import { getStats, getSignups, getScans, getUsers, toChartSeries } from '../lib/adminApi';
 import { useAuth } from '../context/AuthContext';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend);
@@ -54,6 +54,7 @@ export function Dashboard() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const LIMIT = 20;
 
   useEffect(() => {
@@ -66,81 +67,47 @@ export function Dashboard() {
     fetchUsers();
   }, [page, search]);
 
+  // All data comes from the backend admin API (service role, admin-gated).
+  // Querying Supabase directly from the browser runs as the signed-in user and
+  // RLS clips every table to that one user — which is why the dashboard used to
+  // report "1 total user".
   const fetchStats = async () => {
-    const now = new Date();
-    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-    const [
-      { count: totalUsers },
-      { data: today },
-      { data: week },
-      { data: month },
-      { data: subs },
-    ] = await Promise.all([
-      supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('food_logs').select('user_id').gte('logged_at', last24h),
-      supabase.from('food_logs').select('user_id').gte('logged_at', last7d),
-      supabase.from('food_logs').select('user_id').gte('logged_at', last30d),
-      supabase.from('subscriptions').select('plan').eq('status', 'active'),
-    ]);
-
-    const monthlySubs = subs?.filter(s => s.plan === 'monthly').length ?? 0;
-    const annualSubs = subs?.filter(s => s.plan === 'annual').length ?? 0;
-
-    setStats({
-      totalUsers: totalUsers ?? 0,
-      activeToday: new Set(today?.map(r => r.user_id)).size,
-      activeThisWeek: new Set(week?.map(r => r.user_id)).size,
-      activeThisMonth: new Set(month?.map(r => r.user_id)).size,
-      totalProSubscribers: (subs?.length ?? 0),
-      monthlyRevenuePaise: monthlySubs * 150 + annualSubs * 100,
-    });
-    setLoading(false);
+    try {
+      setStats(await getStats());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load stats.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchSignups = async () => {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase.from('profiles').select('created_at').gte('created_at', since);
-
-    const buckets: Record<string, number> = {};
-    data?.forEach(row => {
-      const day = row.created_at.slice(5, 10); // MM-DD
-      buckets[day] = (buckets[day] || 0) + 1;
-    });
-
-    const sorted = Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b));
-    setSignupChart({ labels: sorted.map(([k]) => k), data: sorted.map(([, v]) => v) });
+    try {
+      const { signups } = await getSignups(30);
+      setSignupChart(toChartSeries(signups));
+    } catch {
+      // Charts are secondary — the error banner from fetchStats already shows.
+    }
   };
 
   const fetchScans = async () => {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase.from('food_logs').select('logged_at').gte('logged_at', since);
-
-    const buckets: Record<string, number> = {};
-    data?.forEach(row => {
-      const day = row.logged_at.slice(5, 10);
-      buckets[day] = (buckets[day] || 0) + 1;
-    });
-
-    const sorted = Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b));
-    setScanChart({ labels: sorted.map(([k]) => k), data: sorted.map(([, v]) => v) });
+    try {
+      const { scans } = await getScans(30);
+      setScanChart(toChartSeries(scans));
+    } catch {
+      // See above.
+    }
   };
 
   const fetchUsers = async () => {
-    const offset = (page - 1) * LIMIT;
-    let query = supabase
-      .from('profiles')
-      .select('id, name, email, created_at, scan_count, is_subscribed', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + LIMIT - 1);
-
-    if (search) query = query.ilike('email', `%${search}%`);
-
-    const { data, count } = await query;
-    setUsers(data ?? []);
-    setTotal(count ?? 0);
+    try {
+      const res = await getUsers(page, LIMIT, search);
+      setUsers(res.users);
+      setTotal(res.total ?? 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load users.');
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -158,6 +125,23 @@ export function Dashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-teal border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Surface failures loudly. Silently rendering zeros is worse than an error:
+  // it looks like real data and quietly misleads.
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-lg bg-white dark:bg-gray-800 rounded-2xl p-6 border border-red-200 dark:border-red-900">
+          <h2 className="text-lg font-bold text-red-600 mb-2">Couldn't load admin data</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">{error}</p>
+          <p className="text-xs text-gray-400">
+            Check that <code>VITE_BACKEND_URL</code> is set on this deployment and that your
+            account exists in the <code>admin_users</code> table.
+          </p>
+        </div>
       </div>
     );
   }
@@ -263,7 +247,7 @@ export function Dashboard() {
                 {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-5 py-3 font-medium">
-                      <Link to={`/users/${user.id}`} className="text-teal hover:underline">
+                      <Link to={`/admin/users/${user.id}`} className="text-teal hover:underline">
                         {user.name ?? '—'}
                       </Link>
                     </td>

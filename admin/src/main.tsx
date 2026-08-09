@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Landing } from './pages/Landing';
 import { Dashboard } from './pages/Dashboard';
 import { UserDetail } from './pages/UserDetail';
 import { Login } from './pages/Login';
@@ -46,9 +47,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <AuthProvider>
     <BrowserRouter>
       <Routes>
+        {/* Public marketing site at the root; the admin panel lives under
+            /admin and is gated server-side on every data call. */}
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route
-          path="/"
+          path="/admin"
           element={
             <ProtectedRoute>
               <Dashboard />
@@ -56,7 +60,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           }
         />
         <Route
-          path="/users/:userId"
+          path="/admin/users/:userId"
           element={
             <ProtectedRoute>
               <UserDetail />

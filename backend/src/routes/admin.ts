@@ -11,7 +11,29 @@ import { supabase } from '../lib/supabase';
 
 const router: ExpressRouter = Router();
 
-// All admin routes require auth + admin role check
+// ─── GET /api/admin/check ────────────────────────────────────────────────────
+// Declared BEFORE the admin gate below, so it is authenticated but not
+// admin-only. The public site's navbar needs to ask "am I an admin?" and get a
+// plain yes/no — a 403 would work, but it litters every normal user's console
+// with an error for something that isn't one.
+router.get(
+  '/check',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { data } = await supabase
+        .from('admin_users')
+        .select('id')
+        .eq('id', req.user!.id)
+        .maybeSingle();
+      res.json({ isAdmin: Boolean(data) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Every route BELOW this line requires auth + admin membership.
 router.use(authMiddleware, adminAuthMiddleware);
 
 // ─── GET /api/admin/stats ─────────────────────────────────────────────────────
@@ -153,6 +175,33 @@ router.get(
 
       const body: AdminUsersResponse = { users: data ?? [], total: count, page, limit };
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── GET /api/admin/users/:userId ────────────────────────────────────────────
+// One user's profile. The admin panel cannot read this straight from Supabase:
+// `profiles` RLS is `auth.uid() = id`, so a browser query returns nothing for
+// anyone but the admin themselves.
+
+router.get(
+  '/users/:userId',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId } = req.params as { userId: string };
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) {
+        res.status(404).json({ error: 'not_found', message: 'User not found.' });
+        return;
+      }
+      res.json({ user: data });
     } catch (err) {
       next(err);
     }
