@@ -47,6 +47,11 @@ export interface WeekStats {
   avg_sodium_mg: number;
   /** Days over the WHO 2,000 mg/day sodium guideline. */
   days_high_sodium: number;
+  /** avg_calories − calorie_goal. Negative = eating under goal. Pre-computed so
+   *  the writer can name the size of the gap without doing arithmetic. */
+  avg_calorie_gap: number;
+  /** avg_protein − protein_goal. Negative = short on protein. */
+  avg_protein_gap: number;
 }
 
 /** WHO recommends staying under this much sodium per day. */
@@ -175,5 +180,7 @@ export function computeWeekStats(
     best_protein_day_kg: bestProtein,
     avg_sodium_mg: avg(sodByDay),
     days_high_sodium: loggedDays.filter((k) => (sodByDay.get(k) ?? 0) > HIGH_SODIUM_MG).length,
+    avg_calorie_gap: daysLogged ? avg(calByDay) - (profile.daily_calorie_goal ?? 2000) : 0,
+    avg_protein_gap: daysLogged ? avg(protByDay) - proteinGoal : 0,
   };
 }

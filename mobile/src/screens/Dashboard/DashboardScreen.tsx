@@ -24,6 +24,7 @@ import { MacroDonut } from '../../components/MacroDonut';
 import { MealSection } from '../../components/MealSection';
 import { TrialBanner } from '../../components/TrialBanner';
 import { AlertsModal } from '../../components/AlertsModal';
+import { CoachFab, useHideOnScroll } from '../../components/CoachFab';
 import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
 import { buildSmartAlerts } from '../../utils/alerts';
 import { useTheme } from '../../hooks/useTheme';
@@ -68,6 +69,9 @@ export function DashboardScreen() {
   // Home is the root of the back stack, so a single stray press would otherwise
   // close the app outright.
   useConfirmExit();
+
+  // Slides the floating Coach pill away while scrolling down through the log.
+  const { hidden: fabHidden, onScroll } = useHideOnScroll();
 
   // Pull the weekly recap once so the bell can flag an unread review. The server
   // generates it at most once a week, so this is a cheap cached read after that.
@@ -192,6 +196,8 @@ export function DashboardScreen() {
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor={C.primary} />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         {/* ── Personalized greeting ── */}
         <View style={styles.greetingBlock}>
@@ -211,28 +217,8 @@ export function DashboardScreen() {
             meals, and burying it behind the hub would be too slow. ── */}
         <WaterCard onOpen={() => rootNavigation?.navigate('Water')} />
 
-        {/* ── Nutrition Coach (beta) ── hidden unless profiles.chat_beta is on. */}
-        {profile?.chat_beta && (
-          <TouchableOpacity
-            style={styles.coachCard}
-            onPress={() => rootNavigation?.navigate('Coach')}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Open your nutrition coach"
-          >
-            <View style={styles.coachIcon}>
-              <Ionicons name="chatbubbles" size={19} color={C.primary} />
-            </View>
-            <View style={styles.coachText}>
-              <View style={styles.coachTitleRow}>
-                <Text style={styles.coachTitle}>Ask your coach</Text>
-                <View style={styles.coachBeta}><Text style={styles.coachBetaText}>BETA</Text></View>
-              </View>
-              <Text style={styles.coachSub}>Questions about your food, answered from your logs</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={17} color={C.outline} />
-          </TouchableOpacity>
-        )}
+        {/* Coach lives in a floating pill (see CoachFab below) rather than a card
+            here — a card scrolls away exactly when a question occurs to you. */}
 
         {/* ── Macro Targets Card (Pro) ── */}
         <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macro Breakdown" borderRadius={20}>
@@ -275,6 +261,8 @@ export function DashboardScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <CoachFab hidden={fabHidden} />
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
       <AlertsModal visible={alertsOpen} onClose={() => setAlertsOpen(false)} alerts={alerts} onUpgrade={showPaywall} />
@@ -383,33 +371,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
-
-  /* Coach entry card */
-  coachCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: C.insightBg,
-    borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.30)',
-  },
-  coachIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(1,105,111,0.35)',
-  },
-  coachText: { flex: 1, gap: 2 },
-  coachTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  coachTitle: { fontSize: 15, fontWeight: '800', color: C.onSurface },
-  coachBeta: { paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5, backgroundColor: 'rgba(133,211,218,0.22)' },
-  coachBetaText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6, color: C.primary },
-  coachSub: { fontSize: 12, fontWeight: '600', color: C.outline },
 
   /* Section header */
   sectionHeader: {

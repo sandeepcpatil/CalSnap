@@ -137,13 +137,20 @@ export function CoachScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* iOS needs padding behavior; Android relies on the activity's
+          windowSoftInputMode=adjustResize (set in the manifest) — adding an
+          explicit Android behavior on top of that double-adjusts. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
+        {/* flex:1 on the ScrollView itself (not just the content) is essential:
+            without it the list grows to its content height and shoves the
+            composer off the bottom of the screen — where the keyboard hides it.
+            With it, the list fills the space above a bottom-pinned composer. */}
         <ScrollView
           ref={scrollRef}
+          style={styles.flex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={scrollToEnd}
@@ -242,7 +249,9 @@ const styles = StyleSheet.create({
   betaTag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: T.primaryTint },
   betaText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8, color: T.primary },
 
-  scroll: { padding: 16, gap: 10, paddingBottom: 8 },
+  // flexGrow:1 so short conversations still fill the height (empty-state
+  // intro + suggestions sit correctly above the composer).
+  scroll: { flexGrow: 1, padding: 16, gap: 10, paddingBottom: 8 },
   center: { paddingVertical: 60, alignItems: 'center' },
 
   intro: { alignItems: 'center', gap: 10, paddingVertical: 32, paddingHorizontal: 12 },

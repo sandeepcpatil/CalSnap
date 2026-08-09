@@ -127,6 +127,12 @@ export function WaterScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         <Text style={styles.sectionLabel}>Add a drink</Text>
+
+        {/* Your own size is a VESSEL, so it sits in the vessel row and looks
+            like one. Previously it lived in a separate row with different
+            styling, which made it read as a settings toggle — nobody could tell
+            that tapping it logs a drink. Labelled "Mine" to avoid colliding
+            with the 500 ml "Bottle" preset next to it. */}
         <View style={styles.vesselRow}>
           {VESSELS.map((v) => (
             <TouchableOpacity
@@ -138,16 +144,14 @@ export function WaterScreen({ navigation }: Props) {
               accessibilityLabel={`Log ${v.label}, ${formatMl(v.ml)}`}
             >
               <Ionicons name={v.icon as never} size={24} color={T.primary} />
-              <Text style={styles.vesselLabel}>{v.label}</Text>
-              <Text style={styles.vesselMl}>{formatMl(v.ml)}</Text>
+              <Text style={styles.vesselLabel} numberOfLines={1}>{v.label}</Text>
+              <Text style={styles.vesselMl} numberOfLines={1}>{formatMl(v.ml)}</Text>
             </TouchableOpacity>
           ))}
-        </View>
 
-        <View style={styles.customRow}>
           {myBottleMl ? (
             <TouchableOpacity
-              style={[styles.customTile, styles.customTileFilled]}
+              style={[styles.vessel, styles.vesselMine]}
               onPress={() => add(myBottleMl)}
               onLongPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -155,44 +159,46 @@ export function WaterScreen({ navigation }: Props) {
               }}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={`Log my bottle, ${formatMl(myBottleMl)}. Long press to change the size.`}
+              accessibilityLabel={`Log your own size, ${formatMl(myBottleMl)}. Long press to change it.`}
             >
-              <Ionicons name="bookmark" size={18} color={T.primary} />
-              <View style={styles.customTileText}>
-                <Text style={styles.customTileLabel}>My bottle</Text>
-                <Text style={styles.customTileSub}>{formatMl(myBottleMl)} · hold to edit</Text>
-              </View>
+              <Ionicons name="bookmark" size={24} color={T.primary} />
+              <Text style={styles.vesselLabel} numberOfLines={1}>Mine</Text>
+              <Text style={styles.vesselMl} numberOfLines={1}>{formatMl(myBottleMl)}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={styles.customTile}
+              style={[styles.vessel, styles.vesselAdd]}
               onPress={() => openCustom(true)}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Save my bottle size"
+              accessibilityLabel="Save your own bottle size for one-tap logging"
             >
-              <Ionicons name="bookmark-outline" size={18} color={T.textSecondary} />
-              <View style={styles.customTileText}>
-                <Text style={styles.customTileLabel}>My bottle</Text>
-                <Text style={styles.customTileSub}>Save your size</Text>
-              </View>
+              <Ionicons name="add-circle-outline" size={24} color={T.textSecondary} />
+              <Text style={[styles.vesselLabel, { color: T.textSecondary }]} numberOfLines={1}>Add</Text>
+              <Text style={styles.vesselMl} numberOfLines={1}>yours</Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            style={styles.customTile}
-            onPress={() => openCustom(false)}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Log a custom amount"
-          >
-            <Ionicons name="add" size={20} color={T.textSecondary} />
-            <View style={styles.customTileText}>
-              <Text style={styles.customTileLabel}>Custom</Text>
-              <Text style={styles.customTileSub}>Type an amount</Text>
-            </View>
-          </TouchableOpacity>
         </View>
+
+        <Text style={styles.vesselHint}>
+          {myBottleMl
+            ? 'Tap a vessel to log it. Hold “Mine” to change your size.'
+            : 'Bottle a different size? Save it once and log it in one tap.'}
+        </Text>
+
+        <TouchableOpacity
+          style={styles.customTile}
+          onPress={() => openCustom(false)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Log a custom amount"
+        >
+          <Ionicons name="create-outline" size={18} color={T.textSecondary} />
+          <View style={styles.customTileText}>
+            <Text style={styles.customTileLabel}>Custom amount</Text>
+            <Text style={styles.customTileSub}>Type a one-off amount</Text>
+          </View>
+        </TouchableOpacity>
 
         <Text style={styles.sectionLabel}>Today</Text>
         {todayRows.length === 0 ? (
@@ -233,7 +239,12 @@ export function WaterScreen({ navigation }: Props) {
         >
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setCustomOpen(false)} />
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{savingVessel ? 'My bottle size' : 'Custom amount'}</Text>
+            <Text style={styles.modalTitle}>{savingVessel ? 'Your bottle size' : 'Custom amount'}</Text>
+            {savingVessel && (
+              <Text style={styles.modalHint}>
+                Saved as a vessel next to Glass and Bottle, so you can log it in one tap.
+              </Text>
+            )}
             <View style={styles.inputRow}>
               <TextInput
                 value={customText}
@@ -261,7 +272,7 @@ export function WaterScreen({ navigation }: Props) {
                 onPress={submitCustom}
                 disabled={!customText}
               >
-                <Text style={styles.modalConfirmText}>{savingVessel ? 'Save' : 'Log it'}</Text>
+                <Text style={styles.modalConfirmText}>{savingVessel ? 'Save size' : 'Log it'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -393,23 +404,28 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  vesselRow: { flexDirection: 'row', gap: 10 },
+  // gap 8 (not 10) so four tiles still breathe on a 320pt screen.
+  vesselRow: { flexDirection: 'row', gap: 8 },
   vessel: {
     flex: 1,
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 2,
     borderRadius: 16,
     backgroundColor: T.surface,
     borderWidth: 1,
     borderColor: T.border,
   },
-  vesselLabel: { fontSize: 13.5, fontWeight: '700', color: T.textPrimary, marginTop: 2 },
-  vesselMl: { fontSize: 12, fontWeight: '600', color: T.textMuted },
+  /** The saved personal size — tinted so it reads as "yours". */
+  vesselMine: { borderColor: 'rgba(133,211,218,0.35)', backgroundColor: T.primaryTint },
+  /** Empty slot inviting you to save a size. */
+  vesselAdd: { borderStyle: 'dashed', backgroundColor: 'transparent' },
+  vesselLabel: { fontSize: 13, fontWeight: '700', color: T.textPrimary, marginTop: 2 },
+  vesselMl: { fontSize: 11.5, fontWeight: '600', color: T.textMuted },
+  vesselHint: { fontSize: 11.5, color: T.textMuted, marginTop: -6, lineHeight: 16 },
 
-  customRow: { flexDirection: 'row', gap: 10 },
   customTile: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -420,7 +436,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: T.border,
   },
-  customTileFilled: { borderColor: 'rgba(133,211,218,0.35)', backgroundColor: T.primaryTint },
   customTileText: { flex: 1 },
   customTileLabel: { fontSize: 13.5, fontWeight: '700', color: T.textPrimary },
   customTileSub: { fontSize: 11.5, fontWeight: '600', color: T.textMuted, marginTop: 1 },

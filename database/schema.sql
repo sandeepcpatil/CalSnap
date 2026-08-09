@@ -257,3 +257,5 @@ $$;
 --   005_recaps.sql — recaps table (weekly "your week in review", Pro)
 --   006_food_log_micros.sql — food_logs sodium_mg, sugar_g, sat_fat_g
 --   007_chat.sql — chat_messages table + profiles.chat_beta (AI coach, beta)
+--   008_subscription_tier.sql — reconcile profiles.subscription_tier drift
+--   009_feedback.sql — feedback table (in-app user feedback)

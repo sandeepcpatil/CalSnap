@@ -24,6 +24,7 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { NotificationSettingsModal } from '../../components/NotificationSettingsModal';
 import { EditProfileModal } from '../../components/EditProfileModal';
+import { FeedbackModal } from '../../components/FeedbackModal';
 import { LegalModal, type LegalDoc } from '../../components/LegalModal';
 import { T } from '../../theme';
 
@@ -54,6 +55,7 @@ export function ProfileScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
 
   // Single source of truth for subscription/trial/scan state (same hook the
@@ -297,6 +299,7 @@ export function ProfileScreen() {
                 ? [{ icon: 'chatbubbles-outline' as const, label: 'Nutrition Coach (Beta)', onPress: () => rootNav?.navigate('Coach') }]
                 : []),
               { icon: 'notifications-outline',    label: 'Notifications',       onPress: () => setShowNotifSettings(true) },
+              { icon: 'megaphone-outline',        label: 'Send Feedback',       onPress: () => setShowFeedback(true) },
               { icon: 'chatbubble-ellipses-outline', label: 'Contact Support',  onPress: handleContactSupport },
               { icon: 'shield-checkmark-outline', label: 'Privacy Policy',      onPress: () => setLegalDoc('privacy') },
               { icon: 'document-text-outline',    label: 'Terms of Service',    onPress: () => setLegalDoc('terms') },
@@ -336,6 +339,7 @@ export function ProfileScreen() {
       <PaywallModal visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
       <NotificationSettingsModal visible={showNotifSettings} onDismiss={() => setShowNotifSettings(false)} />
       <EditProfileModal visible={showEditProfile} onDismiss={() => setShowEditProfile(false)} />
+      <FeedbackModal visible={showFeedback} onDismiss={() => setShowFeedback(false)} />
       <LegalModal visible={legalDoc !== null} doc={legalDoc ?? 'terms'} onClose={() => setLegalDoc(null)} />
     </View>
   );

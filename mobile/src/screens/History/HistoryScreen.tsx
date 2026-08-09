@@ -19,6 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 import { normalizeLog, type FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
+import { CoachFab, useHideOnScroll } from '../../components/CoachFab';
 import { ProGate } from '../../components/ProGate';
 import { ExportRangeModal } from '../../components/ExportRangeModal';
 import { StreakCard } from '../../components/StreakCard';
@@ -192,6 +193,9 @@ export function HistoryScreen() {
     () => LOCAL_QUOTES[new Date().getDate() % LOCAL_QUOTES.length] ?? LOCAL_QUOTES[0],
   );
 
+  // Slides the floating Coach pill away while scrolling through history.
+  const { hidden: fabHidden, onScroll } = useHideOnScroll();
+
   const today = new Date().toISOString().slice(0, 10);
 
   // Fetch the shared "quote of the day" (backend caches one per day for everyone).
@@ -313,7 +317,12 @@ export function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+      >
 
         {/* Header */}
         <View style={styles.headerSection}>
@@ -592,6 +601,8 @@ export function HistoryScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <CoachFab hidden={fabHidden} />
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
       <ExportRangeModal

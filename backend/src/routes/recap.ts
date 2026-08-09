@@ -52,49 +52,115 @@ function buildPrompt(s: WeekStats): string {
     'NEVER give medical advice (no diagnoses, supplements, or treatment). Keep it personal,',
     'specific and non-judgmental; Indian foods (dal, roti, curd) are welcome as examples.',
     '',
-    'Return JSON with: headline (<=8 words, upbeat, no emoji), summary (2-3 sentences that',
-    'reference their real numbers), insights (2-3 short specific observations), tip (one',
-    'concrete, kind focus for next week).',
     '',
-    'If days_high_sodium > 0, include one gentle insight about sodium — it matters for',
-    'blood pressure, and eating out / packaged food is usually the cause. Frame it as',
-    'awareness, never alarm, and never as medical advice.',
+    'THE SCREEN ALREADY SHOWS A STAT STRIP with days logged, average calories, average',
+    'protein and weight change. Your job is to INTERPRET those numbers, not read them back.',
+    'Restating the strip is the single worst thing you can do here.',
+    '',
+    'Each field has a DIFFERENT job. Never repeat a fact or a number between them:',
+    '• headline — <=8 words, no emoji. Name the ONE thing that actually mattered this week.',
+    '• summary  — exactly 2 sentences on the story of the week: what stood out and why it',
+    '             matters. Quote AT MOST one number, and only if it is the point.',
+    '• insights — 2 or 3 items. EACH MUST COVER A DIFFERENT TOPIC (pick from: calorie gap,',
+    '             protein, hydration, sodium, weight, consistency). One sentence each, under',
+    '             160 characters. Say something the number alone does not — a pattern, a',
+    '             likely cause, what it means. Never repeat a topic already in the summary.',
+    '• tip      — one concrete, doable focus for next week. Not a summary of the above.',
+    '',
+    'PRIORITISE HONESTLY. Lead with what most affects their goal, not with whatever is',
+    'most flattering. A large avg_calorie_gap or avg_protein_gap matters far more than a',
+    'logging streak — if the gap is big, that is the story and the headline.',
+    'Be warm but truthful: encouraging-but-useless is worse than kind-and-honest.',
+    '',
+    'If avg_calorie_gap is more negative than about -700, treat under-LOGGING as the most',
+    'likely explanation (missed snacks, drinks, oil) before assuming they truly ate that',
+    'little — say so plainly and invite them to check.',
+    '',
+    'If days_high_sodium > 0, you may use ONE insight on sodium — eating out or packaged',
+    'food is the usual cause. Awareness, never alarm, never medical advice.',
+    '',
+    'Address the reader as "you". Never write about them in the third person.',
+    'Never end mid-sentence.',
     '',
     `Stats: ${JSON.stringify(s)}`,
   ].join('\n');
 }
 
-/** A never-fails recap built straight from the numbers. */
+/**
+ * Trim to a length without slicing a word in half.
+ *
+ * A blunt `slice()` produced insights that ended mid-word ("…can help her"),
+ * which reads like the app broke. Prefer a sentence boundary; fall back to a
+ * word boundary with an ellipsis.
+ */
+export function trimClean(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  if (sentenceEnd > max * 0.5) return cut.slice(0, sentenceEnd + 1).trim();
+  const wordEnd = cut.lastIndexOf(' ');
+  return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).replace(/[,;:—–-]+$/, '').trim()}…`;
+}
+
+/**
+ * A never-fails recap built straight from the numbers.
+ *
+ * Deliberately keeps each part on a DIFFERENT topic — the stat strip above it
+ * already shows days/calories/protein, so restating them here (as an earlier
+ * version did, in both the summary and the first two insights) just reads as
+ * the same sentence three times.
+ */
 function deterministicRecap(s: WeekStats): RecapContent {
+  const bigDeficit = s.avg_calorie_gap < -700;
+
+  // The headline names whatever most affects their goal — not the streak.
+  const headline =
+    bigDeficit ? 'Your intake looks under-recorded'
+    : s.days_protein_low >= 3 ? 'Protein was the week’s weak spot'
+    : s.days_logged >= 6 ? 'A genuinely consistent week'
+    : 'A partial picture this week';
+
+  const summary =
+    bigDeficit
+      ? `Across ${s.week_label} your logged intake averaged ${Math.abs(s.avg_calorie_gap).toLocaleString('en-IN')} kcal below your goal — a gap that big usually means meals, drinks or cooking oil went unlogged rather than genuinely eaten. Worth a quick check so the rest of your numbers can be trusted.`
+      : s.days_protein_low >= 3
+        ? `${s.week_label} held together well on the whole, but protein was the one place you kept falling short. That's the lever worth pulling next week — everything else is broadly on track.`
+        : `${s.week_label} went well, and the consistency is the part worth noticing. Habits built on ordinary weeks like this one are the ones that actually last.`;
+
+  // Each insight covers a topic the summary did NOT.
   const insights: string[] = [];
-  insights.push(`You logged ${s.days_logged} of 7 days.`);
-  if (s.avg_calories > 0) insights.push(`You averaged ${s.avg_calories.toLocaleString('en-IN')} kcal/day (goal ${s.calorie_goal.toLocaleString('en-IN')}).`);
-  if (s.avg_protein > 0) {
+  if (!bigDeficit && s.avg_calorie_gap !== 0) {
     insights.push(
-      s.days_protein_low > 0
-        ? `Protein averaged ${s.avg_protein}g — below your ${s.protein_goal}g goal on ${s.days_protein_low} day${s.days_protein_low === 1 ? '' : 's'}.`
-        : `Protein held strong at ${s.avg_protein}g/day.`,
+      s.avg_calorie_gap < 0
+        ? `You ran about ${Math.abs(s.avg_calorie_gap).toLocaleString('en-IN')} kcal/day under goal — small but steady.`
+        : `You ran about ${s.avg_calorie_gap.toLocaleString('en-IN')} kcal/day over goal.`,
     );
   }
-  if (s.days_with_water > 0) insights.push(`You hit your water goal on ${s.days_water_goal_hit} of ${s.days_with_water} tracked day${s.days_with_water === 1 ? '' : 's'}.`);
-  if (s.avg_sodium_mg > 0 && s.days_high_sodium > 0) insights.push(`Sodium ran high (over 2,000 mg) on ${s.days_high_sodium} day${s.days_high_sodium === 1 ? '' : 's'} — often the days you ate out or had packaged food.`);
-  if (s.weight_change_kg != null) {
-    const c = s.weight_change_kg;
-    insights.push(c === 0 ? 'Weight held steady this week.' : `Weight ${c < 0 ? 'down' : 'up'} ${Math.abs(c)} kg.`);
+  if (s.avg_protein > 0 && s.days_protein_low < 3) {
+    insights.push(`Protein held up on ${s.days_logged - s.days_protein_low} of ${s.days_logged} logged days.`);
+  } else if (s.avg_protein > 0 && !(s.days_protein_low >= 3)) {
+    insights.push(`Protein averaged ${s.avg_protein}g against your ${s.protein_goal}g target.`);
+  }
+  if (s.days_with_water === 0) {
+    insights.push('No water was logged this week — even a glass or two a day makes the picture more complete.');
+  } else {
+    insights.push(`Hydration landed on ${s.days_water_goal_hit} of ${s.days_with_water} tracked day${s.days_with_water === 1 ? '' : 's'}.`);
+  }
+  if (s.days_high_sodium > 0) {
+    insights.push(`Sodium went over 2,000 mg on ${s.days_high_sodium} day${s.days_high_sodium === 1 ? '' : 's'} — usually eating out or packaged food.`);
+  }
+  if (s.weight_change_kg != null && s.weight_change_kg !== 0) {
+    insights.push(`Weight moved ${s.weight_change_kg < 0 ? 'down' : 'up'} ${Math.abs(s.weight_change_kg)} kg over the week.`);
   }
 
   const tip =
-    s.days_protein_low >= 3 ? 'Aim to add one protein source — dal, curd, eggs or paneer — to a meal each day next week.'
-    : s.days_logged < 5 ? 'Try to log a little more consistently next week — even a quick scan keeps the picture accurate.'
-    : 'Keep doing what you\'re doing — consistency like this is exactly what pays off.';
+    bigDeficit ? 'Next week, try logging the in-between things — chai, oil, a handful of nuts. They close most of the gap.'
+    : s.days_protein_low >= 3 ? 'Add one protein source — dal, curd, eggs or paneer — to a single meal each day.'
+    : s.days_logged < 5 ? 'Aim for one more logged day than last week. Even a quick scan keeps the picture honest.'
+    : 'Keep the routine exactly as it is — consistency like this is what compounds.';
 
-  return {
-    headline: `Your week: ${s.days_logged}/7 days logged`,
-    summary: `Here\'s how ${s.week_label} went. You logged ${s.days_logged} of 7 days${s.avg_calories > 0 ? `, averaging ${s.avg_calories.toLocaleString('en-IN')} kcal a day` : ''}. Small, steady habits add up — nice work showing up for yourself.`,
-    insights,
-    tip,
-    ai: false,
-  };
+  return { headline, summary, insights: insights.slice(0, 3), tip, ai: false };
 }
 
 /** Encouraging placeholder when there wasn't enough logged to review. */
@@ -120,10 +186,10 @@ export async function generateContent(s: WeekStats): Promise<RecapContent> {
       return deterministicRecap(s);
     }
     return {
-      headline: String(parsed.headline).slice(0, 80),
-      summary: String(parsed.summary).slice(0, 600),
-      insights: insights.map((x) => String(x).slice(0, 200)),
-      tip: String(parsed.tip).slice(0, 300),
+      headline: trimClean(String(parsed.headline), 80),
+      summary: trimClean(String(parsed.summary), 600),
+      insights: insights.map((x) => trimClean(String(x), 220)),
+      tip: trimClean(String(parsed.tip), 300),
       ai: true,
     };
   } catch {
@@ -141,14 +207,23 @@ router.get(
     try {
       const userId = req.user!.id;
 
-      const { data: profileRow } = await supabase
+      // NB: do NOT select columns that may not exist in the live DB (e.g.
+      // subscription_tier). A failed select returns null here, which would make
+      // isPro false and wrongly lock the recap for a paying subscriber.
+      const { data: profileRow, error: profileErr } = await supabase
         .from('profiles')
-        .select('is_subscribed, subscription_tier, trial_end_date, daily_calorie_goal, daily_protein_goal, daily_water_ml_goal, weight_kg, activity_level')
+        .select('is_subscribed, trial_end_date, daily_calorie_goal, daily_protein_goal, daily_water_ml_goal, weight_kg, activity_level')
         .eq('id', userId)
         .single();
 
-      const onTrial = profileRow?.trial_end_date ? new Date(profileRow.trial_end_date).getTime() > Date.now() : false;
-      const isPro = Boolean(profileRow?.is_subscribed) || onTrial;
+      if (profileErr || !profileRow) {
+        // Surface the real problem instead of silently showing the Pro teaser.
+        next(new Error(`recap: profile load failed — ${profileErr?.message ?? 'no row'}`));
+        return;
+      }
+
+      const onTrial = profileRow.trial_end_date ? new Date(profileRow.trial_end_date).getTime() > Date.now() : false;
+      const isPro = Boolean(profileRow.is_subscribed) || onTrial;
       if (!isPro) {
         res.json({ locked: true, recap: null });
         return;
