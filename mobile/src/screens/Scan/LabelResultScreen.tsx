@@ -23,6 +23,7 @@ import { getMealTypeFromTime } from '../../utils/nutrition';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { useAndroidBack } from '../../hooks/useAndroidBack';
 import { T } from '../../theme';
 
 type Props = {
@@ -95,6 +96,16 @@ export function LabelResultScreen({ navigation, route }: Props) {
   const { addLog } = useFoodLogStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [isSaving, setIsSaving] = useState(false);
+
+  // Same nested-stack reason as ScanResult: handle back explicitly rather than
+  // relying on it bubbling out of the inner navigator.
+  useAndroidBack(
+    React.useCallback(() => {
+      if (isSaving) return true;
+      navigation.goBack();
+      return true;
+    }, [isSaving, navigation]),
+  );
 
   const { health, per_100g } = result;
   // Log one serving when the pack states one; otherwise fall back to 100 g.

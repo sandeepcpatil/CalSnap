@@ -28,6 +28,7 @@ import { ScanItemsEditor } from '../../components/ScanItemsEditor';
 import { sumItems } from '../../utils/foodItems';
 import { logFoodItems } from '../../services/foodLogs';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useAndroidBack } from '../../hooks/useAndroidBack';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
@@ -140,6 +141,24 @@ export function ScanResultScreen({ navigation, route }: Props) {
         }],
   );
 
+  // Explicit hardware-back handling. ScanResult sits inside a nested stack, and
+  // relying on the press bubbling correctly is what let it fall through to
+  // Android's default (close the app). Back = the previous step, i.e. Retake.
+  useAndroidBack(
+    React.useCallback(() => {
+      if (isSaving) return true;
+      navigation.goBack();
+      return true;
+    }, [isSaving, navigation]),
+  );
+
+  /** Abandon the scan entirely and return to Home. */
+  const discard = React.useCallback(() => {
+    navigation
+      .getParent<NativeStackNavigationProp<RootStackParamList>>()
+      ?.navigate('Main', { screen: 'Home' });
+  }, [navigation]);
+
   // Totals are always derived from the edited items — never the original scan.
   const totals = sumItems(items);
 
@@ -203,6 +222,17 @@ export function ScanResultScreen({ navigation, route }: Props) {
         {/* Hero — a spoken log has no photo, so show a compact banner instead
             of a blank 1:1 image block. */}
         <View style={styles.heroWrap}>
+          {/* No header on this screen, so "I don't want to log this" needs its
+              own affordance — Retake implies another photo, not leaving. */}
+          <TouchableOpacity
+            style={styles.discardBtn}
+            onPress={discard}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Discard this scan and go home"
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.foodImage} />
           ) : (
@@ -326,6 +356,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingBottom: 120 },
   heroWrap: { position: 'relative' },
+  discardBtn: {
+    position: 'absolute', top: 12, left: 12, zIndex: 10,
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+  },
   foodImage: { width: '100%', aspectRatio: 1, resizeMode: 'cover' },
   voiceHero: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,

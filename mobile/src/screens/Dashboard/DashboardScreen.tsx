@@ -26,7 +26,8 @@ import { TrialBanner } from '../../components/TrialBanner';
 import { AlertsModal } from '../../components/AlertsModal';
 import { CoachFab, useHideOnScroll } from '../../components/CoachFab';
 import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
-import { buildSmartAlerts } from '../../utils/alerts';
+import { buildSmartAlerts, alertsSignature } from '../../utils/alerts';
+import { useAlertsSeenStore } from '../../store/alertsSeenStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { useConfirmExit } from '../../hooks/useConfirmExit';
@@ -137,6 +138,20 @@ export function DashboardScreen() {
     hour: currentHour,
   });
 
+  // Bell dot: clears the moment the sheet is opened, and only re-appears when a
+  // genuinely new/different alert shows up (see `alertsSignature`). Today's local
+  // date keys the signature so a fresh day's alerts count as new.
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const alertsSig = alertsSignature(alerts, todayKey);
+  const alertsUnread = useAlertsSeenStore((s) => s.hasUnread(alertsSig));
+  const markAlertsSeen = useAlertsSeenStore((s) => s.markSeen);
+  const badgeCount = (alertsUnread ? alerts.length : 0) + (recapUnread ? 1 : 0);
+
+  const openAlerts = () => {
+    markAlertsSeen(alertsSig);
+    setAlertsOpen(true);
+  };
+
   const firstName = (profile?.name ?? '').trim().split(' ')[0] || 'there';
   const greeting =
     currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
@@ -174,14 +189,14 @@ export function DashboardScreen() {
             {/* Bell → Alerts */}
             <TouchableOpacity
               style={styles.bellBtn}
-              onPress={() => setAlertsOpen(true)}
+              onPress={openAlerts}
               accessibilityRole="button"
               accessibilityLabel="Open alerts"
             >
               <Ionicons name="notifications-outline" size={22} color={C.onSurfaceVar} />
-              {alerts.length + (recapUnread ? 1 : 0) > 0 && (
+              {badgeCount > 0 && (
                 <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>{alerts.length + (recapUnread ? 1 : 0)}</Text>
+                  <Text style={styles.bellBadgeText}>{badgeCount}</Text>
                 </View>
               )}
             </TouchableOpacity>

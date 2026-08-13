@@ -126,3 +126,18 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
 
   return alerts;
 }
+
+/**
+ * A stable signature for a set of alerts on a given day. The bell's unread dot
+ * compares the current signature against the one last seen: it clears when the
+ * user opens the sheet, and re-appears only when a *new or different* alert
+ * shows up (or a new day brings its own alerts) — not on every re-render.
+ *
+ * The date is part of the signature so yesterday's "no breakfast logged" and
+ * today's are treated as distinct notifications worth surfacing again.
+ */
+export function alertsSignature(alerts: readonly SmartAlert[], dayKey: string): string {
+  if (alerts.length === 0) return '';
+  const ids = alerts.map((a) => a.id).sort();
+  return `${dayKey}|${ids.join(',')}`;
+}

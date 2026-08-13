@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useAndroidBack } from '../../hooks/useAndroidBack';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
 import { useNotificationStore } from '../../store/notificationStore';
@@ -68,6 +69,18 @@ export function FromHistoryScreen({ navigation }: Props) {
   /** Index of the cart item being re-portioned, or null. */
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [logging, setLogging] = useState(false);
+
+  // FindFood is the first route of a nested stack, so its own navigator has
+  // nothing to pop and the press would otherwise fall through to Android's
+  // default (close the app). Also lets back dismiss the cart instead of
+  // abandoning what you were assembling.
+  useAndroidBack(
+    useCallback(() => {
+      if (cartOpen) { setCartOpen(false); return true; }
+      navigation.goBack();
+      return true;
+    }, [cartOpen, navigation]),
+  );
 
   const userId = session?.user.id;
 

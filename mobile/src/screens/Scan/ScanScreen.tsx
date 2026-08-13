@@ -27,6 +27,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { VoiceModePanel } from '../../components/VoiceModePanel';
+import { useAndroidBack } from '../../hooks/useAndroidBack';
 import { T } from '../../theme';
 
 type Props = {
@@ -235,6 +236,17 @@ export function ScanScreen({ navigation, route }: Props) {
       setVoiceAnalyzing(false);
       barcodeLock.current = false;
     }, [requestedMode]),
+  );
+
+  // Same nested-stack situation as Find a food: ScanCamera is the first route
+  // of ScanNavigator, so the press has nothing to pop locally and would
+  // otherwise close the app. Don't allow leaving mid-analysis.
+  useAndroidBack(
+    React.useCallback(() => {
+      if (isAnalyzing) return true;
+      navigation.getParent()?.goBack();
+      return true;
+    }, [isAnalyzing, navigation]),
   );
 
   const handleBarcode = async (code: string) => {

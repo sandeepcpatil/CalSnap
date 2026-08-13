@@ -21,6 +21,7 @@ import { sumItems } from '../../utils/foodItems';
 import { getMealTypeFromTime } from '../../utils/nutrition';
 import { logFoodItems, type MealType } from '../../services/foodLogs';
 import { MealTypePicker } from '../../components/MealTypePicker';
+import { useAndroidBack } from '../../hooks/useAndroidBack';
 import {
   createSavedMeal,
   updateSavedMeal,
@@ -53,6 +54,16 @@ export function CreateMealScreen({ navigation, route }: Props) {
   const [items, setItems] = useState<FoodItem[]>(existing?.items ?? []);
   const [busy, setBusy] = useState<'save' | 'log' | null>(null);
   const [mealType, setMealType] = useState<MealType>(getMealTypeFromTime());
+
+  // Inside a nested stack like the rest of the log flow — handle back
+  // explicitly, and don't let it interrupt a save in progress.
+  useAndroidBack(
+    useCallback(() => {
+      if (busy !== null) return true;
+      navigation.goBack();
+      return true;
+    }, [busy, navigation]),
+  );
 
   const totals = sumItems(items);
   const userId = session?.user.id;
