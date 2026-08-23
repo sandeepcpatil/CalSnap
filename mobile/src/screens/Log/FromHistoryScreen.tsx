@@ -14,6 +14,7 @@ import { getMealTypeFromTime } from '../../utils/nutrition';
 import { PortionSheet } from '../../components/PortionSheet';
 import { MealTypePicker } from '../../components/MealTypePicker';
 import { fetchSavedMeals, touchSavedMeal, type SavedMeal } from '../../services/savedMeals';
+import { searchFoods, itemFromDbFood, sourceLabel, MIN_FOOD_QUERY, type FoodDbRow } from '../../services/foodSearch';
 import { sumItems } from '../../utils/foodItems';
 import type { FoodItem } from '../../services/api';
 import { T } from '../../theme';
@@ -59,6 +60,9 @@ export function FromHistoryScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<Tab>('foods');
   const [meals, setMeals] = useState<SavedMeal[]>([]);
+  // Ranked results from the shared IFCT + USDA food database.
+  const [dbResults, setDbResults] = useState<FoodDbRow[]>([]);
+  const [dbSearching, setDbSearching] = useState(false);
   /** Bumped to force a reload after the meal builder saves something. */
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -152,6 +156,27 @@ export function FromHistoryScreen({ navigation }: Props) {
     }
   }, [userId, cart, cartMeal, pendingMealIds, addLog, navigation]);
 
+  // Search the shared food database (IFCT + USDA) as the user types — only on
+  // the foods tab. Debounced so a word is one query, not one-per-keystroke, and
+  // guarded against races so a slow early response can't overwrite a newer one.
+  useEffect(() => {
+    const term = query.trim();
+    if (tab !== 'foods' || term.length < MIN_FOOD_QUERY) {
+      setDbResults([]);
+      setDbSearching(false);
+      return;
+    }
+    let active = true;
+    setDbSearching(true);
+    const handle = setTimeout(() => {
+      searchFoods(term)
+        .then((rows) => { if (active) setDbResults(rows); })
+        .catch(() => { if (active) setDbResults([]); })
+        .finally(() => { if (active) setDbSearching(false); });
+    }, 280);
+    return () => { active = false; clearTimeout(handle); };
+  }, [query, tab]);
+
   // Searching collapses the two sections into one flat result list — a split
   // between "frequent" and "recent" is noise once you've typed a name.
   const q = query.trim().toLowerCase();
@@ -177,6 +202,27 @@ export function FromHistoryScreen({ navigation }: Props) {
       <View style={styles.rowText}>
         <Text style={styles.rowName} numberOfLines={1}>{food.item.name}</Text>
         <Text style={styles.rowSub}>{food.item.calories} kcal · {subtitle}</Text>
+      </View>
+      <View style={styles.addBtn}>
+        <Ionicons name="add" size={20} color={T.textOnPrimary} />
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderDbRow = (row: FoodDbRow) => (
+    <TouchableOpacity
+      key={`db-${row.id}`}
+      style={styles.row}
+      onPress={() => addToCart(itemFromDbFood(row))}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={`Add ${row.name} to your meal`}
+    >
+      <View style={styles.rowText}>
+        <Text style={styles.rowName} numberOfLines={1}>{row.name}</Text>
+        <Text style={styles.rowSub} numberOfLines={1}>
+          {Math.round(row.energy_kcal)} kcal / 100 g · {sourceLabel(row.source)}
+        </Text>
       </View>
       <View style={styles.addBtn}>
         <Ionicons name="add" size={20} color={T.textOnPrimary} />
@@ -233,7 +279,7 @@ export function FromHistoryScreen({ navigation }: Props) {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder={tab === 'meals' ? 'Search your meals' : 'Search your foods'}
+          placeholder={tab === 'meals' ? 'Search your meals' : 'Search foods & history'}
           placeholderTextColor={T.textMuted}
           style={styles.searchInput}
           autoCorrect={false}
@@ -321,16 +367,34 @@ export function FromHistoryScreen({ navigation }: Props) {
               </Text>
             </View>
           ) : q ? (
-            results.length === 0 ? (
+            results.length === 0 && dbResults.length === 0 && !dbSearching ? (
               <View style={styles.emptyBlock}>
                 <Text style={styles.emptyText}>No match for “{query}”.</Text>
               </View>
             ) : (
               <>
-                <Text style={styles.sectionLabel}>{results.length} match{results.length === 1 ? '' : 'es'}</Text>
-                <View style={styles.card}>
-                  {results.map((f) => renderRow(f, relativeDay(f.lastLoggedAt)))}
-                </View>
+                {results.length > 0 && (
+                  <>
+                    <Text style={styles.sectionLabel}>From your history</Text>
+                    <View style={styles.card}>
+                      {results.map((f) => renderRow(f, relativeDay(f.lastLoggedAt)))}
+                    </View>
+                  </>
+                )}
+
+                <Text style={styles.sectionLabel}>From the food database</Text>
+                {dbResults.length > 0 ? (
+                  <View style={styles.card}>
+                    {dbResults.map((r) => renderDbRow(r))}
+                  </View>
+                ) : dbSearching ? (
+                  <View style={styles.dbLoading}>
+                    <ActivityIndicator size="small" color={T.primary} />
+                    <Text style={styles.dbLoadingText}>Searching database…</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.dbEmptyText}>No database match for “{query}”.</Text>
+                )}
               </>
             )
           ) : (
@@ -551,6 +615,10 @@ const styles = StyleSheet.create({
     color: T.textMuted,
     marginTop: 6,
   },
+
+  dbLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 4 },
+  dbLoadingText: { fontSize: 13, color: T.textMuted, fontWeight: '600' },
+  dbEmptyText: { fontSize: 13, color: T.textMuted, paddingVertical: 10, paddingHorizontal: 4 },
 
   card: {
     borderRadius: 16,

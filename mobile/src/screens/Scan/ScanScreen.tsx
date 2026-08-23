@@ -22,7 +22,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScanStackParamList, type ScanMode } from '../../navigation/ScanNavigator';
 import { supabase } from '../../services/supabase';
-import { analyzeFood, analyzeLabel, analyzeText, lookupBarcode } from '../../services/api';
+import { analyzeFood, analyzeLabel, analyzeText, analyzeVoice, lookupBarcode } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
@@ -391,6 +391,27 @@ export function ScanScreen({ navigation, route }: Props) {
     }
   };
 
+  /** Log by voice — read the recorded clip and send the bytes to Gemini. */
+  const processVoiceAudio = async (uri: string, mimeType: string) => {
+    setVoiceAnalyzing(true);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const { result } = await analyzeVoice(base64, mimeType, session!.access_token);
+      consumeScan();
+      navigation.navigate('ScanResult', {
+        imageUri: '',
+        imageStorageUrl: '',
+        result,
+      });
+    } catch (err: any) {
+      handleScanError(err);
+    } finally {
+      setVoiceAnalyzing(false);
+    }
+  };
+
   const processLabelPhoto = async (rawUri: string) => {
     setIsAnalyzing(true);
     try {
@@ -508,6 +529,7 @@ export function ScanScreen({ navigation, route }: Props) {
           <View style={styles.viewfinderWrap}>
             <VoiceModePanel
               onSubmit={processVoiceText}
+              onSubmitAudio={processVoiceAudio}
               analyzing={voiceAnalyzing}
               onListeningChange={setVoiceListening}
             />

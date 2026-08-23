@@ -6,11 +6,13 @@ import {
   TextInput,
   ScrollView,
   Alert,
-  KeyboardAvoidingView,
+  Animated,
+  Keyboard,
   Platform,
+  type KeyboardEvent,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
@@ -37,6 +39,35 @@ const SUGGESTIONS = [
 const MAX_CHARS = 800;
 
 /**
+ * Animates a bottom offset that tracks the keyboard height.
+ *
+ * On Android 15+ (targetSdk 35+) the app runs edge-to-edge and the window no
+ * longer resizes for the keyboard, so `windowSoftInputMode=adjustResize` and a
+ * bare `KeyboardAvoidingView` do nothing — the composer draws behind the
+ * keyboard. Driving the offset from `Keyboard` events (which still fire with a
+ * correct height edge-to-edge) works reliably on both platforms. It rests at the
+ * safe-area inset and rises to sit exactly on top of the keyboard.
+ */
+function useKeyboardOffset(restingInset: number): Animated.Value {
+  const offset = useRef(new Animated.Value(restingInset)).current;
+  useEffect(() => {
+    const animateTo = (to: number, duration: number) =>
+      Animated.timing(offset, { toValue: to, duration: duration || 200, useNativeDriver: false }).start();
+
+    const onShow = (e: KeyboardEvent) => animateTo(e.endCoordinates.height, e.duration);
+    const onHide = (e: KeyboardEvent) => animateTo(restingInset, e.duration);
+
+    // iOS fires *Will* events (smooth, pre-animation); Android only *Did*.
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(showEvt, onShow);
+    const h = Keyboard.addListener(hideEvt, onHide);
+    return () => { s.remove(); h.remove(); };
+  }, [offset, restingInset]);
+  return offset;
+}
+
+/**
  * The AI nutrition coach.
  *
  * Grounded on server-computed aggregates of the user's own logs — it can only
@@ -52,6 +83,10 @@ export function CoachScreen({ navigation }: Props) {
   const [sending, setSending] = useState(false);
   const [usage, setUsage] = useState({ used: 0, limit: 30 });
   const scrollRef = useRef<ScrollView>(null);
+  // Own the bottom inset ourselves (SafeAreaView top-only) so the same value
+  // rests below the composer and animates up with the keyboard.
+  const insets = useSafeAreaInsets();
+  const kbOffset = useKeyboardOffset(insets.bottom);
 
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -123,7 +158,7 @@ export function CoachScreen({ navigation }: Props) {
   const atLimit = usage.used >= usage.limit;
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={navigation.goBack} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={22} color={T.textPrimary} />
@@ -137,13 +172,11 @@ export function CoachScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* iOS needs padding behavior; Android relies on the activity's
-          windowSoftInputMode=adjustResize (set in the manifest) — adding an
-          explicit Android behavior on top of that double-adjusts. */}
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      {/* paddingBottom tracks the keyboard height (see useKeyboardOffset) so the
+          composer sits on top of the keyboard on both platforms — including
+          edge-to-edge Android 15+, where adjustResize/KeyboardAvoidingView no
+          longer resize the window. */}
+      <Animated.View style={[styles.flex, { paddingBottom: kbOffset }]}>
         {/* flex:1 on the ScrollView itself (not just the content) is essential:
             without it the list grows to its content height and shoves the
             composer off the bottom of the screen — where the keyboard hides it.
@@ -233,7 +266,7 @@ export function CoachScreen({ navigation }: Props) {
             Coach gives general nutrition guidance, not medical advice. {usage.used}/{usage.limit} today.
           </Text>
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </SafeAreaView>
   );
 }

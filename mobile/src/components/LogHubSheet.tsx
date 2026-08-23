@@ -127,11 +127,11 @@ export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onW
               onPress={() => go(onVoice)}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Say what you ate"
+              accessibilityLabel="Describe what you ate by speaking or typing"
             >
-              <Ionicons name="mic-outline" size={21} color={T.textPrimary} />
-              <Text style={styles.smallTitle}>Say it</Text>
-              <Text style={styles.smallSub}>Forgot the photo</Text>
+              <Ionicons name="create-outline" size={21} color={T.textPrimary} />
+              <Text style={styles.smallTitle}>Describe it</Text>
+              <Text style={styles.smallSub}>Speak or type</Text>
             </TouchableOpacity>
           </View>
 

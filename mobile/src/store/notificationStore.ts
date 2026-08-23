@@ -11,6 +11,7 @@ import {
   cancelWaterReminders,
   scheduleWeighInReminders,
   cancelWeighInReminders,
+  reconcileOrphanReminders,
   type MealType,
 } from '../services/notifications';
 import { useFoodLogStore } from './foodLogStore';
@@ -120,6 +121,9 @@ export const useNotificationStore = create<NotificationState>()(
 
         const { loggedTypesToday, loggedToday, goalMl, consumedMl, lastWeighInMs } = currentDayState();
         try {
+          // Clear orphans from older builds first, so a stale reminder can't fire
+          // alongside the fresh one (the "same notification twice" bug).
+          await reconcileOrphanReminders();
           await Promise.all([
             scheduleSmartMealReminders({ reminders, loggedTypesToday }),
             scheduleStreakReminders({ enabled: streakReminderEnabled, loggedToday }),

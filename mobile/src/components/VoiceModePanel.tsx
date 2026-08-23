@@ -1,22 +1,38 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated, Easing, ScrollView } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Voice, {
-  type SpeechResultsEvent,
-  type SpeechErrorEvent,
-  type SpeechVolumeChangeEvent,
-} from '@react-native-voice/voice';
+import {
+  useAudioRecorder,
+  useAudioRecorderState,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  RecordingPresets,
+  IOSOutputFormat,
+  AudioQuality,
+  type RecordingOptions,
+} from 'expo-audio';
 import { T } from '../theme';
 
 interface Props {
-  /** Called with the transcript when the user confirms. */
+  /** Called with the typed description when the user submits the text field. */
   onSubmit: (text: string) => void;
-  /** True while the backend is interpreting the description. */
+  /** Called with the recorded clip's file uri + mime type when the user analyses it. */
+  onSubmitAudio: (uri: string, mimeType: string) => void;
+  /** True while the backend is interpreting the description / recording. */
   analyzing: boolean;
-  /** Hides the mode toggle etc. while listening, per the design. */
-  onListeningChange?: (listening: boolean) => void;
+  /** Hides the mode toggle etc. while recording, per the design. */
+  onListeningChange?: (recording: boolean) => void;
 }
 
 // Localised examples — a generic "a sandwich" teaches the wrong mental model.
@@ -25,255 +41,272 @@ const EXAMPLES = [
   'Masala dosa with sambar, medium size',
 ];
 
-const BARS = 12;
-/** Android reports roughly -2…10 dB through onSpeechVolumeChanged. */
-const DB_MIN = -2;
-const DB_MAX = 10;
+const MAX_RECORD_MS = 30_000; // hard cap — a spoken log is a sentence, not a monologue
+const MIN_RECORD_MS = 600;    // below this there's nothing to transcribe
+const BARS = 24;
 
 /**
- * VOICE mode — the "I forgot to photograph it" path.
- *
- * Lives inside the scan flow rather than as a separate screen, so the result
- * hands ScanResultScreen the same payload the photo path produces and nothing
- * downstream changes.
+ * Recording format, chosen per platform so the bytes land in a container Gemini
+ * accepts natively (AAC on Android, WAV on iOS) — no transcoding, no on-device
+ * speech engine. Speech only needs 16 kHz mono, which keeps the upload small.
  */
-export function VoiceModePanel({ onSubmit, analyzing, onListeningChange }: Props) {
-  const [listening, setListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [partial, setPartial] = useState('');
+const RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+  extension: Platform.OS === 'ios' ? '.wav' : '.aac',
+  sampleRate: 16_000,
+  numberOfChannels: 1,
+  bitRate: 64_000,
+  android: { extension: '.aac', outputFormat: 'aac_adts', audioEncoder: 'aac' },
+  ios: {
+    extension: '.wav',
+    outputFormat: IOSOutputFormat.LINEARPCM,
+    audioQuality: AudioQuality.HIGH,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+};
+
+/** Matches the container recorded above; sent to the backend with the bytes. */
+export const VOICE_MIME = Platform.OS === 'ios' ? 'audio/wav' : 'audio/aac';
+
+function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * DESCRIBE mode — the "I forgot to photograph it" path, by voice or by typing.
+ *
+ * Voice records a short clip and hands it to the backend, which sends the audio
+ * straight to Gemini for transcription + interpretation. The result is the same
+ * payload the photo path produces, so ScanResultScreen renders it unchanged.
+ */
+export function VoiceModePanel({ onSubmit, onSubmitAudio, analyzing, onListeningChange }: Props) {
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
+  const state = useAudioRecorderState(recorder, 100);
+
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [levels, setLevels] = useState<number[]>(() => Array(BARS).fill(0.08));
 
-  /**
-   * Android's SpeechRecognizer is built for short commands: it ends the session
-   * after ~2s of silence, which cut people off mid-sentence while they thought
-   * about the next item. Extending the silence extras is unreliable across
-   * devices, so instead we treat "speech ended" as a segment boundary and
-   * immediately restart, accumulating text until the user actually taps stop.
-   */
-  const keepListening = useRef(false);
-  /** Text from completed segments; the live partial is appended for display. */
-  const finalized = useRef('');
+  // Typing is the same intent as speaking — describe the meal — routed through
+  // the same analyse path, so nothing downstream changes.
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState('');
 
-  // One Animated.Value per bar — driven by real mic amplitude, not a canned loop.
-  const bars = useRef(Array.from({ length: BARS }, () => new Animated.Value(0.15))).current;
-  const barCursor = useRef(0);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const stoppingRef = useRef(false);
 
-  useEffect(() => { onListeningChange?.(listening); }, [listening, onListeningChange]);
+  useEffect(() => { onListeningChange?.(state.isRecording); }, [state.isRecording, onListeningChange]);
 
+  // Feed the live meter into a rolling waveform, and enforce the hard cap.
   useEffect(() => {
-    Voice.onSpeechStart = () => { setListening(true); setError(null); };
+    if (!state.isRecording) return;
+    const db = state.metering ?? -60;
+    const level = Math.min(Math.max((db + 60) / 55, 0.05), 1);
+    setLevels((prev) => [...prev.slice(1), level]);
+    if (state.durationMillis >= MAX_RECORD_MS) void stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.metering, state.durationMillis, state.isRecording]);
 
-    // A segment ended — restart unless the user asked to stop.
-    Voice.onSpeechEnd = () => {
-      if (keepListening.current) restart();
-      else setListening(false);
-    };
+  // Stop a recording still running if the panel unmounts (e.g. mode switch).
+  useEffect(() => {
+    return () => { if (recorder.isRecording) recorder.stop().catch(() => {}); };
+  }, [recorder]);
 
-    Voice.onSpeechPartialResults = (e: SpeechResultsEvent) => {
-      if (e.value?.length) setPartial(e.value[0] ?? '');
-    };
-
-    // Append, never replace: each restart returns only that segment's words.
-    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      const text = e.value?.[0]?.trim();
-      if (text) {
-        finalized.current = finalized.current ? `${finalized.current} ${text}` : text;
-        setTranscript(finalized.current);
-      }
-      setPartial('');
-    };
-
-    // Amplitude → the next bar in a rolling window, so the waveform scrolls
-    // with speech instead of pulsing uniformly.
-    Voice.onSpeechVolumeChanged = (e: SpeechVolumeChangeEvent) => {
-      const db = typeof e.value === 'number' ? e.value : DB_MIN;
-      const level = Math.min(Math.max((db - DB_MIN) / (DB_MAX - DB_MIN), 0), 1);
-      const target = 0.15 + level * 0.85;
-      const bar = bars[barCursor.current % BARS];
-      barCursor.current += 1;
-      Animated.timing(bar, {
-        toValue: target, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: false,
-      }).start(() => {
-        Animated.timing(bar, {
-          toValue: 0.15, duration: 380, easing: Easing.in(Easing.quad), useNativeDriver: false,
-        }).start();
-      });
-    };
-
-    Voice.onSpeechError = (e: SpeechErrorEvent) => {
-      setPartial('');
-      const code = e.error?.code ?? '';
-      // 6 = speech timeout, 7 = no match. Both just mean "a quiet moment" —
-      // keep the session alive so a pause mid-sentence isn't the end of it.
-      if (code === '7' || code === '6') {
-        if (keepListening.current) { restart(); return; }
-        setListening(false);
+  const startRecording = async () => {
+    setError(null);
+    try {
+      const perm = await requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        setError('Microphone access is needed to record. Enable it in Settings.');
         return;
       }
-      keepListening.current = false;
-      setListening(false);
-      setError('Could not hear that clearly. Tap the mic to try again.');
-    };
-
-    return () => {
-      keepListening.current = false;
-      Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {});
-    };
-  }, [bars]);
-
-  /** Begin a new recognition segment without clearing what's already captured. */
-  const restart = () => {
-    // Small gap so the recognizer fully releases before re-acquiring the mic.
-    setTimeout(() => {
-      if (!keepListening.current) return;
-      Voice.start('en-IN').catch(() => {
-        keepListening.current = false;
-        setListening(false);
-      });
-    }, 150);
-  };
-
-  const start = async () => {
-    try {
-      setError(null);
-      setPartial('');
-      finalized.current = '';
-      setTranscript('');
-      keepListening.current = true;
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      setLevels(Array(BARS).fill(0.08));
+      setRecordedUri(null);
+      await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+      recorder.record();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await Voice.start('en-IN'); // better on Indian dish names than en-US
-      setListening(true);
     } catch {
-      keepListening.current = false;
-      setError('Microphone unavailable. Check permissions in Settings.');
-      setListening(false);
+      setError('Could not start recording. Please try again.');
     }
   };
 
-  const stop = async () => {
-    // Set first: onSpeechEnd fires during stop() and must not restart.
-    keepListening.current = false;
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); await Voice.stop(); } catch { /* already stopped */ }
-    setListening(false);
-    // Keep any unresolved words rather than discarding them.
-    setPartial((p) => {
-      if (p) {
-        finalized.current = finalized.current ? `${finalized.current} ${p}` : p;
-        setTranscript(finalized.current);
+  const stopRecording = async () => {
+    if (stoppingRef.current) return;
+    stoppingRef.current = true;
+    const tooShort = state.durationMillis < MIN_RECORD_MS;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await recorder.stop();
+      const uri = recorder.uri;
+      if (tooShort) {
+        setError('That was too short — hold on a moment longer.');
+      } else if (uri) {
+        setRecordedUri(uri);
+      } else {
+        setError('Recording failed — please try again.');
       }
-      return '';
-    });
+    } catch {
+      setError('Could not finish the recording. Please try again.');
+    } finally {
+      stoppingRef.current = false;
+    }
   };
 
-  const reset = () => {
-    finalized.current = '';
-    setTranscript(''); setPartial(''); setError(null);
+  const submitTyped = () => {
+    const t = typed.trim();
+    if (t.length < 3) return;
+    Keyboard.dismiss();
+    onSubmit(t);
   };
 
-  const shown = [transcript, partial].filter(Boolean).join(' ').trim();
-  const hasText = shown.length >= 3;
+  // ── Type it ──────────────────────────────────────────────────────────────
+  if (typing) {
+    const canSubmit = typed.trim().length >= 3 && !analyzing;
+    return (
+      <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.introIcon}>
+          <Ionicons name="create-outline" size={28} color={T.primary} />
+        </View>
+        <Text style={styles.introTitle}>Type what you ate</Text>
+        <Text style={styles.introSub}>List the items with rough quantities.</Text>
 
-  // ── Listening ──────────────────────────────────────────────────────────────
-  if (listening) {
+        <TextInput
+          style={styles.textInput}
+          value={typed}
+          onChangeText={setTyped}
+          placeholder="e.g. 2 rotis, a bowl of dal and some curd"
+          placeholderTextColor={T.textMuted}
+          multiline
+          autoFocus
+          editable={!analyzing}
+          maxLength={280}
+        />
+
+        {!!error && <Text style={styles.error}>{error}</Text>}
+
+        <View style={styles.reviewActions}>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => { Keyboard.dismiss(); setTyping(false); setError(null); }}
+            disabled={analyzing}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="mic-outline" size={16} color={T.textSecondary} />
+            <Text style={styles.retryText}>Speak</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.confirmBtn, !canSubmit && { opacity: 0.6 }]}
+            onPress={submitTyped}
+            disabled={!canSubmit}
+            activeOpacity={0.85}
+          >
+            {analyzing
+              ? <ActivityIndicator animating size={16} color={T.textOnPrimary} />
+              : <Ionicons name="sparkles" size={16} color={T.textOnPrimary} />}
+            <Text style={styles.confirmText}>{analyzing ? 'Matching…' : 'Analyze'}</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Recording ──────────────────────────────────────────────────────────────
+  if (state.isRecording) {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.stateLabel}>LISTENING</Text>
+        <Text style={styles.stateLabel}>RECORDING</Text>
 
         <View style={styles.waveRow}>
-          {bars.map((b, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.bar,
-                {
-                  height: b.interpolate({ inputRange: [0, 1], outputRange: [6, 56] }),
-                  opacity: b.interpolate({ inputRange: [0.15, 1], outputRange: [0.45, 1] }),
-                },
-              ]}
-            />
+          {levels.map((lv, i) => (
+            <View key={i} style={[styles.bar, { height: 6 + lv * 50, opacity: 0.4 + lv * 0.6 }]} />
           ))}
         </View>
 
-        {/* Open text, not a boxed field — the words are the hero here, and a
-            bordered container made long dictation feel cramped. */}
-        <ScrollView
-          style={styles.liveScroll}
-          contentContainerStyle={styles.liveInner}
-          ref={(r) => { scrollRef.current = r; }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-          showsVerticalScrollIndicator={false}
-        >
-          {shown ? (
-            <Text style={styles.liveText}>
-              {transcript}
-              {!!partial && <Text style={styles.livePartial}>{transcript ? ' ' : ''}{partial}</Text>}
-            </Text>
-          ) : (
-            <Text style={styles.liveWaiting}>Go ahead, I'm listening…</Text>
-          )}
-        </ScrollView>
+        <Text style={styles.timer}>{formatDuration(state.durationMillis)}</Text>
 
-        <TouchableOpacity style={styles.stopBtn} onPress={stop} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.stopBtn} onPress={stopRecording} activeOpacity={0.85}>
           <Ionicons name="stop" size={26} color={T.textOnPrimary} />
         </TouchableOpacity>
-        <Text style={styles.helper}>Tap when you're done · pauses are fine</Text>
+        <Text style={styles.helper}>Tap when you're done · up to 30s</Text>
       </View>
     );
   }
 
-  // ── Idle / review ──────────────────────────────────────────────────────────
+  // ── Review a finished recording ──────────────────────────────────────────────
+  if (recordedUri) {
+    return (
+      <View style={styles.wrap}>
+        <View style={styles.introIcon}>
+          <Ionicons name="checkmark-circle" size={30} color={T.primary} />
+        </View>
+        <Text style={styles.introTitle}>Recorded {formatDuration(state.durationMillis)}</Text>
+        <Text style={styles.introSub}>Analyze it, or record again if you missed something.</Text>
+
+        {!!error && <Text style={styles.error}>{error}</Text>}
+
+        <View style={styles.reviewActions}>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => { setRecordedUri(null); setError(null); startRecording(); }}
+            disabled={analyzing}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh" size={16} color={T.textSecondary} />
+            <Text style={styles.retryText}>Redo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.confirmBtn, analyzing && { opacity: 0.6 }]}
+            onPress={() => onSubmitAudio(recordedUri, VOICE_MIME)}
+            disabled={analyzing}
+            activeOpacity={0.85}
+          >
+            {analyzing
+              ? <ActivityIndicator animating size={16} color={T.textOnPrimary} />
+              : <Ionicons name="sparkles" size={16} color={T.textOnPrimary} />}
+            <Text style={styles.confirmText}>{analyzing ? 'Matching…' : 'Analyze'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Idle / intro ─────────────────────────────────────────────────────────────
   return (
     <View style={styles.wrap}>
-      {hasText ? (
-        <>
-          <Text style={styles.stateLabel}>WE HEARD</Text>
-          <ScrollView style={styles.liveScroll} contentContainerStyle={styles.liveInner} showsVerticalScrollIndicator={false}>
-            <Text style={styles.liveText}>“{shown}”</Text>
-          </ScrollView>
-          {!!error && <Text style={styles.error}>{error}</Text>}
+      <View style={styles.introIcon}>
+        <Ionicons name="mic" size={30} color={T.primary} />
+      </View>
+      <Text style={styles.introTitle}>What did you eat?</Text>
+      <Text style={styles.introSub}>Say it the way you'd tell a friend — quantities help.</Text>
 
-          <View style={styles.reviewActions}>
-            <TouchableOpacity style={styles.retryBtn} onPress={() => { reset(); start(); }} disabled={analyzing} activeOpacity={0.8}>
-              <Ionicons name="refresh" size={16} color={T.textSecondary} />
-              <Text style={styles.retryText}>Redo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.confirmBtn, analyzing && { opacity: 0.6 }]}
-              onPress={() => onSubmit(shown)}
-              disabled={analyzing}
-              activeOpacity={0.85}
-            >
-              {analyzing
-                ? <ActivityIndicator animating size={16} color={T.textOnPrimary} />
-                : <Ionicons name="sparkles" size={16} color={T.textOnPrimary} />}
-              <Text style={styles.confirmText}>{analyzing ? 'Matching…' : 'Continue'}</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <>
-          <View style={styles.introIcon}>
-            <Ionicons name="mic" size={30} color={T.primary} />
-          </View>
-          <Text style={styles.introTitle}>What did you eat?</Text>
-          <Text style={styles.introSub}>Say it the way you'd tell a friend — quantities help.</Text>
+      <View style={styles.exampleBox}>
+        <Text style={styles.exampleLabel}>FOR EXAMPLE</Text>
+        {EXAMPLES.map((e) => (
+          <Text key={e} style={styles.exampleText}>“{e}”</Text>
+        ))}
+      </View>
 
-          <View style={styles.exampleBox}>
-            <Text style={styles.exampleLabel}>FOR EXAMPLE</Text>
-            {EXAMPLES.map((e) => (
-              <Text key={e} style={styles.exampleText}>“{e}”</Text>
-            ))}
-          </View>
+      {!!error && <Text style={styles.error}>{error}</Text>}
 
-          {!!error && <Text style={styles.error}>{error}</Text>}
+      <TouchableOpacity style={styles.micBtn} onPress={startRecording} activeOpacity={0.85}>
+        <Ionicons name="mic" size={30} color={T.textOnPrimary} />
+      </TouchableOpacity>
+      <Text style={styles.helper}>Tap to record</Text>
 
-          <TouchableOpacity style={styles.micBtn} onPress={start} activeOpacity={0.85}>
-            <Ionicons name="mic" size={30} color={T.textOnPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.helper}>Tap to speak</Text>
-        </>
-      )}
+      <TouchableOpacity
+        style={styles.typeInstead}
+        onPress={() => { setError(null); setTyping(true); }}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="create-outline" size={16} color={T.primary} />
+        <Text style={styles.typeInsteadText}>Type it instead</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -302,19 +335,10 @@ const styles = StyleSheet.create({
 
   waveRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, height: 60, marginVertical: 4,
+    gap: 3, height: 60, marginVertical: 4,
   },
-  bar: { width: 4, borderRadius: 2, backgroundColor: T.primary },
-
-  liveScroll: { alignSelf: 'stretch', maxHeight: 190 },
-  liveInner: { paddingVertical: 8, justifyContent: 'center', flexGrow: 1 },
-  liveText: {
-    fontSize: 21, lineHeight: 30, color: T.textPrimary,
-    fontWeight: '600', textAlign: 'center', letterSpacing: -0.2,
-  },
-  /** Unresolved words are dimmed so mishearings are visible before submitting. */
-  livePartial: { color: T.textMuted, fontWeight: '500' },
-  liveWaiting: { fontSize: 16, color: T.textMuted, textAlign: 'center', fontStyle: 'italic' },
+  bar: { width: 3, borderRadius: 2, backgroundColor: T.primary },
+  timer: { fontSize: 28, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.5 },
 
   error: { fontSize: 13, color: T.error, fontWeight: '600', textAlign: 'center' },
 
@@ -329,6 +353,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginTop: 8,
   },
   helper: { fontSize: 12, color: T.textMuted, fontWeight: '600' },
+
+  textInput: {
+    alignSelf: 'stretch', minHeight: 100, maxHeight: 168,
+    backgroundColor: T.glass, borderRadius: 14,
+    borderWidth: 1, borderColor: T.border,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
+    fontSize: 16, lineHeight: 22, color: T.textPrimary,
+    textAlignVertical: 'top',
+  },
+  typeInstead: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 6, paddingVertical: 8, paddingHorizontal: 14,
+  },
+  typeInsteadText: { fontSize: 14, fontWeight: '700', color: T.primary },
 
   reviewActions: { flexDirection: 'row', gap: 12, alignSelf: 'stretch', marginTop: 8 },
   retryBtn: {

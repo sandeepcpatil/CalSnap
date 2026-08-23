@@ -65,14 +65,21 @@ const MEAL_COPY: Record<MealType, { title: string; body: string }> = {
 
 const mealId = (type: MealType, i: number) => `meal-${type}-${i}`;
 
-/** Purge every meal notification — the new runway ids and the old DAILY ids. */
-async function cancelMealReminders(): Promise<void> {
+/** Every meal identifier this build can schedule, plus the legacy DAILY ids. */
+function mealReminderIds(): string[] {
   const ids: string[] = [];
   for (const type of MEAL_TYPES) {
     ids.push(`reminder-${type}`); // legacy DAILY id from earlier versions
     for (let i = 0; i < RUNWAY_DAYS; i++) ids.push(mealId(type, i));
   }
-  await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})));
+  return ids;
+}
+
+/** Purge every meal notification — the new runway ids and the old DAILY ids. */
+async function cancelMealReminders(): Promise<void> {
+  await Promise.all(
+    mealReminderIds().map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})),
+  );
 }
 
 /**
@@ -279,5 +286,44 @@ export async function scheduleStreakReminders(opts: {
       },
     }).catch(() => {});
     scheduled += 1;
+  }
+}
+
+// ─── Orphan reconciliation ───────────────────────────────────────────────────
+/**
+ * Every identifier any current scheduler can produce. The app owns its entire
+ * notification surface (all four categories re-arm through `syncReminders`), so
+ * anything pending that is NOT in this set was left by an older build under an
+ * id scheme the targeted cancels can't reach.
+ */
+function allKnownReminderIds(): Set<string> {
+  return new Set<string>([
+    ...mealReminderIds(),
+    ...WATER_IDS,
+    ...WEIGHIN_IDS,
+    ...STREAK_IDS,
+  ]);
+}
+
+/**
+ * Cancel pending notifications this build no longer recognises — the root cause
+ * of the "same reminder fires twice" report. An orphan from a previous build
+ * keeps firing next to the freshly-scheduled one; a cancel keyed on today's ids
+ * never touches it. Reconciling against the full allowlist clears it for good.
+ *
+ * Best-effort and cheap; run at the start of every sync so a device heals itself
+ * on the next foreground without any migration flag.
+ */
+export async function reconcileOrphanReminders(): Promise<void> {
+  try {
+    const known = allKnownReminderIds();
+    const pending = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      pending
+        .filter((n) => !known.has(n.identifier))
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier).catch(() => {})),
+    );
+  } catch {
+    // Non-fatal — reminders still re-arm below.
   }
 }

@@ -93,6 +93,22 @@ export async function analyzeText(description: string, token: string): Promise<{
   }, token);
 }
 
+/**
+ * Log a meal by voice: the recorded clip (base64) goes straight to Gemini for
+ * transcription + interpretation. `mimeType` is 'audio/wav' on iOS and
+ * 'audio/aac' on Android — both formats Gemini accepts natively.
+ */
+export async function analyzeVoice(
+  audioBase64: string,
+  mimeType: string,
+  token: string,
+): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
+  return apiFetch('/api/analyze-voice', {
+    method: 'POST',
+    body: JSON.stringify({ audio: audioBase64, mimeType }),
+  }, token);
+}
+
 // ─── Label scan (packaged food) ──────────────────────────────────────────────
 
 /** Nutrition values normalised to per 100 g (or 100 ml for drinks). */

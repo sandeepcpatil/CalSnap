@@ -254,6 +254,30 @@ export async function analyzeFoodText(description: string): Promise<CalorieBreak
   return validateBreakdown(parsed);
 }
 
+/**
+ * Analyse a *spoken* meal description. The audio goes straight to Gemini, which
+ * transcribes and interprets it in a single call — far better on Indian dish
+ * names than an on-device recogniser, and with no separate speech service to run.
+ * Shares the text prompt and calibration, so a spoken and a typed "2 rotis and
+ * dal" resolve to the same result.
+ */
+export async function analyzeFoodAudio(audioBase64: string, mimeType: string): Promise<CalorieBreakdown> {
+  const geminiResult = await model.generateContent([
+    TEXT_SYSTEM_PROMPT,
+    'The meal description is spoken in the following audio. Transcribe what was said, then apply the METHOD above. Ignore background noise and anything unrelated to food.',
+    { inlineData: { data: audioBase64, mimeType } },
+  ]);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(geminiResult.response.text());
+  } catch {
+    console.warn('[analyzeFoodAudio] Non-JSON response, returning fallback.');
+    return fallbackBreakdown('Could not understand that recording');
+  }
+  return validateBreakdown(parsed);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 interface ImageData {
@@ -700,6 +724,76 @@ router.post(
       const dbHits = enriched.filter((i) => i.source === 'database').length;
       console.log(
         `[Gemini/text] user=${req.user!.id} items=${enriched.length} db_hits=${dbHits}/${enriched.length}`,
+      );
+
+      const responseBody: FoodScanResult = { result, cached: false };
+      res.json(responseBody);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Voice (spoken description) route ─────────────────────────────────────────
+
+/** Audio containers Gemini accepts. The app records AAC (Android) / WAV (iOS). */
+const ALLOWED_AUDIO_MIME = new Set([
+  'audio/aac', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3',
+  'audio/ogg', 'audio/flac', 'audio/aiff',
+]);
+/** Base64 length cap (~4.5 MB decoded) — a short spoken log is a few hundred KB. */
+const MAX_AUDIO_BASE64_LEN = 6_000_000;
+
+/**
+ * POST /api/analyze-voice
+ * Body: { audio: string (base64), mimeType: string }
+ *
+ * Log a meal by speaking it. The recording is sent straight to Gemini for
+ * transcription + interpretation — no on-device speech dependency, much better
+ * accuracy on Indian dishes. Shares the text path's scan gate, items schema and
+ * `foods` enrichment, so the client renders it on the same editable screen.
+ */
+router.post(
+  '/analyze-voice',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { audio, mimeType } = req.body as { audio?: unknown; mimeType?: unknown };
+
+      if (typeof audio !== 'string' || audio.length < 100) {
+        res.status(400).json({ error: 'No recording received. Please try again.' });
+        return;
+      }
+      if (audio.length > MAX_AUDIO_BASE64_LEN) {
+        res.status(413).json({ error: 'That recording is too long — keep it under ~30 seconds.' });
+        return;
+      }
+      // Never trust the client's label blindly; fall back to a safe default.
+      const mt = typeof mimeType === 'string' && ALLOWED_AUDIO_MIME.has(mimeType) ? mimeType : 'audio/aac';
+
+      // Same fair-use ceiling as photo scans.
+      if (!(await enforceScanGate(req, res))) return;
+
+      const aiResult = await analyzeFoodAudio(audio, mt);
+
+      if (aiResult.items.length === 0 || aiResult.calories === 0) {
+        // Nothing recognisable — do not bill a scan.
+        res.status(422).json({
+          error: aiResult.notes || "We couldn't hear any food in that recording.",
+        });
+        return;
+      }
+
+      const enriched = await enrichItems(aiResult.items);
+      const result: CalorieBreakdown = enriched.length
+        ? { ...aiResult, items: enriched, ...totalsOf(enriched) }
+        : aiResult;
+
+      await supabase.rpc('increment_scan_count', { user_id: req.user!.id });
+
+      const dbHits = enriched.filter((i) => i.source === 'database').length;
+      console.log(
+        `[Gemini/voice] user=${req.user!.id} items=${enriched.length} db_hits=${dbHits}/${enriched.length}`,
       );
 
       const responseBody: FoodScanResult = { result, cached: false };
