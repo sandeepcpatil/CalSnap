@@ -16,7 +16,7 @@ interface BarcodeResponse {
 }
 
 // Open Food Facts asks every caller to send an identifying User-Agent.
-const OFF_UA = 'CalSnap/1.0 (nutrition app; contact: support@calsnap.app)';
+const OFF_UA = 'CalVue/1.0 (nutrition app; contact: calsnap.support@gmail.com)';
 const OFF_TIMEOUT_MS = 6000;
 
 /** EAN-8/13, UPC-A/E — 8 to 14 digits. */

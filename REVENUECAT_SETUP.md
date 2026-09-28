@@ -1,4 +1,4 @@
-# CalSnap — RevenueCat Payments Setup
+# CalVue — RevenueCat Payments Setup
 
 The app now uses **RevenueCat** (over StoreKit on iOS + Google Play Billing on Android) instead of Razorpay. The code changes are done; this guide covers the account/dashboard steps only **you** can do, plus how to test.
 
@@ -28,7 +28,7 @@ The app now uses **RevenueCat** (over StoreKit on iOS + Google Play Billing on A
 ### 1. Store products
 Create an auto-renewing subscription in **both** stores with matching logic:
 
-- **App Store Connect** → your app → Subscriptions → create a group (e.g. "CalSnap Pro") with two products, e.g. `calsnap_pro_monthly` and `calsnap_pro_annual`. Set prices (INR + other territories).
+- **App Store Connect** → your app → Subscriptions → create a group (e.g. "CalVue Pro") with two products, e.g. `calsnap_pro_monthly` and `calsnap_pro_annual`. Set prices (INR + other territories).
 - **Google Play Console** → Monetize → Subscriptions → create `calsnap_pro_monthly` and `calsnap_pro_annual` with base plans (monthly / yearly).
 
 > The backend infers plan type from the product id containing "annual"/"year". Keep "annual" (or "year") in the annual product id, or adjust `planFromProductId` in `subscription.ts`.

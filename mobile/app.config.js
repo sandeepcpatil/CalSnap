@@ -1,11 +1,11 @@
 const IS_DEV = process.env.APP_VARIANT === 'development';
 // v6
 module.exports = {
-  name: IS_DEV ? 'CalSnap (Dev)' : 'CalSnap',
+  name: IS_DEV ? 'CalVue (Dev)' : 'CalVue',
   slug: 'calsnap',
   version: '1.0.0',
   orientation: 'portrait',
-  scheme: 'calsnap',
+  scheme: 'calvue',
   icon: './assets/icon.png',
   // The app ships dark-only — 'automatic' let the OS force a light appearance
   // on some surfaces while every screen renders dark.
@@ -24,8 +24,8 @@ module.exports = {
     supportsTablet: false,
     bundleIdentifier: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
     infoPlist: {
-      NSCameraUsageDescription: 'CalSnap needs camera access to scan your food.',
-      NSPhotoLibraryUsageDescription: 'CalSnap needs photo library access to analyze food photos.',
+      NSCameraUsageDescription: 'CalVue needs camera access to scan your food.',
+      NSPhotoLibraryUsageDescription: 'CalVue needs photo library access to analyze food photos.',
     },
   },
   android: {
@@ -35,7 +35,7 @@ module.exports = {
       backgroundColor: '#01696F',
     },
     package: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
-    versionCode: 11,
+    versionCode: 12,
     permissions: [
       'CAMERA',
       'RECEIVE_BOOT_COMPLETED',
@@ -64,19 +64,19 @@ module.exports = {
     [
       'expo-camera',
       {
-        cameraPermission: 'CalSnap needs camera access to scan your food.',
+        cameraPermission: 'CalVue needs camera access to scan your food.',
       },
     ],
     [
       'expo-image-picker',
       {
-        photosPermission: 'CalSnap needs photo library access to analyze food photos.',
+        photosPermission: 'CalVue needs photo library access to analyze food photos.',
       },
     ],
     [
       'expo-audio',
       {
-        microphonePermission: 'CalSnap uses the microphone so you can log a meal by speaking.',
+        microphonePermission: 'CalVue uses the microphone so you can log a meal by speaking.',
       },
     ],
     [

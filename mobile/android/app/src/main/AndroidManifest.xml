@@ -28,9 +28,9 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="calsnap"/>
+        <data android:scheme="calvue"/>
         <data android:scheme="com.sanverse.calsnapapp"/>
-        <data android:scheme="exp+calsnap"/>
+        <data android:scheme="exp+calvue"/>
       </intent-filter>
     </activity>
   </application>

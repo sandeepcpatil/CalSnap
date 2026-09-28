@@ -36,7 +36,7 @@ const C = {
 type Category = 'feature' | 'improvement' | 'bug' | 'other';
 
 const CATEGORIES: { key: Category; label: string; icon: keyof typeof Ionicons.glyphMap; blurb: string }[] = [
-  { key: 'feature', label: 'Feature idea', icon: 'bulb-outline', blurb: 'Something you wish CalSnap could do' },
+  { key: 'feature', label: 'Feature idea', icon: 'bulb-outline', blurb: 'Something you wish CalVue could do' },
   { key: 'improvement', label: 'Improvement', icon: 'trending-up-outline', blurb: 'Something that could work better' },
   { key: 'bug', label: 'Something broke', icon: 'bug-outline', blurb: 'A bug or something behaving oddly' },
   { key: 'other', label: 'Anything else', icon: 'chatbox-ellipses-outline', blurb: 'Praise, confusion, or a stray thought' },
@@ -137,7 +137,7 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
             </View>
             <Text style={styles.doneTitle}>Thank you — genuinely</Text>
             <Text style={styles.doneBody}>
-              This goes straight to the person building CalSnap and gets read. If it's something we
+              This goes straight to the person building CalVue and gets read. If it's something we
               can fix or add, it shapes what comes next.
             </Text>
             <TouchableOpacity style={styles.doneBtn} onPress={close} activeOpacity={0.88}>
@@ -151,7 +151,7 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
           <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
               <Text style={styles.intro}>
-                What would make CalSnap better for you? Feature ideas, things that annoy you, or
+                What would make CalVue better for you? Feature ideas, things that annoy you, or
                 anything that felt confusing — it all helps.
               </Text>
 

@@ -59,7 +59,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
     if (result.reason === 'permission_denied') {
       Alert.alert(
         'Notifications are turned off',
-        'To get meal reminders, allow notifications for CalSnap in your device settings.',
+        'To get meal reminders, allow notifications for CalVue in your device settings.',
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -76,7 +76,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
     if (result.reason === 'permission_denied') {
       Alert.alert(
         'Notifications are turned off',
-        `To get ${what}, allow notifications for CalSnap in your device settings.`,
+        `To get ${what}, allow notifications for CalVue in your device settings.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -129,7 +129,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
           </Text>
 
           {/* Streak nudge — on by default, but switchable so nobody has to
-              disable every CalSnap notification just to silence this one. */}
+              disable every CalVue notification just to silence this one. */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={[styles.mealIcon, { backgroundColor: T.warning + '22' }]}>

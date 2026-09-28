@@ -78,7 +78,7 @@ export function ProfileScreen() {
 
   const handleContactSupport = async () => {
     const version = Constants.expoConfig?.version ?? '1.0.0';
-    const subject = `CalSnap Support (v${version})`;
+    const subject = `CalVue Support (v${version})`;
     // Pre-fill context so support has what they need without asking.
     const body = [
       '',
@@ -239,7 +239,7 @@ export function ProfileScreen() {
             <View style={styles.ctaContent}>
               <View style={styles.ctaText}>
                 <Text style={[styles.ctaTitle, { color: C.tertiary }]}>⏳ Trial ends in {trialDaysLeft ?? 0} day{(trialDaysLeft ?? 0) !== 1 ? 's' : ''}</Text>
-                <Text style={styles.ctaSubtitle}>Enjoying CalSnap Pro? Lock in your access.</Text>
+                <Text style={styles.ctaSubtitle}>Enjoying CalVue Pro? Lock in your access.</Text>
               </View>
               <TouchableOpacity
                 style={[styles.ctaButton, { backgroundColor: C.tertiary }]}
@@ -331,7 +331,7 @@ export function ProfileScreen() {
         </View>
 
         <Text style={styles.versionText}>
-          CalSnap v{Constants.expoConfig?.version ?? '1.0.0'}
+          CalVue v{Constants.expoConfig?.version ?? '1.0.0'}
         </Text>
         <View style={{ height: 80 }} />
       </ScrollView>

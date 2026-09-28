@@ -174,7 +174,7 @@ export async function exportHistoryToExcel(days: ExportDay[]): Promise<boolean> 
   const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const uri = `${FileSystem.cacheDirectory}CalSnap-Nutrition-${stamp}.xlsx`;
+  const uri = `${FileSystem.cacheDirectory}CalVue-Nutrition-${stamp}.xlsx`;
   await FileSystem.writeAsStringAsync(uri, base64, {
     encoding: FileSystem.EncodingType.Base64,
   });
@@ -184,7 +184,7 @@ export async function exportHistoryToExcel(days: ExportDay[]): Promise<boolean> 
   }
   await Sharing.shareAsync(uri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    dialogTitle: 'Export CalSnap nutrition data',
+    dialogTitle: 'Export CalVue nutrition data',
     UTI: 'org.openxmlformats.spreadsheetml.sheet',
   });
   return true;

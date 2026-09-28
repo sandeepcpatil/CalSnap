@@ -563,7 +563,7 @@ export function ScanScreen({ navigation, route }: Props) {
 
             <Text style={styles.permissionTitle}>Camera access needed</Text>
             <Text style={styles.permissionText}>
-              CalSnap uses your camera to scan meals and packaged-food labels. Photos are only used
+              CalVue uses your camera to scan meals and packaged-food labels. Photos are only used
               to analyze nutrition.
             </Text>
 

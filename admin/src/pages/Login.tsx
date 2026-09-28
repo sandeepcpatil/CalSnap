@@ -21,7 +21,7 @@ export function Login() {
     <div className="min-h-screen flex">
       {/* Left decorative panel */}
       <div className="hidden lg:flex flex-col justify-between w-2/5 bg-gradient-to-br from-teal to-teal-dark p-12 text-white">
-        <div className="text-3xl font-black tracking-tight">🥗 CalSnap</div>
+        <div className="text-3xl font-black tracking-tight">🥗 CalVue</div>
         <div>
           <blockquote className="text-2xl font-semibold leading-snug opacity-90">
             "Snap your food.<br />Know your nutrition."

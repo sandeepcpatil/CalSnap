@@ -150,7 +150,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
     try {
       const isPro = await purchasePackage(selectedPkg);
       if (isPro) {
-        await activatePro("Welcome to Pro! 🎉", "Your CalSnap Pro subscription is now active. Scan unlimited food!");
+        await activatePro("Welcome to Pro! 🎉", "Your CalVue Pro subscription is now active. Scan unlimited food!");
       }
     } catch (err: any) {
       // RevenueCat sets userCancelled on user-dismissed purchases — stay silent.
@@ -167,7 +167,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
     try {
       const isPro = await restorePurchases();
       if (isPro) {
-        await activatePro("Purchases restored", "Your CalSnap Pro subscription is active again.");
+        await activatePro("Purchases restored", "Your CalVue Pro subscription is active again.");
       } else {
         Alert.alert("Nothing to restore", "We couldn't find an active subscription for this account.");
       }
@@ -205,7 +205,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             <View style={styles.heroIcon}>
               <Ionicons name="star" size={32} color={C.primary} />
             </View>
-            <Text style={styles.heroTitle}>CalSnap <Text style={styles.heroTitlePro}>Pro</Text></Text>
+            <Text style={styles.heroTitle}>CalVue <Text style={styles.heroTitlePro}>Pro</Text></Text>
             <Text style={styles.heroSubtitle}>
               {scansRemaining === 0
                 ? "You've used all your free scans"

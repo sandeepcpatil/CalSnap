@@ -1,4 +1,4 @@
-# CalSnap — Google Play Store Listing
+# CalVue — Google Play Store Listing
 
 Ready-to-paste copy. Only claims features that actually exist in the app.
 
@@ -7,13 +7,13 @@ Ready-to-paste copy. Only claims features that actually exist in the app.
 ## App name (max 30 characters)
 
 ```
-CalSnap: AI Calorie Counter
+CalVue: AI Calorie Counter
 ```
 *(27 characters)*
 
 Alternatives:
-- `CalSnap – AI Food Scanner` (25)
-- `CalSnap: Calorie & Macro AI` (27)
+- `CalVue – AI Food Scanner` (25)
+- `CalVue: Calorie & Macro AI` (27)
 
 ---
 
@@ -33,16 +33,16 @@ Alternatives:
 ## Full description (max 4000 characters)
 
 ```
-Stop guessing what's on your plate. CalSnap turns a single photo into a complete nutrition breakdown — calories, protein, carbs, fat and fibre — in seconds.
+Stop guessing what's on your plate. CalVue turns a single photo into a complete nutrition breakdown — calories, protein, carbs, fat and fibre — in seconds.
 
 📸 SNAP A MEAL, GET INSTANT NUTRITION
-Point your camera at your food and let CalSnap's AI do the rest. No searching endless databases, no weighing every ingredient, no manual entry. Works beautifully with Indian meals — dal, roti, biryani, sabzi and everything in between.
+Point your camera at your food and let CalVue's AI do the rest. No searching endless databases, no weighing every ingredient, no manual entry. Works beautifully with Indian meals — dal, roti, biryani, sabzi and everything in between.
 
 🏷️ SCAN PACKAGED FOOD LABELS
-Not sure if that biscuit packet is actually healthy? Scan the nutrition label and get a clear Health Score from 0 to 100, plus the reason behind it. CalSnap reads the label and flags what matters — added sugars, palm oil, high sodium, saturated fat — so you can make a confident choice in the aisle.
+Not sure if that biscuit packet is actually healthy? Scan the nutrition label and get a clear Health Score from 0 to 100, plus the reason behind it. CalVue reads the label and flags what matters — added sugars, palm oil, high sodium, saturated fat — so you can make a confident choice in the aisle.
 
 🎯 PERSONALISED DAILY TARGETS
-Tell CalSnap your height, weight, age, activity level and goal, and it calculates daily calorie and protein targets built around you. Track your progress with a clean calorie ring and a macro breakdown that shows exactly where your energy is coming from.
+Tell CalVue your height, weight, age, activity level and goal, and it calculates daily calorie and protein targets built around you. Track your progress with a clean calorie ring and a macro breakdown that shows exactly where your energy is coming from.
 
 📊 UNDERSTAND YOUR HABITS
 • Daily calorie ring with live progress
@@ -54,13 +54,13 @@ Tell CalSnap your height, weight, age, activity level and goal, and it calculate
 ⏰ NEVER FORGET TO LOG
 Set daily reminders for each meal so logging becomes a habit, not a chore.
 
-✨ WHY PEOPLE LOVE CALSNAP
+✨ WHY PEOPLE LOVE CALVUE
 • Fast — a photo takes seconds, not minutes
 • Honest — every health score is calculated from the actual label, with a clear explanation
 • Clean, distraction-free design
 • Built for real Indian eating habits
 
-🌟 CALSNAP PRO
+🌟 CALVUE PRO
 Start with a 7-day free trial. Pro unlocks:
 • Unlimited AI scans
 • Full nutrition breakdown on every scan
@@ -74,7 +74,7 @@ Free accounts include 2 AI scans per day.
 Subscriptions are billed through your Google Play account and renew automatically unless cancelled at least 24 hours before the period ends. Manage or cancel anytime in your Play Store account settings.
 
 📌 IMPORTANT
-CalSnap provides nutrition estimates for general informational purposes only. It is not a medical device and does not provide medical, dietary or nutritional advice. AI estimates are approximate. Always consult a qualified doctor or dietitian before making decisions about your diet or health.
+CalVue provides nutrition estimates for general informational purposes only. It is not a medical device and does not provide medical, dietary or nutritional advice. AI estimates are approximate. Always consult a qualified doctor or dietitian before making decisions about your diet or health.
 
 Questions or feedback? Reach us any time from Profile → Contact Support.
 

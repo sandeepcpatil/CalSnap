@@ -154,7 +154,7 @@ function LockedTeaser({ onUpgrade }: { onUpgrade?: () => void }) {
       <Text style={styles.teaserTitle}>Your week in review</Text>
       <Text style={styles.teaserBody}>
         Every Monday, get a personal breakdown of your week — calories, protein, hydration and weight —
-        with tips on what to focus on next. A CalSnap Pro feature.
+        with tips on what to focus on next. A CalVue Pro feature.
       </Text>
       {onUpgrade && (
         <TouchableOpacity style={styles.teaserBtn} onPress={onUpgrade} activeOpacity={0.88}>

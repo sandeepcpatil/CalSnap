@@ -4,7 +4,7 @@ const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.sanverse.cal
 const SUPPORT_EMAIL = 'calsnap.support@gmail.com';
 
 /**
- * The public CalSnap website.
+ * The public CalVue website.
  *
  * Every claim here maps to a feature that actually ships — the same discipline
  * as the Play listing. No invented screenshots, no "coming soon" dressed up as
@@ -15,7 +15,7 @@ const FEATURES = [
   {
     icon: '📸',
     title: 'Snap a meal, get the numbers',
-    body: 'Point your camera at a plate and CalSnap breaks it into individual items — dal, rice, two rotis — each with its own calories and macros. Fix any portion before you log it.',
+    body: 'Point your camera at a plate and CalVue breaks it into individual items — dal, rice, two rotis — each with its own calories and macros. Fix any portion before you log it.',
     accent: 'text-brand',
   },
   {
@@ -52,7 +52,7 @@ const FEATURES = [
 
 const STEPS = [
   { n: '1', title: 'Snap or say it', body: 'Photo, barcode, voice, or pick from foods you have logged before.' },
-  { n: '2', title: 'Check the items', body: 'CalSnap splits the meal up. Adjust a portion or add anything it missed.' },
+  { n: '2', title: 'Check the items', body: 'CalVue splits the meal up. Adjust a portion or add anything it missed.' },
   { n: '3', title: 'Watch the trend', body: 'Daily rings, weekly reviews, and a weight trend that tells you if it is working.' },
 ];
 
@@ -242,7 +242,7 @@ export function Landing() {
               CAL<span className="text-brand">SNAP</span>
             </p>
             <p className="mt-1 text-xs text-content-muted">
-              © {new Date().getFullYear()} CalSnap. Made in India.
+              © {new Date().getFullYear()} CalVue. Made in India.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-content-secondary">
@@ -252,7 +252,7 @@ export function Landing() {
           </div>
         </div>
         <p className="mx-auto max-w-6xl px-5 pb-8 text-center text-[11px] leading-relaxed text-content-muted sm:text-left">
-          CalSnap provides general nutrition information and is not a substitute for professional
+          CalVue provides general nutrition information and is not a substitute for professional
           medical advice. AI estimates from photos are approximations — always check the items
           before logging.
         </p>

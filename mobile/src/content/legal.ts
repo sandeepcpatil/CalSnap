@@ -1,4 +1,4 @@
-// CalSnap legal content — single source for the in-app Terms & Privacy screens.
+// CalVue legal content — single source for the in-app Terms & Privacy screens.
 // NOTE: This is a good-faith template, not legal advice. Have it reviewed by a
 // lawyer and fill in the bracketed fields ([ ]) before you rely on it.
 
@@ -9,24 +9,24 @@ export interface LegalSection {
 
 export const LEGAL_LAST_UPDATED = "12 July 2026";
 export const SUPPORT_EMAIL = "calsnap.support@gmail.com"; // TODO: replace with your real support email
-export const LEGAL_ENTITY = "CalSnap"; // TODO: replace with your registered legal entity name
+export const LEGAL_ENTITY = "CalVue"; // TODO: replace with your registered legal entity name
 
 export const TERMS: LegalSection[] = [
   {
     title: "1. Acceptance of these Terms",
-    body: `By creating an account or using CalSnap ("the App"), you agree to these Terms of Service. If you do not agree, please do not use the App.`,
+    body: `By creating an account or using CalVue ("the App"), you agree to these Terms of Service. If you do not agree, please do not use the App.`,
   },
   {
     title: "2. Eligibility",
-    body: `You must be at least 16 years old to use CalSnap. The App is not intended for children. By using it, you confirm you meet this requirement.`,
+    body: `You must be at least 16 years old to use CalVue. The App is not intended for children. By using it, you confirm you meet this requirement.`,
   },
   {
-    title: "3. What CalSnap does",
-    body: `CalSnap uses artificial intelligence to estimate the calories and macronutrients of food from photos you take, and helps you log and track your nutrition over time. Estimates are approximate and generated automatically.`,
+    title: "3. What CalVue does",
+    body: `CalVue uses artificial intelligence to estimate the calories and macronutrients of food from photos you take, and helps you log and track your nutrition over time. Estimates are approximate and generated automatically.`,
   },
   {
     title: "4. Not medical or nutritional advice",
-    body: `CalSnap provides estimates for general informational and educational purposes only. It is NOT a medical device and does not provide medical, dietary, or nutritional advice, diagnosis, or treatment. Calorie and macro figures are estimates and may be inaccurate. Always consult a qualified doctor or dietitian before making decisions about your diet, health, or any medical condition. Do not rely on CalSnap for medical purposes.`,
+    body: `CalVue provides estimates for general informational and educational purposes only. It is NOT a medical device and does not provide medical, dietary, or nutritional advice, diagnosis, or treatment. Calorie and macro figures are estimates and may be inaccurate. Always consult a qualified doctor or dietitian before making decisions about your diet, health, or any medical condition. Do not rely on CalVue for medical purposes.`,
   },
   {
     title: "5. Your account",
@@ -34,7 +34,7 @@ export const TERMS: LegalSection[] = [
   },
   {
     title: "6. Free trial, subscriptions & billing",
-    body: `New users receive a 7-day free trial. After the trial, free accounts may perform a limited number of scans per day. CalSnap Pro is a paid auto-renewing subscription (monthly or annual) with a generous daily fair-use scan limit.
+    body: `New users receive a 7-day free trial. After the trial, free accounts may perform a limited number of scans per day. CalVue Pro is a paid auto-renewing subscription (monthly or annual) with a generous daily fair-use scan limit.
 
 Payment is charged to your Apple App Store or Google Play account. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. You manage or cancel your subscription in your App Store or Google Play account settings — not in the App. Refunds are handled by Apple or Google under their policies; we do not separately process refunds.`,
   },
@@ -44,7 +44,7 @@ Payment is charged to your Apple App Store or Google Play account. Subscriptions
   },
   {
     title: "8. Your content",
-    body: `You retain ownership of the food photos and information you submit. You grant CalSnap a limited licence to process this content to provide the service (including sending images to our AI provider for analysis). Food images are automatically deleted after 90 days; your nutrition logs remain until you delete them or your account.`,
+    body: `You retain ownership of the food photos and information you submit. You grant CalVue a limited licence to process this content to provide the service (including sending images to our AI provider for analysis). Food images are automatically deleted after 90 days; your nutrition logs remain until you delete them or your account.`,
   },
   {
     title: "9. Intellectual property",
@@ -52,15 +52,15 @@ Payment is charged to your Apple App Store or Google Play account. Subscriptions
   },
   {
     title: "10. Third-party services",
-    body: `CalSnap relies on third parties including Supabase (hosting & authentication), Google (sign-in and AI analysis via Gemini), and RevenueCat (subscription management). Your use of the App is also subject to their terms.`,
+    body: `CalVue relies on third parties including Supabase (hosting & authentication), Google (sign-in and AI analysis via Gemini), and RevenueCat (subscription management). Your use of the App is also subject to their terms.`,
   },
   {
     title: "11. Disclaimers & limitation of liability",
-    body: `The App is provided "as is" without warranties of any kind. To the maximum extent permitted by law, CalSnap and its operators are not liable for any indirect, incidental, or consequential damages, or for any decisions you make based on the App's estimates.`,
+    body: `The App is provided "as is" without warranties of any kind. To the maximum extent permitted by law, CalVue and its operators are not liable for any indirect, incidental, or consequential damages, or for any decisions you make based on the App's estimates.`,
   },
   {
     title: "12. Termination",
-    body: `You may stop using CalSnap and delete your account at any time. We may suspend or terminate access if you breach these Terms.`,
+    body: `You may stop using CalVue and delete your account at any time. We may suspend or terminate access if you breach these Terms.`,
   },
   {
     title: "13. Changes to these Terms",
@@ -79,7 +79,7 @@ Payment is charged to your Apple App Store or Google Play account. Subscriptions
 export const PRIVACY: LegalSection[] = [
   {
     title: "1. Introduction",
-    body: `This Privacy Policy explains how CalSnap collects, uses, and protects your information. By using the App, you agree to this policy.`,
+    body: `This Privacy Policy explains how CalVue collects, uses, and protects your information. By using the App, you agree to this policy.`,
   },
   {
     title: "2. Information we collect",
@@ -99,7 +99,7 @@ export const PRIVACY: LegalSection[] = [
   },
   {
     title: "5. How we share information",
-    body: `We do not sell your personal data. We share it only with service providers that help us run CalSnap: Supabase (secure hosting and authentication), Google (sign-in and AI analysis), and RevenueCat (subscription management). We may disclose information if required by law.`,
+    body: `We do not sell your personal data. We share it only with service providers that help us run CalVue: Supabase (secure hosting and authentication), Google (sign-in and AI analysis), and RevenueCat (subscription management). We may disclose information if required by law.`,
   },
   {
     title: "6. Data retention",
@@ -115,7 +115,7 @@ export const PRIVACY: LegalSection[] = [
   },
   {
     title: "9. Children",
-    body: `CalSnap is not directed to children under 16 and we do not knowingly collect their data. If you believe a child has provided us information, contact us and we will delete it.`,
+    body: `CalVue is not directed to children under 16 and we do not knowingly collect their data. If you believe a child has provided us information, contact us and we will delete it.`,
   },
   {
     title: "10. International transfers",

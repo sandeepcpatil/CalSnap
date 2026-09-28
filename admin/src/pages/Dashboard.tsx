@@ -158,7 +158,7 @@ export function Dashboard() {
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🥗</span>
-          <h1 className="text-xl font-bold text-teal">CalSnap Admin</h1>
+          <h1 className="text-xl font-bold text-teal">CalVue Admin</h1>
         </div>
         <button onClick={handleSignOut} className="text-sm text-gray-500 hover:text-red-500 transition-colors">
           Sign out

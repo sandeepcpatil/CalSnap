@@ -1,11 +1,11 @@
-# CalSnap — Privacy Policy
+# CalVue — Privacy Policy
 
 _Last updated: 12 July 2026_
 
 > This is a good-faith template, not legal advice. Have it reviewed by a lawyer and fill in the bracketed fields before publishing. Mirrors the in-app Privacy Policy (`mobile/src/content/legal.ts`).
 
 ## 1. Introduction
-This Privacy Policy explains how CalSnap collects, uses, and protects your information. By using the App, you agree to this policy.
+This Privacy Policy explains how CalVue collects, uses, and protects your information. By using the App, you agree to this policy.
 
 ## 2. Information we collect
 - **Account information:** your email address, name, and profile photo from your sign-in provider.
@@ -21,7 +21,7 @@ We use your information to: provide food analysis and tracking, calculate your n
 To estimate nutrition, the food images you scan are sent to our AI provider, Google (Gemini API), for analysis. We send only what is needed for the estimate. Please review Google's applicable terms for how they handle API data. Images are deleted from our storage after 90 days.
 
 ## 5. How we share information
-We do not sell your personal data. We share it only with service providers that help us run CalSnap: Supabase (secure hosting and authentication), Google (sign-in and AI analysis), and RevenueCat (subscription management). We may disclose information if required by law.
+We do not sell your personal data. We share it only with service providers that help us run CalVue: Supabase (secure hosting and authentication), Google (sign-in and AI analysis), and RevenueCat (subscription management). We may disclose information if required by law.
 
 ## 6. Data retention
 Food images are automatically deleted 90 days after upload. Your account and nutrition logs are retained until you delete your account. You can request deletion at any time.
@@ -33,7 +33,7 @@ You can access and correct your profile in the App. You can delete your account 
 We use industry-standard measures to protect your data, including encryption in transit and access controls. No method of transmission or storage is 100% secure, but we work to protect your information.
 
 ## 9. Children
-CalSnap is not directed to children under 16 and we do not knowingly collect their data. If you believe a child has provided us information, contact us and we will delete it.
+CalVue is not directed to children under 16 and we do not knowingly collect their data. If you believe a child has provided us information, contact us and we will delete it.
 
 ## 10. International transfers
 Your information may be processed on servers located outside your country (for example, by our hosting and AI providers). We take steps to ensure appropriate protection for such transfers.

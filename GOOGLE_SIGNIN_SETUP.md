@@ -1,6 +1,6 @@
-# CalSnap — Native Google Sign-In & Branding Setup
+# CalVue — Native Google Sign-In & Branding Setup
 
-The login now uses **native Google Sign-In** (`@react-native-google-signin/google-signin` → `supabase.auth.signInWithIdToken`) instead of the browser OAuth flow. This shows a native account picker branded as **CalSnap** (no `supabase.co` domain) and removes the Expo Go redirect problem.
+The login now uses **native Google Sign-In** (`@react-native-google-signin/google-signin` → `supabase.auth.signInWithIdToken`) instead of the browser OAuth flow. This shows a native account picker branded as **CalVue** (no `supabase.co` domain) and removes the Expo Go redirect problem.
 
 > Requires a **dev/production build** — native Google Sign-In does **not** run in Expo Go. Use `npx expo run:android` / `run:ios` or an EAS build.
 
@@ -17,7 +17,7 @@ Create **three** OAuth 2.0 client IDs in the same project:
 3. **iOS** — bundle ID `com.sanverse.calsnapapp` (+ `.dev`). Copy its **iOS client ID**; its reversed form is `com.googleusercontent.apps.<IOS_CLIENT_ID>`.
 
 ## 2. OAuth consent screen (fixes the "supabase.co" branding)
-Google Cloud → **OAuth consent screen**: set **App name = CalSnap**, upload a logo, set the support email and developer contact. This is what makes the sign-in sheet say *CalSnap*. (With native sign-in there's no `supabase.co` domain line at all.)
+Google Cloud → **OAuth consent screen**: set **App name = CalVue**, upload a logo, set the support email and developer contact. This is what makes the sign-in sheet say *CalVue*. (With native sign-in there's no `supabase.co` domain line at all.)
 
 ## 3. Supabase → Auth → Providers → Google
 - Enable Google.
@@ -38,7 +38,7 @@ cd mobile
 npm install
 npx expo run:android   # or run:ios (Mac + Xcode)
 ```
-Tap **Continue with Google** → you should see the native CalSnap account picker, and land in the app signed in.
+Tap **Continue with Google** → you should see the native CalVue account picker, and land in the app signed in.
 
 ## Notes
 - Android needs the correct **SHA-1** registered or sign-in fails with `DEVELOPER_ERROR`. Register both your dev-client and release SHA-1.

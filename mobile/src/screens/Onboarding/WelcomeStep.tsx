@@ -33,7 +33,7 @@ export function WelcomeStep({ navigation }: Props) {
         <OnboardingProgress step={1} total={5} />
 
         <View style={styles.content}>
-          <Text variant="headlineMedium" style={styles.title}>Welcome to CalSnap 👋</Text>
+          <Text variant="headlineMedium" style={styles.title}>Welcome to CalVue 👋</Text>
           <Text variant="bodyLarge" style={styles.subtitle}>Let's personalise your experience</Text>
 
           <View style={styles.form}>

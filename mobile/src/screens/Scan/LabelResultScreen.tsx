@@ -265,7 +265,7 @@ export function LabelResultScreen({ navigation, route }: Props) {
         </ProGate>
 
         <Text style={styles.disclaimer}>
-          CalSnap Score is computed from the label using Nutri-Score-based rules. It is general guidance, not medical advice.
+          CalVue Score is computed from the label using Nutri-Score-based rules. It is general guidance, not medical advice.
         </Text>
 
         <View style={{ height: 120 }} />

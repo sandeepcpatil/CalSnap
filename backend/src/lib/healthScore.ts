@@ -1,7 +1,7 @@
 import type { LabelNutrition, HealthScoreDetail } from '../types/shared';
 
 /**
- * CalSnap Health Score — deterministic 0–100 rating for packaged foods.
+ * CalVue Health Score — deterministic 0–100 rating for packaged foods.
  *
  * The AI only *reads* the label; this module *judges* it, so the same product
  * always gets the same score and every point is explainable.
@@ -137,7 +137,7 @@ function mapNutriToScore(nutri: number): number {
 }
 
 /**
- * Compute the CalSnap Health Score for a product.
+ * Compute the CalVue Health Score for a product.
  * Pure function — no I/O, fully unit-testable.
  * `isBeverage` switches energy/sugar to the stricter drinks thresholds.
  */
