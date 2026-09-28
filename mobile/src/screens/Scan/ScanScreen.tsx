@@ -141,6 +141,84 @@ function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
   );
 }
 
+/**
+ * Shown when a scan fails (slow network / timeout / server error) instead of
+ * silently dropping the capture. The photo is kept, so Retry re-runs the
+ * analysis — reusing the already-uploaded image where possible — and the user
+ * never loses their shot to a bad connection.
+ */
+function ScanErrorOverlay({
+  imageUri, message, onRetry, onRetake,
+}: { imageUri: string | null; message: string; onRetry: () => void; onRetake: () => void }) {
+  return (
+    <View style={analyzeStyles.container}>
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={3} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
+      )}
+      <LinearGradient
+        colors={['rgba(6,10,11,0.85)', 'rgba(6,10,11,0.7)', 'rgba(6,10,11,0.92)']}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={errorStyles.card}>
+        <View style={errorStyles.iconWrap}>
+          <Ionicons name="cloud-offline-outline" size={30} color={T.warning} />
+        </View>
+        <Text style={errorStyles.title}>Couldn't analyze that</Text>
+        <Text style={errorStyles.message}>{message}</Text>
+        <TouchableOpacity style={errorStyles.retryBtn} onPress={onRetry} activeOpacity={0.85}>
+          <Ionicons name="refresh" size={18} color={T.textOnPrimary} />
+          <Text style={errorStyles.retryText}>Try again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={errorStyles.retakeBtn} onPress={onRetake} activeOpacity={0.8}>
+          <Text style={errorStyles.retakeText}>Retake photo</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  card: {
+    position: 'absolute', left: 28, right: 28, top: '50%',
+    transform: [{ translateY: -160 }],
+    backgroundColor: T.surface, borderRadius: 22, padding: 24,
+    borderWidth: 1, borderColor: T.border, alignItems: 'center', gap: 10,
+  },
+  iconWrap: {
+    width: 60, height: 60, borderRadius: 30, marginBottom: 4,
+    backgroundColor: 'rgba(240,180,80,0.14)', alignItems: 'center', justifyContent: 'center',
+  },
+  title: { fontSize: 18, fontWeight: '800', color: T.textPrimary, textAlign: 'center' },
+  message: { fontSize: 14, lineHeight: 20, color: T.textSecondary, textAlign: 'center', marginBottom: 8 },
+  retryBtn: {
+    alignSelf: 'stretch', height: 52, borderRadius: 14, backgroundColor: T.primary,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  retryText: { fontSize: 15.5, fontWeight: '800', color: T.textOnPrimary },
+  retakeBtn: { alignSelf: 'stretch', height: 48, alignItems: 'center', justifyContent: 'center' },
+  retakeText: { fontSize: 14.5, fontWeight: '700', color: T.textSecondary },
+});
+
+/** Reject if a promise takes too long — used to bound the image upload, which
+ *  has no built-in timeout and otherwise hangs the whole scan on slow networks. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error(message);
+      (err as any).code = 'timeout';
+      reject(err);
+    }, ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+const UPLOAD_TIMEOUT_MS = 45_000;
+
 const analyzeStyles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
@@ -218,9 +296,13 @@ export function ScanScreen({ navigation, route }: Props) {
   const [scanMode, setScanMode] = useState<ScanMode>(requestedMode);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [voiceAnalyzing, setVoiceAnalyzing] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  // Caches a successful upload for the current capture so a retry after a failed
+  // *analysis* re-sends the URL, not the whole image again.
+  const uploadedRef = useRef<{ rawUri: string; compressedUri: string; signedUrl: string } | null>(null);
   // Latch so the live barcode scanner fires the lookup once, not on every frame.
   const barcodeLock = useRef(false);
 
@@ -231,6 +313,8 @@ export function ScanScreen({ navigation, route }: Props) {
   useFocusEffect(
     React.useCallback(() => {
       setPendingUri(null);
+      setScanError(null);
+      uploadedRef.current = null;
       setScanMode(requestedMode);
       setVoiceListening(false);
       setVoiceAnalyzing(false);
@@ -244,9 +328,11 @@ export function ScanScreen({ navigation, route }: Props) {
   useAndroidBack(
     React.useCallback(() => {
       if (isAnalyzing) return true;
+      // Back on the error card dismisses it (return to camera), not the app.
+      if (scanError) { retakeScan(); return true; }
       navigation.getParent()?.goBack();
       return true;
-    }, [isAnalyzing, navigation]),
+    }, [isAnalyzing, scanError, navigation]),
   );
 
   const handleBarcode = async (code: string) => {
@@ -351,25 +437,51 @@ export function ScanScreen({ navigation, route }: Props) {
 
   const processPhoto = async (rawUri: string) => {
     setIsAnalyzing(true);
+    setScanError(null);
     try {
-      const { compressedUri, signedUrl } = await uploadAndSign(rawUri);
+      // Reuse a prior successful upload for this same capture — a retry after a
+      // failed *analysis* shouldn't pay the upload cost again.
+      let up = uploadedRef.current;
+      if (!up || up.rawUri !== rawUri) {
+        const { compressedUri, signedUrl } = await withTimeout(
+          uploadAndSign(rawUri), UPLOAD_TIMEOUT_MS,
+          'Upload timed out — your connection looks slow. Try again.',
+        );
+        up = { rawUri, compressedUri, signedUrl };
+        uploadedRef.current = up;
+      }
 
       // Call backend (server enforces scan count gate)
-      const { result } = await analyzeFood(signedUrl, session!.access_token);
+      const { result } = await analyzeFood(up.signedUrl, session!.access_token);
 
       // Optimistically decrement the local "scans left" badge (server is authoritative).
       consumeScan();
+      uploadedRef.current = null; // consumed — a fresh capture uploads again
 
       navigation.navigate('ScanResult', {
-        imageUri: compressedUri,
-        imageStorageUrl: signedUrl,
+        imageUri: up.compressedUri,
+        imageStorageUrl: up.signedUrl,
         result,
       });
     } catch (err: any) {
-      handleScanError(err);
+      if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
+        showPaywall();
+      } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
+        Alert.alert('Daily limit reached', err.message ?? "You've reached today's scan limit. It resets tomorrow.");
+      } else {
+        // Recoverable (slow network / timeout / server) — keep the capture and
+        // the uploaded URL so "Try again" is cheap and nothing is lost.
+        setScanError(err?.message ?? 'Something went wrong. Please try again.');
+      }
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const retakeScan = () => {
+    setScanError(null);
+    setPendingUri(null);
+    uploadedRef.current = null;
   };
 
   /** Log by description — no image, so no upload; straight to the text endpoint. */
@@ -489,6 +601,15 @@ export function ScanScreen({ navigation, route }: Props) {
 
       {/* Full-screen analyzing overlay — scans over the photo just taken */}
       {isAnalyzing && <AnalyzingOverlay imageUri={pendingUri} />}
+
+      {!!scanError && !isAnalyzing && (
+        <ScanErrorOverlay
+          imageUri={pendingUri}
+          message={scanError}
+          onRetry={() => { if (pendingUri) processPhoto(pendingUri); }}
+          onRetake={retakeScan}
+        />
+      )}
 
       {/* Overlay UI */}
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>

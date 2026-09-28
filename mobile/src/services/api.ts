@@ -5,7 +5,18 @@ const BASE_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL ??
   'http://localhost:4000';
 
-async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+/** Default per-request ceiling. Long enough for a normal API call, short enough
+ *  that a stalled connection fails fast instead of hanging forever. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+/** AI analysis legitimately takes longer — Gemini + upload round-trip. */
+export const ANALYZE_TIMEOUT_MS = 60_000;
+
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -15,15 +26,41 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  // Without an abort, RN's fetch waits indefinitely on a stalled connection —
+  // the "it never finishes analyzing" bug. The timer guarantees it resolves.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const data = await response.json();
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const e = new Error(
+      (err as Error)?.name === 'AbortError'
+        ? "This is taking longer than usual — check your connection and try again."
+        : 'Network error. Please check your connection and try again.',
+    );
+    (e as any).code = (err as Error)?.name === 'AbortError' ? 'timeout' : 'network';
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // Parse defensively — a proxy/gateway can return non-JSON (e.g. an HTML 502).
+  const raw = await response.text();
+  let data: any = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
 
   if (!response.ok) {
-    const error = new Error(data.message ?? data.error ?? 'Request failed');
+    const error = new Error(data.message ?? data.error ?? `Request failed (${response.status})`);
     (error as any).statusCode = response.status;
     (error as any).code = data.error;
     throw error;
@@ -78,7 +115,7 @@ export async function analyzeFood(imageUrl: string, token: string, description?:
   return apiFetch('/api/analyze-food', {
     method: 'POST',
     body: JSON.stringify({ imageUrl, description }),
-  }, token);
+  }, token, ANALYZE_TIMEOUT_MS);
 }
 
 /**
@@ -90,7 +127,7 @@ export async function analyzeText(description: string, token: string): Promise<{
   return apiFetch('/api/analyze-text', {
     method: 'POST',
     body: JSON.stringify({ description }),
-  }, token);
+  }, token, ANALYZE_TIMEOUT_MS);
 }
 
 /**
@@ -106,7 +143,7 @@ export async function analyzeVoice(
   return apiFetch('/api/analyze-voice', {
     method: 'POST',
     body: JSON.stringify({ audio: audioBase64, mimeType }),
-  }, token);
+  }, token, ANALYZE_TIMEOUT_MS);
 }
 
 // ─── Label scan (packaged food) ──────────────────────────────────────────────
@@ -152,7 +189,7 @@ export async function analyzeLabel(imageUrl: string, token: string): Promise<{ r
   return apiFetch('/api/analyze-label', {
     method: 'POST',
     body: JSON.stringify({ imageUrl }),
-  }, token);
+  }, token, ANALYZE_TIMEOUT_MS);
 }
 
 /**
