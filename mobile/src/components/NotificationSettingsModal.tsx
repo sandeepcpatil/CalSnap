@@ -14,23 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotificationStore } from '../store/notificationStore';
 import type { MealType } from '../services/notifications';
-import { T } from '../theme';
-
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondary: T.primary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  outlineVar: T.border,
-  header: T.bg,
-  error: T.error,
-};
+import { ModalHeader } from './ModalHeader';
+import { T, withAlpha, spacing, radius, HIT_TARGET, tabularNums } from '../theme';
 
 const MEALS: { type: MealType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
   { type: 'breakfast', label: 'Breakfast', icon: 'cafe-outline',        color: T.mealBreakfast },
@@ -38,6 +23,26 @@ const MEALS: { type: MealType; label: string; icon: keyof typeof Ionicons.glyphM
   { type: 'dinner',    label: 'Dinner',    icon: 'restaurant-outline',  color: T.mealDinner },
   { type: 'snack',     label: 'Snack',     icon: 'nutrition-outline',   color: T.mealSnack },
 ];
+
+/** Times most people actually eat at — one tap instead of eight arrow presses. */
+const COMMON_TIMES: { hour: number; minute: number }[] = [
+  { hour: 7, minute: 0 },
+  { hour: 8, minute: 0 },
+  { hour: 12, minute: 30 },
+  { hour: 13, minute: 0 },
+  { hour: 19, minute: 0 },
+  { hour: 20, minute: 0 },
+];
+
+const MINUTE_STEP = 15;
+
+const SWITCH_TRACK = { false: T.surface2, true: withAlpha(T.primary, 0.4) };
+
+const pad2 = (n: number) => n.toString().padStart(2, '0');
+const hour12 = (h: number) => h % 12 || 12;
+const meridiem = (h: number) => (h >= 12 ? 'PM' : 'AM');
+/** "8:00 AM" — the one format the display, the stepper and the chips share. */
+const fmt12 = (h: number, m: number) => `${hour12(h)}:${pad2(m)} ${meridiem(h)}`;
 
 interface Props {
   visible: boolean;
@@ -62,11 +67,11 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
         'To get meal reminders, allow notifications for CalVue in your device settings.',
         [
           { text: 'Not now', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Open settings', onPress: () => Linking.openSettings() },
         ],
       );
     } else {
-      Alert.alert('Could not set reminder', 'Something went wrong scheduling this reminder. Please try again.');
+      Alert.alert("Couldn't set reminder", 'Something went wrong scheduling this reminder. Please try again.');
     }
   };
 
@@ -79,18 +84,18 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
         `To get ${what}, allow notifications for CalVue in your device settings.`,
         [
           { text: 'Not now', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Open settings', onPress: () => Linking.openSettings() },
         ],
       );
     } else {
-      Alert.alert('Could not update', 'Something went wrong. Please try again.');
+      Alert.alert("Couldn't update", 'Something went wrong. Please try again.');
     }
   };
   const handleStreakToggle = () => handleTogglePreset(toggleStreakReminder, 'streak reminders');
   const handleWaterToggle = () => handleTogglePreset(toggleWaterReminder, 'water reminders');
   const handleWeighInToggle = () => handleTogglePreset(toggleWeighInReminder, 'weigh-in reminders');
 
-  const adjustHour   = (mealType: MealType, delta: number) => {
+  const adjustHour = (mealType: MealType, delta: number) => {
     const r = reminders[mealType];
     setReminderTime(mealType, (r.hour + delta + 24) % 24, r.minute);
   };
@@ -98,24 +103,13 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
     const r = reminders[mealType];
     setReminderTime(mealType, r.hour, (r.minute + delta + 60) % 60);
   };
-
-  const fmt = (h: number, m: number) => {
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
+  const toggleMeridiem = (mealType: MealType) => adjustHour(mealType, 12);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onDismiss}>
       <View style={styles.root}>
-        {/* Header */}
         <SafeAreaView edges={['top']} style={styles.headerSafe}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onDismiss} style={styles.backBtn} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={22} color={C.primary} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Reminders</Text>
-            <View style={{ width: 36 }} />
-          </View>
+          <ModalHeader title="Reminders" onClose={onDismiss} />
         </SafeAreaView>
 
         <ScrollView
@@ -132,20 +126,21 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
               disable every CalVue notification just to silence this one. */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <View style={[styles.mealIcon, { backgroundColor: T.warning + '22' }]}>
+              <View style={[styles.mealIcon, { backgroundColor: T.warningTint }]}>
                 <Ionicons name="flame-outline" size={20} color={T.warning} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.mealLabel}>Streak reminder</Text>
                 <Text style={styles.streakSub}>
-                  8:00 PM, only on days you haven’t logged
+                  8:00 PM, only on days you haven't logged
                 </Text>
               </View>
               <Switch
                 value={streakReminderEnabled}
                 onValueChange={handleStreakToggle}
-                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
-                thumbColor={streakReminderEnabled ? C.primary : C.outline}
+                trackColor={SWITCH_TRACK}
+                thumbColor={streakReminderEnabled ? T.primary : T.textMuted}
+                accessibilityLabel="Streak reminder"
               />
             </View>
           </View>
@@ -153,7 +148,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
           {/* Water — paced through the day, stops once the goal is met. */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <View style={[styles.mealIcon, { backgroundColor: T.primary + '22' }]}>
+              <View style={[styles.mealIcon, { backgroundColor: T.primaryTint }]}>
                 <Ionicons name="water-outline" size={20} color={T.primary} />
               </View>
               <View style={{ flex: 1 }}>
@@ -165,8 +160,9 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
               <Switch
                 value={waterReminderEnabled}
                 onValueChange={handleWaterToggle}
-                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
-                thumbColor={waterReminderEnabled ? C.primary : C.outline}
+                trackColor={SWITCH_TRACK}
+                thumbColor={waterReminderEnabled ? T.primary : T.textMuted}
+                accessibilityLabel="Water reminder"
               />
             </View>
           </View>
@@ -174,7 +170,7 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
           {/* Weekly weigh-in — anchored to your last weigh-in. */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <View style={[styles.mealIcon, { backgroundColor: T.protein + '22' }]}>
+              <View style={[styles.mealIcon, { backgroundColor: withAlpha(T.protein, 0.14) }]}>
                 <Ionicons name="scale-outline" size={20} color={T.protein} />
               </View>
               <View style={{ flex: 1 }}>
@@ -186,8 +182,9 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
               <Switch
                 value={weighInReminderEnabled}
                 onValueChange={handleWeighInToggle}
-                trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
-                thumbColor={weighInReminderEnabled ? C.primary : C.outline}
+                trackColor={SWITCH_TRACK}
+                thumbColor={weighInReminderEnabled ? T.primary : T.textMuted}
+                accessibilityLabel="Weigh-in reminder"
               />
             </View>
           </View>
@@ -198,46 +195,105 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
               <View key={meal.type} style={styles.card}>
                 {/* Meal header row */}
                 <View style={styles.cardHeader}>
-                  <View style={[styles.mealIcon, { backgroundColor: meal.color + '22' }]}>
+                  <View style={[styles.mealIcon, { backgroundColor: withAlpha(meal.color, 0.14) }]}>
                     <Ionicons name={meal.icon} size={20} color={meal.color} />
                   </View>
-                  <Text style={styles.mealLabel}>{meal.label}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.mealLabel}>{meal.label}</Text>
+                    {config.enabled && (
+                      <Text style={styles.streakSub}>Reminder at {fmt12(config.hour, config.minute)}</Text>
+                    )}
+                  </View>
                   <Switch
                     value={config.enabled}
                     onValueChange={() => handleToggle(meal.type)}
-                    trackColor={{ false: C.outlineVar, true: C.primary + '66' }}
-                    thumbColor={config.enabled ? C.primary : C.outline}
+                    trackColor={SWITCH_TRACK}
+                    thumbColor={config.enabled ? T.primary : T.textMuted}
+                    accessibilityLabel={`${meal.label} reminder`}
                   />
                 </View>
 
-                {/* Time picker (only when enabled) */}
+                {/* Time control (only when enabled) */}
                 {config.enabled && (
                   <View style={styles.timePicker}>
-                    <Text style={styles.timeDisplay}>{fmt(config.hour, config.minute)}</Text>
+                    <View style={styles.chipRow}>
+                      {COMMON_TIMES.map((t) => {
+                        const active = t.hour === config.hour && t.minute === config.minute;
+                        return (
+                          <TouchableOpacity
+                            key={`${t.hour}:${t.minute}`}
+                            style={[styles.timeChip, active && styles.timeChipActive]}
+                            onPress={() => setReminderTime(meal.type, t.hour, t.minute)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: active }}
+                            accessibilityLabel={`Set ${meal.label} reminder to ${fmt12(t.hour, t.minute)}`}
+                          >
+                            <Text style={[styles.timeChipText, active && styles.timeChipTextActive]}>
+                              {fmt12(t.hour, t.minute)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.timeDisplay} accessibilityLiveRegion="polite">
+                      {fmt12(config.hour, config.minute)}
+                    </Text>
+
                     <View style={styles.timeControls}>
                       {/* Hour */}
                       <View style={styles.timeUnit}>
-                        <TouchableOpacity style={styles.arrowBtn} onPress={() => adjustHour(meal.type, 1)}>
-                          <Ionicons name="chevron-up" size={18} color={C.primary} />
+                        <TouchableOpacity
+                          style={styles.arrowBtn}
+                          onPress={() => adjustHour(meal.type, 1)}
+                          accessibilityRole="button"
+                          accessibilityLabel="One hour later"
+                        >
+                          <Ionicons name="chevron-up" size={20} color={T.primary} />
                         </TouchableOpacity>
-                        <Text style={styles.timeNumber}>{config.hour.toString().padStart(2, '0')}</Text>
-                        <TouchableOpacity style={styles.arrowBtn} onPress={() => adjustHour(meal.type, -1)}>
-                          <Ionicons name="chevron-down" size={18} color={C.primary} />
+                        <Text style={styles.timeNumber}>{hour12(config.hour)}</Text>
+                        <TouchableOpacity
+                          style={styles.arrowBtn}
+                          onPress={() => adjustHour(meal.type, -1)}
+                          accessibilityRole="button"
+                          accessibilityLabel="One hour earlier"
+                        >
+                          <Ionicons name="chevron-down" size={20} color={T.primary} />
                         </TouchableOpacity>
                       </View>
                       <Text style={styles.timeSep}>:</Text>
                       {/* Minute */}
                       <View style={styles.timeUnit}>
-                        <TouchableOpacity style={styles.arrowBtn} onPress={() => adjustMinute(meal.type, 15)}>
-                          <Ionicons name="chevron-up" size={18} color={C.primary} />
+                        <TouchableOpacity
+                          style={styles.arrowBtn}
+                          onPress={() => adjustMinute(meal.type, MINUTE_STEP)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${MINUTE_STEP} minutes later`}
+                        >
+                          <Ionicons name="chevron-up" size={20} color={T.primary} />
                         </TouchableOpacity>
-                        <Text style={styles.timeNumber}>{config.minute.toString().padStart(2, '0')}</Text>
-                        <TouchableOpacity style={styles.arrowBtn} onPress={() => adjustMinute(meal.type, -15)}>
-                          <Ionicons name="chevron-down" size={18} color={C.primary} />
+                        <Text style={styles.timeNumber}>{pad2(config.minute)}</Text>
+                        <TouchableOpacity
+                          style={styles.arrowBtn}
+                          onPress={() => adjustMinute(meal.type, -MINUTE_STEP)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${MINUTE_STEP} minutes earlier`}
+                        >
+                          <Ionicons name="chevron-down" size={20} color={T.primary} />
                         </TouchableOpacity>
                       </View>
+                      {/* AM / PM */}
+                      <TouchableOpacity
+                        style={styles.meridiemBtn}
+                        onPress={() => toggleMeridiem(meal.type)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Switch to ${meridiem(config.hour) === 'AM' ? 'PM' : 'AM'}`}
+                      >
+                        <Text style={styles.meridiemText}>{meridiem(config.hour)}</Text>
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.stepHint}>15-min steps</Text>
+                    <Text style={styles.stepHint}>Minutes move in {MINUTE_STEP}-minute steps</Text>
                   </View>
                 )}
               </View>
@@ -252,79 +308,92 @@ export function NotificationSettingsModal({ visible, onDismiss }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-
-  headerSafe: { zIndex: 10 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: C.header,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: C.onSurface },
+  root: { flex: 1, backgroundColor: T.bg },
+  headerSafe: { zIndex: 10, backgroundColor: T.bg },
 
   scroll: { flex: 1 },
-  content: { padding: 20, gap: 14 },
+  content: { padding: spacing.xl, gap: spacing.md },
 
   hint: {
-    fontSize: 13,
-    color: C.onSurfaceVar,
-    lineHeight: 20,
-    marginBottom: 4,
+    fontSize: 15,
+    color: T.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.xs,
   },
 
   card: {
-    backgroundColor: C.glass,
-    borderRadius: 16,
+    backgroundColor: T.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderColor: T.border,
     overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   mealIcon: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 40, height: 40, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  mealLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: C.onSurface },
+  mealLabel: { fontSize: 16, fontWeight: '600', color: T.textPrimary },
+  streakSub: { fontSize: 13, lineHeight: 18, color: T.textSecondary, marginTop: 2 },
 
   timePicker: {
     borderTopWidth: 1,
     borderTopColor: T.divider,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
+  timeChip: {
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: T.surface2,
+    borderWidth: 1,
+    borderColor: T.border,
+    justifyContent: 'center',
+  },
+  timeChipActive: { backgroundColor: T.primaryTint, borderColor: T.primaryBorder },
+  timeChipText: { fontSize: 13, fontWeight: '700', color: T.textSecondary, ...tabularNums },
+  timeChipTextActive: { color: T.primary },
   timeDisplay: {
     fontSize: 28,
     fontWeight: '800',
-    color: C.primary,
-    letterSpacing: 1,
+    color: T.primary,
+    ...tabularNums,
   },
   timeControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
-  timeUnit: { alignItems: 'center', gap: 4 },
+  timeUnit: { alignItems: 'center', gap: spacing.xs },
   arrowBtn: {
-    width: 36, height: 32,
+    width: HIT_TARGET, height: HIT_TARGET,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(133,211,218,0.1)',
-    borderRadius: 8,
+    backgroundColor: T.primaryTint,
+    borderRadius: radius.sm,
   },
-  timeNumber: { fontSize: 22, fontWeight: '700', color: C.onSurface, minWidth: 36, textAlign: 'center' },
-  timeSep: { fontSize: 24, fontWeight: '700', color: C.outline, marginBottom: 4 },
-  streakSub: { fontSize: 12, color: C.onSurfaceVar, marginTop: 2 },
-  stepHint: { fontSize: 11, color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
+  timeNumber: { fontSize: 22, fontWeight: '700', color: T.textPrimary, minWidth: 40, textAlign: 'center', ...tabularNums },
+  timeSep: { fontSize: 24, fontWeight: '700', color: T.textMuted, marginBottom: spacing.xs },
+  meridiemBtn: {
+    minWidth: HIT_TARGET + 8,
+    height: HIT_TARGET,
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.surface2,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  meridiemText: { fontSize: 15, fontWeight: '700', color: T.textPrimary },
+  stepHint: { fontSize: 12, color: T.textMuted },
 });

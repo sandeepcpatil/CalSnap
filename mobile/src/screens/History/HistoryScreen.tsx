@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,12 +9,10 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../services/supabase';
-import { getDailyQuote } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { normalizeLog, type FoodLog } from '../../store/foodLogStore';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
@@ -23,7 +21,7 @@ import { CoachFab, useHideOnScroll } from '../../components/CoachFab';
 import { ProGate } from '../../components/ProGate';
 import { ExportRangeModal } from '../../components/ExportRangeModal';
 import { StreakCard } from '../../components/StreakCard';
-import { T } from '../../theme';
+import { T, HIT_TARGET, tabularNums } from '../../theme';
 import {
   exportHistoryToExcel,
   resolveExportRange,
@@ -35,7 +33,6 @@ import {
   granularityFor,
   averageOverLoggedDays,
   trendPct,
-  trendLabel,
   type Bucket,
 } from '../../utils/historyStats';
 
@@ -43,43 +40,27 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondary: T.primary,
-  tertiary: T.protein,
-  secondaryCont: T.primary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  outlineVar: T.border,
-  primaryCont: T.primaryDeep,
-  error: T.error,
-};
-
-const DOW_SHORT = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const MEAL_ICONS: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
   breakfast: { icon: 'cafe-outline',       color: T.mealBreakfast },
-  lunch:     { icon: 'fast-food-outline',  color: C.primary },
-  dinner:    { icon: 'restaurant-outline', color: C.tertiary },
+  lunch:     { icon: 'fast-food-outline',  color: T.mealLunch },
+  dinner:    { icon: 'restaurant-outline', color: T.mealDinner },
   snack:     { icon: 'nutrition-outline',  color: T.mealSnack },
 };
 
+// Chart geometry. Each column stacks: value label / track / axis label, so the
+// target line can be placed against the track by arithmetic alone.
 const CHART_BAR_HEIGHT = 120;
+const VALUE_LABEL_H = 18;
+const AXIS_LABEL_H = 16;
+const BAR_GAP = 4;
+/** Bars scale to at least 1.2× the goal so the goal line never sits at the top. */
+const TARGET_HEADROOM = 1.2;
 
-// Local fallback so a quote always shows (offline, or before the fetch resolves).
-const LOCAL_QUOTES = [
-  'Consistency is the silent catalyst of transformation. Your data tells a story of progress.',
-  'Small choices, repeated daily, become the body you live in.',
-  'You don’t need to be perfect — just one step better than yesterday.',
-  'Your habits are voting for the person you’re becoming.',
-  'Progress is quiet. Keep going even when no one is watching.',
-];
+type LoadStatus = 'loading' | 'ready' | 'error';
+type TrendDir = 'up' | 'down' | 'neutral';
+type BodyGoal = 'lose_weight' | 'maintain' | 'gain_muscle' | null;
 
 interface DayData {
   date: string;
@@ -95,7 +76,7 @@ interface DayData {
 const RANGE_OPTIONS = [
   { days: 7,  label: 'Week' },
   { days: 30, label: 'Month' },
-  { days: 90, label: '90 Days' },
+  { days: 90, label: '90 days' },
 ] as const;
 type RangeDays = (typeof RANGE_OPTIONS)[number]['days'];
 
@@ -121,6 +102,12 @@ function buildDays(count: number, endOffset = 0): DayData[] {
 }
 
 const buildLast7 = (): DayData[] => buildDays(7);
+
+/** Weekday for a daily bucket key, in sentence case (the stats helper emits caps). */
+function dowLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return DOW_SHORT[new Date(y, (m ?? 1) - 1, d ?? 1).getDay()];
+}
 
 interface MealGroup {
   key: string;
@@ -177,9 +164,47 @@ function fillDays(days: DayData[], byDay: Record<string, { logs: FoodLog[] }>): 
   });
 }
 
+/**
+ * Colour for a calorie trend, read through the body goal. Eating more is only
+ * a warning when the goal is to lose; for a muscle-gain goal it is progress;
+ * small moves and unset goals stay neutral so nothing is painted good or bad
+ * without a reason.
+ */
+function calorieTrendColor(dir: TrendDir, pct: number, goal: BodyGoal): string {
+  if (dir === 'neutral' || pct < 5) return T.textSecondary;
+  switch (goal) {
+    case 'lose_weight':
+      return dir === 'down' ? T.success : T.warning;
+    case 'gain_muscle':
+      return dir === 'up' ? T.success : T.warning;
+    case 'maintain':
+      return pct <= 10 ? T.textSecondary : T.warning;
+    default:
+      return T.textSecondary;
+  }
+}
+
+function RetryRow({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.retryRow}>
+      <Ionicons name="cloud-offline-outline" size={18} color={T.textMuted} />
+      <Text style={styles.retryText}>Couldn't load your history.</Text>
+      <TouchableOpacity
+        onPress={onRetry}
+        style={styles.retryBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Retry loading history"
+      >
+        <Text style={styles.retryBtnText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export function HistoryScreen() {
-  const { session } = useAuthStore();
+  const { session, profile } = useAuthStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
+  const [status, setStatus] = useState<LoadStatus>('loading');
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [listDays, setListDays] = useState<DayData[]>(buildLast7());
   const [historyRange, setHistoryRange] = useState<RangeDays>(7);
@@ -188,29 +213,21 @@ export function HistoryScreen() {
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [exportBusyKey, setExportBusyKey] = useState<ExportRangeKey | null>(null);
   const [avgCalories, setAvgCalories] = useState(0);
-  const [trend, setTrend] = useState<{ pct: number; dir: 'up' | 'down' | 'neutral' }>({ pct: 0, dir: 'neutral' });
-  const [quote, setQuote] = useState<string>(
-    () => LOCAL_QUOTES[new Date().getDate() % LOCAL_QUOTES.length] ?? LOCAL_QUOTES[0],
-  );
+  const [trend, setTrend] = useState<{ pct: number; dir: TrendDir }>({ pct: 0, dir: 'neutral' });
+  // Discards a slow response for a range the user has already moved on from.
+  const requestSeq = useRef(0);
 
   // Slides the floating Coach pill away while scrolling through history.
   const { hidden: fabHidden, onScroll } = useHideOnScroll();
 
   const today = new Date().toISOString().slice(0, 10);
-
-  // Fetch the shared "quote of the day" (backend caches one per day for everyone).
-  useEffect(() => {
-    const token = session?.access_token;
-    if (!token) return;
-    let active = true;
-    getDailyQuote(token)
-      .then((r) => { if (active && r?.quote) setQuote(r.quote); })
-      .catch(() => { /* keep the local fallback already in state */ });
-    return () => { active = false; };
-  }, [session?.access_token]);
+  const calorieGoal = profile?.daily_calorie_goal ?? null;
+  const bodyGoal: BodyGoal = profile?.body_goal ?? null;
 
   const fetchWeekData = useCallback(async () => {
     if (!session?.user.id) return;
+    const seq = ++requestSeq.current;
+    setStatus('loading');
 
     // Fetch two full ranges: the current window for the chart + list, and the
     // window before it so the trend can compare like with like.
@@ -219,14 +236,20 @@ export function HistoryScreen() {
     from.setDate(from.getDate() - (span - 1));
     const startISO = from.toISOString().slice(0, 10) + 'T00:00:00.000Z';
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('food_logs')
       .select('id, logged_at, calories, food_name, meal_type, protein_g, carbs_g, fat_g, fiber_g, image_url, user_id, meal_id')
       .eq('user_id', session.user.id)
       .gte('logged_at', startISO)
       .order('logged_at', { ascending: true });
 
-    if (!data) return;
+    if (seq !== requestSeq.current) return;
+
+    if (error || !data) {
+      console.warn('[history] load failed', error);
+      setStatus('error');
+      return;
+    }
 
     const byDay: Record<string, { logs: FoodLog[] }> = {};
     (data as FoodLog[]).map(normalizeLog).forEach((log) => {
@@ -245,6 +268,7 @@ export function HistoryScreen() {
     const avg = averageOverLoggedDays(currentDays);
     setAvgCalories(avg);
     setTrend(trendPct(avg, averageOverLoggedDays(priorDays)));
+    setStatus('ready');
   }, [session?.user.id, historyRange, today]);
 
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
@@ -287,13 +311,16 @@ export function HistoryScreen() {
         Alert.alert('Nothing to export', `No meals were logged in ${range.label.toLowerCase()}. Try another period.`);
       }
     } catch (err: unknown) {
-      Alert.alert('Export failed', err instanceof Error ? err.message : 'Please try again.');
+      console.warn('[history] export failed', err);
+      Alert.alert("Couldn't export", 'Check your connection and try again.');
     } finally {
       setExportBusyKey(null);
     }
   };
 
   const maxCals = Math.max(...buckets.map((b) => b.avgKcal), 1);
+  const scaleMax = Math.max(calorieGoal ? calorieGoal * TARGET_HEADROOM : 0, maxCals, 1);
+  const targetRatio = calorieGoal ? Math.min(1, calorieGoal / scaleMax) : null;
   const isDaily = granularityFor(historyRange) === 'day';
 
   // Month / 90-day are Pro. A free tap becomes an upsell rather than a dead chip.
@@ -303,13 +330,17 @@ export function HistoryScreen() {
   };
 
   const rangeNoun = historyRange === 7 ? '7 days' : historyRange === 30 ? '30 days' : '90 days';
+  const trendCopy =
+    trend.pct === 0
+      ? { value: 'About the same', caption: `as the previous ${rangeNoun}` }
+      : { value: `${trend.pct}% ${trend.dir === 'up' ? 'more' : 'less'}`, caption: `than the previous ${rangeNoun}` };
 
-  // Daily-logs list: free users see the 3 most recent days; Pro sees the whole
-  // selected range (weeks show every day, longer ranges show only logged days
-  // to avoid a wall of empty rows).
+  // Daily-logs list: free users see the last week; Pro sees the whole selected
+  // range (weeks show every day, longer ranges show only logged days to avoid
+  // a wall of empty rows).
   const reversedList = [...listDays].reverse();
   const daysToShow = !isSubscribed
-    ? reversedList // free: full last-7-days week
+    ? reversedList
     : historyRange === 7
       ? reversedList
       : reversedList.filter((d) => d.logs.length > 0);
@@ -327,7 +358,7 @@ export function HistoryScreen() {
         {/* Header */}
         <View style={styles.headerSection}>
           <Text style={styles.title}>History</Text>
-          <Text style={styles.subtitle}>Your metabolic journey over the last {rangeNoun}.</Text>
+          <Text style={styles.subtitle}>What you ate over the last {rangeNoun}.</Text>
         </View>
 
         {/* Streak — the most motivating element, so it earns the first screenful. */}
@@ -346,8 +377,9 @@ export function HistoryScreen() {
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
+                accessibilityLabel={locked ? `${opt.label}, requires Pro` : opt.label}
               >
-                {locked && <Ionicons name="lock-closed" size={11} color={active ? T.textOnPrimary : C.outline} />}
+                {locked && <Ionicons name="lock-closed" size={12} color={active ? T.textOnPrimary : T.textMuted} />}
                 <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>{opt.label}</Text>
               </TouchableOpacity>
             );
@@ -358,246 +390,262 @@ export function HistoryScreen() {
         <View style={styles.chartCard}>
           <View style={styles.chartTopRow}>
             <View style={{ gap: 4 }}>
-              <Text style={styles.chartCaption}>Average Consumption</Text>
+              <Text style={styles.chartCaption}>Average per logged day</Text>
               <View style={styles.chartAvgRow}>
                 <Text style={styles.chartBigNum}>
-                  {avgCalories > 0 ? avgCalories.toLocaleString() : '--'}
+                  {status === 'ready' && avgCalories > 0 ? avgCalories.toLocaleString() : '—'}
                 </Text>
-                <Text style={styles.chartUnit}>kcal/day</Text>
+                <Text style={styles.chartUnit}>kcal</Text>
               </View>
             </View>
-            <View style={styles.chartTrendBlock}>
-              <Text style={styles.chartTrendLabel}>{trendLabel(historyRange)}</Text>
-              {trend.pct > 0 ? (
-                <Text style={[styles.chartTrendValue, { color: trend.dir === 'up' ? C.error : T.mealSnack }]}>
-                  {trend.dir === 'up' ? '+' : '-'}{trend.pct}% {trend.dir === 'up' ? 'up' : 'down'}
+            {status === 'ready' && avgCalories > 0 && (
+              <View style={styles.chartTrendBlock}>
+                <Text style={[styles.chartTrendValue, { color: calorieTrendColor(trend.dir, trend.pct, bodyGoal) }]}>
+                  {trendCopy.value}
                 </Text>
-              ) : (
-                <Text style={[styles.chartTrendValue, { color: C.outline }]}>-- %</Text>
-              )}
-            </View>
-          </View>
-
-          {/* Caption clarifies what one bar means when it isn't a single day. */}
-          {!isDaily && (
-            <Text style={styles.chartBarNote}>
-              Each bar is the average day of that {historyRange === 30 ? 'week' : 'month'}.
-            </Text>
-          )}
-
-          <View style={styles.barChart}>
-            {buckets.map((b) => {
-              const barH = b.avgKcal > 0
-                ? Math.max(Math.round((b.avgKcal / maxCals) * CHART_BAR_HEIGHT), 6)
-                : 0;
-
-              return (
-                <View key={b.key} style={styles.barCol}>
-                  {isDaily && b.isCurrent ? (
-                    <View style={styles.todayPill}>
-                      <Text style={styles.todayPillText}>TODAY</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.todayPillPlaceholder} />
-                  )}
-
-                  <View style={[styles.barTrack, b.isCurrent && styles.barTrackToday, !b.avgKcal && { opacity: 0.3 }]}>
-                    {barH > 0 && (
-                      <LinearGradient
-                        colors={[T.primaryDeep, T.primary]}
-                        style={[styles.barFill, { height: barH }]}
-                        start={{ x: 0.5, y: 1 }}
-                        end={{ x: 0.5, y: 0 }}
-                      />
-                    )}
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.barLabel,
-                      b.isCurrent && { color: C.secondaryCont, fontWeight: '700' },
-                      !b.avgKcal && { color: C.outlineVar },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {b.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Daily Logs */}
-        <View style={styles.logsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Daily Logs</Text>
-            {isSubscribed ? (
-              <TouchableOpacity style={styles.exportBtn} onPress={() => setExportPickerOpen(true)} activeOpacity={0.7}>
-                <Text style={styles.exportText}>EXPORT</Text>
-                <Ionicons name="download-outline" size={14} color={C.secondaryCont} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.exportBtn} onPress={showPaywall} activeOpacity={0.7}>
-                <Ionicons name="lock-closed" size={12} color={C.outline} />
-                <Text style={[styles.exportText, { color: C.outline }]}>EXPORT</Text>
-              </TouchableOpacity>
+                <Text style={styles.chartTrendLabel}>{trendCopy.caption}</Text>
+              </View>
             )}
           </View>
 
-          {isSubscribed && historyRange !== 7 && (
-            <Text style={styles.rangeCaption}>
-              {loggedDayCount} day{loggedDayCount !== 1 ? 's' : ''} logged in the last {historyRange} days
-            </Text>
-          )}
+          {status === 'loading' ? (
+            <View style={styles.chartLoading} accessibilityLabel="Loading history">
+              <ActivityIndicator color={T.primary} />
+            </View>
+          ) : status === 'error' ? (
+            <RetryRow onRetry={fetchWeekData} />
+          ) : (
+            <>
+              {/* Caption clarifies what one bar means when it isn't a single day. */}
+              {!isDaily && (
+                <Text style={styles.chartBarNote}>
+                  Each bar is the average day of that {historyRange === 30 ? 'week' : 'month'}.
+                </Text>
+              )}
 
-          {/* Free: 3 most recent days. Pro: the selected range. */}
-          {daysToShow.map((day) => {
-            const isExpanded = expandedDate === day.date;
-            const isDayToday = day.date === today;
-
-            return (
-              <View key={day.date} style={[styles.dayCard, isExpanded && styles.dayCardExpanded]}>
-                <TouchableOpacity
-                  style={styles.dayCardHeader}
-                  onPress={() => toggleDay(day.date)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.dateBadge, isExpanded && { backgroundColor: 'rgba(133,211,218,0.12)' }]}>
-                    <Text style={styles.dateBadgeDow}>{day.dow}</Text>
-                    <Text style={[styles.dateBadgeNum, isExpanded && { color: C.primary }]}>{day.dayNum}</Text>
-                  </View>
-
-                  <View style={styles.dayInfo}>
-                    <Text style={styles.dayDateLabel}>{day.dateLabel}</Text>
-                    <Text style={styles.dayMeta}>
-                      {day.mealCount > 0
-                        ? `${day.mealCount} MEAL${day.mealCount !== 1 ? 'S' : ''} - ${day.calories.toLocaleString()} KCAL`
-                        : isDayToday ? 'START LOGGING TODAY' : 'NO LOGS'}
-                    </Text>
-                  </View>
-
-                  {!isExpanded && day.logs.length > 0 && (
-                    <View style={styles.macroDots}>
-                      <View style={[styles.dot, { backgroundColor: C.primary }]} />
-                      <View style={[styles.dot, { backgroundColor: C.tertiary }]} />
-                      <View style={[styles.dot, { backgroundColor: C.error }]} />
-                    </View>
-                  )}
-
-                  <Ionicons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={C.outline}
+              <View style={styles.chartArea}>
+                {targetRatio != null && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.targetLine,
+                      { bottom: AXIS_LABEL_H + BAR_GAP + Math.round(targetRatio * CHART_BAR_HEIGHT) },
+                    ]}
                   />
-                </TouchableOpacity>
+                )}
+                <View style={styles.barChart}>
+                  {buckets.map((b) => {
+                    const barH = b.avgKcal > 0
+                      ? Math.max(Math.round((b.avgKcal / scaleMax) * CHART_BAR_HEIGHT), 6)
+                      : 0;
+                    const over = calorieGoal != null && b.avgKcal > calorieGoal;
+                    const label = isDaily ? dowLabel(b.key) : b.label;
 
-                {isExpanded && (
-                  <View style={styles.expandedBody}>
-                    <View style={styles.expandDivider} />
-                    {day.logs.length > 0 ? (
-                      <>
-                        {groupLogsIntoMeals(day.logs).map((meal) => {
-                          const mealInfo = MEAL_ICONS[meal.mealType] ?? MEAL_ICONS.snack;
-                          const isMulti = meal.logs.length > 1;
-                          const mealOpen = expandedMeals.has(meal.key);
-                          return (
-                            <View key={meal.key} style={styles.mealBlock}>
-                              {/* Meal header — a single food shows its own name;
-                                  a multi-item scan shows "Dinner · 5 items". */}
-                              <TouchableOpacity
-                                style={styles.logItem}
-                                onPress={isMulti ? () => toggleMeal(meal.key) : undefined}
-                                activeOpacity={isMulti ? 0.7 : 1}
-                                disabled={!isMulti}
-                              >
-                                <View style={styles.logLeft}>
-                                  <Ionicons name={mealInfo.icon} size={18} color={mealInfo.color} />
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={styles.logName} numberOfLines={1}>
-                                      {isMulti
-                                        ? `${MEAL_TYPE_LABEL[meal.mealType] ?? 'Meal'} · ${meal.logs.length} items`
-                                        : meal.logs[0].food_name}
-                                    </Text>
-                                    <Text style={styles.mealTime}>{meal.time}</Text>
-                                  </View>
-                                </View>
-                                <Text style={styles.logCal}>{meal.calories.toLocaleString()} kcal</Text>
-                                {isMulti && (
-                                  <Ionicons
-                                    name={mealOpen ? 'chevron-up' : 'chevron-down'}
-                                    size={15}
-                                    color={C.outline}
-                                  />
-                                )}
-                              </TouchableOpacity>
+                    return (
+                      <View
+                        key={b.key}
+                        style={styles.barCol}
+                        accessibilityLabel={`${label}${b.isCurrent ? ', today' : ''}: ${b.avgKcal > 0 ? `${b.avgKcal} kilocalories` : 'nothing logged'}`}
+                      >
+                        <Text style={[styles.barValue, over && { color: T.warning }]} numberOfLines={1}>
+                          {b.avgKcal > 0 ? b.avgKcal.toLocaleString() : ''}
+                        </Text>
 
-                              {/* Item breakdown — only for multi-item meals when opened */}
-                              {isMulti && mealOpen && (
-                                <View style={styles.mealItems}>
-                                  {meal.logs.map((log, li) => (
-                                    <View key={log.id ?? li} style={styles.subItem}>
-                                      <Text style={styles.subItemName} numberOfLines={1}>{log.food_name}</Text>
-                                      <Text style={styles.subItemCal}>{Math.round(log.calories)} kcal</Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })}
-                        <View style={styles.logTotalRow}>
-                          <Text style={styles.logTotalLabel}>Total</Text>
-                          <Text style={styles.logTotalValue}>{day.calories.toLocaleString()} kcal</Text>
+                        <View style={[styles.barTrack, b.isCurrent && styles.barTrackToday, !b.avgKcal && { opacity: 0.3 }]}>
+                          {barH > 0 && (
+                            <View style={[styles.barFill, { height: barH, backgroundColor: over ? T.warning : T.primary }]} />
+                          )}
                         </View>
-                      </>
-                    ) : (
-                      <Text style={styles.noLogsText}>No meals were logged on this day.</Text>
+
+                        <Text
+                          style={[
+                            styles.barLabel,
+                            b.isCurrent && { color: T.primary, fontWeight: '700' },
+                            !b.avgKcal && !b.isCurrent && { color: T.textMuted },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {calorieGoal != null && (
+                <Text style={styles.chartLegend}>
+                  Dashed line: your {calorieGoal.toLocaleString()} kcal goal. Amber bars are above it.
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Daily logs */}
+        <View style={styles.logsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Daily logs</Text>
+            <TouchableOpacity
+              style={styles.exportBtn}
+              onPress={isSubscribed ? () => setExportPickerOpen(true) : showPaywall}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isSubscribed ? 'Export to Excel' : 'Export, requires Pro'}
+            >
+              {!isSubscribed && <Ionicons name="lock-closed" size={13} color={T.textMuted} />}
+              <Text style={[styles.exportText, !isSubscribed && { color: T.textMuted }]}>Export</Text>
+              {isSubscribed && <Ionicons name="download-outline" size={16} color={T.primary} />}
+            </TouchableOpacity>
+          </View>
+
+          {status === 'loading' ? (
+            <View style={styles.listLoading}>
+              <ActivityIndicator color={T.primary} />
+            </View>
+          ) : status === 'error' ? (
+            <View style={styles.dayCard}>
+              <RetryRow onRetry={fetchWeekData} />
+            </View>
+          ) : (
+            <>
+              {isSubscribed && historyRange !== 7 && (
+                <Text style={styles.rangeCaption}>
+                  {loggedDayCount} day{loggedDayCount !== 1 ? 's' : ''} logged in the last {historyRange} days
+                </Text>
+              )}
+
+              {daysToShow.map((day) => {
+                const isExpanded = expandedDate === day.date;
+                const isDayToday = day.date === today;
+                const meta = day.mealCount > 0
+                  ? `${day.mealCount} meal${day.mealCount !== 1 ? 's' : ''} · ${day.calories.toLocaleString()} kcal`
+                  : isDayToday ? 'Start logging today' : 'Nothing logged';
+
+                return (
+                  <View key={day.date} style={[styles.dayCard, isExpanded && styles.dayCardExpanded]}>
+                    <TouchableOpacity
+                      style={styles.dayCardHeader}
+                      onPress={() => toggleDay(day.date)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: isExpanded }}
+                      accessibilityLabel={`${day.dateLabel}. ${meta}`}
+                    >
+                      <View style={[styles.dateBadge, isExpanded && { backgroundColor: T.primaryTint }]}>
+                        <Text style={styles.dateBadgeDow}>{day.dow}</Text>
+                        <Text style={[styles.dateBadgeNum, isExpanded && { color: T.primary }]}>{day.dayNum}</Text>
+                      </View>
+
+                      <View style={styles.dayInfo}>
+                        <Text style={styles.dayDateLabel}>{day.dateLabel}</Text>
+                        <Text style={styles.dayMeta}>{meta}</Text>
+                      </View>
+
+                      <Ionicons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={T.textMuted}
+                      />
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={styles.expandedBody}>
+                        <View style={styles.expandDivider} />
+                        {day.logs.length > 0 ? (
+                          <>
+                            {groupLogsIntoMeals(day.logs).map((meal) => {
+                              const mealInfo = MEAL_ICONS[meal.mealType] ?? MEAL_ICONS.snack;
+                              const isMulti = meal.logs.length > 1;
+                              const mealOpen = expandedMeals.has(meal.key);
+                              return (
+                                <View key={meal.key} style={styles.mealBlock}>
+                                  {/* Meal header — a single food shows its own name;
+                                      a multi-item scan shows "Dinner · 5 items". */}
+                                  <TouchableOpacity
+                                    style={styles.logItem}
+                                    onPress={isMulti ? () => toggleMeal(meal.key) : undefined}
+                                    activeOpacity={isMulti ? 0.7 : 1}
+                                    disabled={!isMulti}
+                                    accessibilityRole={isMulti ? 'button' : undefined}
+                                    accessibilityState={isMulti ? { expanded: mealOpen } : undefined}
+                                  >
+                                    <View style={styles.logLeft}>
+                                      <Ionicons name={mealInfo.icon} size={18} color={mealInfo.color} />
+                                      <View style={{ flex: 1 }}>
+                                        <Text style={styles.logName} numberOfLines={1}>
+                                          {isMulti
+                                            ? `${MEAL_TYPE_LABEL[meal.mealType] ?? 'Meal'} · ${meal.logs.length} items`
+                                            : meal.logs[0].food_name}
+                                        </Text>
+                                        <Text style={styles.mealTime}>{meal.time}</Text>
+                                      </View>
+                                    </View>
+                                    <Text style={styles.logCal}>{meal.calories.toLocaleString()} kcal</Text>
+                                    {isMulti && (
+                                      <Ionicons
+                                        name={mealOpen ? 'chevron-up' : 'chevron-down'}
+                                        size={15}
+                                        color={T.textMuted}
+                                      />
+                                    )}
+                                  </TouchableOpacity>
+
+                                  {/* Item breakdown — only for multi-item meals when opened */}
+                                  {isMulti && mealOpen && (
+                                    <View style={styles.mealItems}>
+                                      {meal.logs.map((log, li) => (
+                                        <View key={log.id ?? li} style={styles.subItem}>
+                                          <Text style={styles.subItemName} numberOfLines={1}>{log.food_name}</Text>
+                                          <Text style={styles.subItemCal}>{Math.round(log.calories)} kcal</Text>
+                                        </View>
+                                      ))}
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })}
+                            <View style={styles.logTotalRow}>
+                              <Text style={styles.logTotalLabel}>Total</Text>
+                              <Text style={styles.logTotalValue}>{day.calories.toLocaleString()} kcal</Text>
+                            </View>
+                          </>
+                        ) : (
+                          <Text style={styles.noLogsText}>No meals were logged on this day.</Text>
+                        )}
+                      </View>
                     )}
                   </View>
-                )}
-              </View>
-            );
-          })}
+                );
+              })}
 
-          {/* Empty state for Pro long ranges with no logs */}
-          {isSubscribed && historyRange !== 7 && daysToShow.length === 0 && (
-            <View style={styles.emptyRange}>
-              <Ionicons name="calendar-outline" size={28} color={C.outline} />
-              <Text style={styles.emptyRangeText}>No meals logged in the last {historyRange} days.</Text>
-            </View>
+              {/* Empty state for Pro long ranges with no logs */}
+              {isSubscribed && historyRange !== 7 && daysToShow.length === 0 && (
+                <View style={styles.emptyRange}>
+                  <Ionicons name="calendar-outline" size={28} color={T.textMuted} />
+                  <Text style={styles.emptyRangeText}>No meals logged in the last {historyRange} days.</Text>
+                </View>
+              )}
+            </>
           )}
 
           {/* Pro gate for older days */}
           {!isSubscribed && (
-            <ProGate isSubscribed={false} onUpgrade={showPaywall} label="Full History, Charts & Export" borderRadius={16}>
+            <ProGate isSubscribed={false} onUpgrade={showPaywall} label="Full history, charts and export" borderRadius={16}>
               <View style={styles.dayCard}>
                 <View style={styles.dayCardHeader}>
                   <View style={styles.dateBadge}>
-                    <Ionicons name="calendar-outline" size={20} color={C.outline} />
+                    <Ionicons name="calendar-outline" size={20} color={T.textMuted} />
                   </View>
                   <View style={styles.dayInfo}>
-                    <Text style={styles.dayDateLabel}>30 & 90-Day History + Export</Text>
-                    <Text style={styles.dayMeta}>UNLOCK WITH PRO</Text>
+                    <Text style={styles.dayDateLabel}>30 and 90-day history, plus export</Text>
+                    <Text style={styles.dayMeta}>Unlock with Pro</Text>
                   </View>
                 </View>
               </View>
             </ProGate>
           )}
         </View>
-
-        {/* Motivational Quote */}
-        <LinearGradient
-          colors={[T.primaryTint, T.primaryTint]}
-          style={styles.quoteCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Ionicons name="sparkles" size={28} color={C.secondaryCont} style={{ marginBottom: 10 }} />
-          <Text style={styles.quoteText}>
-            "{quote}"
-          </Text>
-        </LinearGradient>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -616,42 +664,40 @@ export function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: C.bg },
+  root:   { flex: 1, backgroundColor: T.bg },
   scroll: { paddingBottom: 40, gap: 20 },
 
   headerSection: { paddingHorizontal: 20, paddingTop: 16, gap: 4 },
-  title:    { fontSize: 28, fontWeight: '800', color: C.onSurface, letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, color: C.onSurfaceVar, fontWeight: '400' },
+  title:    { fontSize: 28, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, lineHeight: 22, color: T.textSecondary, fontWeight: '500' },
 
   chartCard: {
     marginHorizontal: 20,
-    backgroundColor: C.glass,
+    backgroundColor: T.surface,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderColor: T.border,
     padding: 20,
-    gap: 20,
+    gap: 16,
   },
   chartTopRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  chartCaption:   { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: C.secondaryCont, textTransform: 'uppercase' },
+  chartCaption:   { fontSize: 13, fontWeight: '700', color: T.textMuted },
   chartAvgRow:    { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  chartBigNum:    { fontSize: 40, fontWeight: '800', color: C.secondary, letterSpacing: -1 },
-  chartUnit:      { fontSize: 14, color: C.onSurfaceVar, fontWeight: '400' },
-  chartTrendBlock:{ alignItems: 'flex-end', gap: 2 },
-  chartTrendLabel:{ fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: C.outline, textTransform: 'uppercase' },
-  chartTrendValue:{ fontSize: 18, fontWeight: '700' },
+  chartBigNum:    { fontSize: 40, fontWeight: '800', color: T.primary, letterSpacing: -1, ...tabularNums },
+  chartUnit:      { fontSize: 14, color: T.textSecondary, fontWeight: '500' },
+  chartTrendBlock:{ alignItems: 'flex-end', gap: 2, maxWidth: '45%' },
+  chartTrendLabel:{ fontSize: 12, fontWeight: '600', color: T.textMuted, textAlign: 'right' },
+  chartTrendValue:{ fontSize: 18, fontWeight: '700', ...tabularNums },
+  chartLoading:   { height: CHART_BAR_HEIGHT + VALUE_LABEL_H + AXIS_LABEL_H + BAR_GAP * 2, alignItems: 'center', justifyContent: 'center' },
 
+  chartArea: { position: 'relative' },
   barChart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: CHART_BAR_HEIGHT + 48,
     gap: 6,
   },
-  barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
-
-  todayPill:           { backgroundColor: C.secondaryCont, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  todayPillText:       { fontSize: 11, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.5 },
-  todayPillPlaceholder:{ height: 18 },
+  barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: BAR_GAP },
+  barValue: { fontSize: 13, lineHeight: VALUE_LABEL_H, fontWeight: '700', color: T.textSecondary, ...tabularNums },
 
   barTrack: {
     width: '100%',
@@ -667,14 +713,32 @@ const styles = StyleSheet.create({
     borderColor: T.border,
   },
   barFill:  { width: '100%', borderRadius: 8 },
-  barLabel: { fontSize: 10.5, fontWeight: '700', color: C.outline, letterSpacing: 0.3 },
-  chartBarNote: { fontSize: 11.5, fontWeight: '500', color: C.onSurfaceVar, marginTop: -8 },
+  barLabel: { fontSize: 12, lineHeight: AXIS_LABEL_H, fontWeight: '600', color: T.textSecondary },
+  targetLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 1,
+    borderColor: T.textSecondary,
+    zIndex: 1,
+  },
+  chartBarNote: { fontSize: 12, fontWeight: '500', color: T.textSecondary, marginTop: -6 },
+  chartLegend: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: T.textMuted },
+
+  retryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14 },
+  retryText: { flex: 1, fontSize: 14, color: T.textSecondary },
+  retryBtn: { minHeight: HIT_TARGET, minWidth: HIT_TARGET, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: T.primaryTint },
+  retryBtnText: { fontSize: 14, fontWeight: '700', color: T.primary },
+  listLoading: { paddingVertical: 32, alignItems: 'center' },
 
   logsSection:  { gap: 12, paddingHorizontal: 20 },
   sectionHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: C.onSurface },
-  exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  exportText:   { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: C.secondaryCont },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: T.textPrimary },
+  exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: HIT_TARGET, minWidth: HIT_TARGET, paddingHorizontal: 8, marginRight: -8, justifyContent: 'flex-end' },
+  exportText:   { fontSize: 14, fontWeight: '700', color: T.primary },
 
   rangeRow: {
     flexDirection: 'row',
@@ -688,79 +752,60 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: 4,
+    minHeight: 40,
     paddingVertical: 8,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rangeChipActive: { backgroundColor: T.primaryTint },
-  rangeChipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: C.outline },
-  rangeChipTextActive: { color: C.secondaryCont },
-  rangeCaption: { fontSize: 11, fontWeight: '600', color: C.outline, letterSpacing: 0.3, marginTop: 2 },
+  rangeChipText: { fontSize: 13, fontWeight: '700', color: T.textMuted },
+  rangeChipTextActive: { color: T.primary },
+  rangeCaption: { fontSize: 12, fontWeight: '600', color: T.textMuted, marginTop: 2 },
 
   emptyRange: { alignItems: 'center', gap: 8, paddingVertical: 32 },
-  emptyRangeText: { fontSize: 13, color: C.outline, textAlign: 'center' },
+  emptyRangeText: { fontSize: 13, color: T.textMuted, textAlign: 'center' },
 
   dayCard: {
-    backgroundColor: C.glass,
+    backgroundColor: T.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderColor: T.border,
     overflow: 'hidden',
     marginBottom: 10,
   },
-  dayCardExpanded: { borderLeftWidth: 3, borderLeftColor: C.secondaryCont },
+  dayCardExpanded: { borderLeftWidth: 3, borderLeftColor: T.primary },
   dayCardHeader:   { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
 
   dateBadge:    { width: 48, height: 48, borderRadius: 10, backgroundColor: T.divider, alignItems: 'center', justifyContent: 'center', gap: 1 },
-  dateBadgeDow: { fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 0.8 },
-  dateBadgeNum: { fontSize: 20, fontWeight: '700', color: C.onSurface, lineHeight: 22 },
+  dateBadgeDow: { fontSize: 12, fontWeight: '700', color: T.textMuted },
+  dateBadgeNum: { fontSize: 20, fontWeight: '700', color: T.textPrimary, lineHeight: 22, ...tabularNums },
 
   dayInfo:      { flex: 1, gap: 3 },
-  dayDateLabel: { fontSize: 15, fontWeight: '600', color: C.onSurface },
-  dayMeta:      { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: C.outline },
-
-  macroDots: { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  dot:        { width: 7, height: 7, borderRadius: 4 },
+  dayDateLabel: { fontSize: 15, fontWeight: '600', color: T.textPrimary },
+  dayMeta:      { fontSize: 13, fontWeight: '600', color: T.textMuted, ...tabularNums },
 
   expandedBody:  { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
   expandDivider: { height: 1, backgroundColor: T.divider, marginBottom: 4 },
 
   mealBlock: { gap: 6 },
-  mealTime:  { fontSize: 11, color: C.outline, fontWeight: '600', marginTop: 1 },
+  mealTime:  { fontSize: 12, color: T.textMuted, fontWeight: '600', marginTop: 1 },
   mealItems: {
     marginLeft: 28, marginBottom: 4, gap: 6,
-    paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: C.glassBorder,
+    paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: T.border,
   },
   subItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  subItemName: { flex: 1, fontSize: 13, color: C.onSurfaceVar },
-  subItemCal:  { fontSize: 12, fontWeight: '600', color: C.outline, letterSpacing: 0.3 },
+  subItemName: { flex: 1, fontSize: 13, color: T.textSecondary },
+  subItemCal:  { fontSize: 13, fontWeight: '600', color: T.textMuted, ...tabularNums },
 
-  logItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  logItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: HIT_TARGET },
   logLeft:  { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  logName:  { fontSize: 14, color: C.onSurface, flex: 1 },
-  logCal:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.outline },
+  logName:  { fontSize: 14, color: T.textPrimary, flex: 1 },
+  logCal:   { fontSize: 13, fontWeight: '700', color: T.textMuted, ...tabularNums },
 
   logTotalRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: T.divider },
-  logTotalLabel:{ fontSize: 11, fontWeight: '700', color: C.outline, letterSpacing: 1, textTransform: 'uppercase' },
-  logTotalValue:{ fontSize: 15, fontWeight: '800', color: C.primary },
+  logTotalLabel:{ fontSize: 13, fontWeight: '700', color: T.textMuted },
+  logTotalValue:{ fontSize: 15, fontWeight: '800', color: T.primary, ...tabularNums },
 
-  noLogsText: { fontSize: 13, color: C.outline, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
-
-  quoteCard: {
-    marginHorizontal: 20,
-    borderRadius: 20,
-    padding: 28,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  quoteText: {
-    fontSize: 15,
-    fontStyle: 'italic',
-    color: C.onSurfaceVar,
-    textAlign: 'center',
-    lineHeight: 24,
-    fontWeight: '500',
-  },
+  noLogsText: { fontSize: 13, color: T.textMuted, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
 });

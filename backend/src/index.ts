@@ -17,6 +17,7 @@ import chatRouter from './routes/chat';
 import subscriptionRouter from './routes/subscription';
 import adminRouter from './routes/admin';
 import contentRouter from './routes/content';
+import accountRouter from './routes/account';
 
 const app: Application = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -58,6 +59,7 @@ app.use('/api', chatRouter);
 app.use('/api', contentRouter);
 app.use('/api/subscription', subscriptionRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/account', accountRouter);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 

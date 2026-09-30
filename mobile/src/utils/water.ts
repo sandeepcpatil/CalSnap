@@ -39,8 +39,13 @@ const FALLBACK_GOAL_ML = 3000;
  * curd, fruit, tea), and this target only counts what you *drink*.
  */
 const BASE_ML_PER_KG = 32;
-const MIN_GOAL_ML = 1500;
-const MAX_GOAL_ML = 5000;
+/**
+ * The one band a daily goal may sit in — used both to clamp the recommendation
+ * and to validate a goal the user types. The Water screen used to carry its
+ * own 1000–6000 copy, so a typed goal could fall outside what "Auto" allowed.
+ */
+export const MIN_GOAL_ML = 1500;
+export const MAX_GOAL_ML = 5000;
 
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 

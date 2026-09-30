@@ -48,7 +48,8 @@ export function useWater() {
       } catch (err) {
         // The optimistic row has already been rolled back by the store, so the
         // ring is correct again — the user only needs to know why it moved.
-        Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+        console.warn('[water] add failed', err);
+        Alert.alert("Couldn't save", 'Check your connection and try again.');
       }
     },
     [userId, addWater],
@@ -59,7 +60,8 @@ export function useWater() {
       try {
         await removeWater(logId);
       } catch (err) {
-        Alert.alert('Could not remove', err instanceof Error ? err.message : 'Please try again.');
+        console.warn('[water] remove failed', err);
+        Alert.alert("Couldn't remove", 'Check your connection and try again.');
       }
     },
     [removeWater],

@@ -4,7 +4,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExportRangeKey } from '../services/export';
-import { T } from '../theme';
+import { T, spacing, radius, HIT_TARGET } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -13,37 +13,30 @@ interface Props {
   busyKey: ExportRangeKey | null;
 }
 
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  sheet: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondaryCont: T.primary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  rowBg: T.surface2,
-};
-
 const OPTIONS: { key: ExportRangeKey; label: string; sub: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'week', label: 'This Week', sub: 'Last 7 days', icon: 'calendar-outline' },
-  { key: 'last30', label: 'Last 30 Days', sub: 'Rolling month', icon: 'calendar-outline' },
-  { key: 'last90', label: 'Last 90 Days', sub: 'Rolling quarter', icon: 'calendar-outline' },
-  { key: 'thisMonth', label: 'This Month', sub: 'From the 1st to today', icon: 'today-outline' },
-  { key: 'lastMonth', label: 'Last Month', sub: 'Previous calendar month', icon: 'today-outline' },
+  { key: 'week', label: 'This week', sub: 'Last 7 days', icon: 'calendar-outline' },
+  { key: 'last30', label: 'Last 30 days', sub: 'Rolling month', icon: 'calendar-outline' },
+  { key: 'last90', label: 'Last 90 days', sub: 'Rolling quarter', icon: 'calendar-outline' },
+  { key: 'thisMonth', label: 'This month', sub: 'From the 1st to today', icon: 'today-outline' },
+  { key: 'lastMonth', label: 'Last month', sub: 'Previous calendar month', icon: 'today-outline' },
 ];
 
+/** Bottom sheet: pick the period to export. Stays a sheet — it is one choice, not a form. */
 export function ExportRangeModal({ visible, onClose, onSelect, busyKey }: Props) {
   const busy = busyKey !== null;
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={busy ? undefined : onClose}>
-      <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose} />
+      <Pressable
+        style={styles.backdrop}
+        onPress={busy ? undefined : onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+      />
       <View style={styles.sheetWrap} pointerEvents="box-none">
         <SafeAreaView edges={['bottom']} style={styles.sheet}>
           <View style={styles.grabber} />
           <View style={styles.header}>
-            <Ionicons name="download-outline" size={20} color={C.primary} />
+            <Ionicons name="download-outline" size={20} color={T.primary} />
             <Text style={styles.title}>Export to Excel</Text>
           </View>
           <Text style={styles.subtitle}>Choose the period to export.</Text>
@@ -58,23 +51,33 @@ export function ExportRangeModal({ visible, onClose, onSelect, busyKey }: Props)
                   onPress={() => !busy && onSelect(opt.key)}
                   activeOpacity={0.8}
                   disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${opt.label}, ${opt.sub}`}
+                  accessibilityState={{ disabled: busy, busy: isBusy }}
                 >
-                  <Ionicons name={opt.icon} size={20} color={C.primary} />
+                  <Ionicons name={opt.icon} size={20} color={T.primary} />
                   <View style={styles.rowText}>
                     <Text style={styles.rowLabel}>{opt.label}</Text>
                     <Text style={styles.rowSub}>{opt.sub}</Text>
                   </View>
                   {isBusy ? (
-                    <ActivityIndicator animating size={16} color={C.secondaryCont} />
+                    <ActivityIndicator animating size={16} color={T.primary} />
                   ) : (
-                    <Ionicons name="chevron-forward" size={18} color={C.outline} />
+                    <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
                   )}
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={busy} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={onClose}
+            disabled={busy}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy }}
+          >
             <Text style={[styles.cancelText, busy && { opacity: 0.4 }]}>Cancel</Text>
           </TouchableOpacity>
         </SafeAreaView>
@@ -84,39 +87,40 @@ export function ExportRangeModal({ visible, onClose, onSelect, busyKey }: Props)
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: T.overlay },
   sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: C.sheet,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: T.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     borderWidth: 1,
-    borderColor: C.glassBorder,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 8,
+    borderColor: T.border,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: 14 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontSize: 18, fontWeight: '800', color: C.onSurface },
-  subtitle: { fontSize: 13, color: C.onSurfaceVar, marginTop: 4, marginBottom: 14 },
+  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.grabber, marginBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  title: { fontSize: 18, fontWeight: '800', color: T.textPrimary },
+  subtitle: { fontSize: 13, color: T.textSecondary, marginTop: spacing.xs, marginBottom: spacing.md },
 
-  list: { gap: 8 },
+  list: { gap: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: C.rowBg,
-    borderRadius: 14,
+    gap: spacing.md,
+    minHeight: HIT_TARGET + spacing.sm,
+    backgroundColor: T.surface2,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: C.glassBorder,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderColor: T.border,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   rowText: { flex: 1, gap: 2 },
-  rowLabel: { fontSize: 15, fontWeight: '700', color: C.onSurface },
-  rowSub: { fontSize: 12, color: C.onSurfaceVar },
+  rowLabel: { fontSize: 15, fontWeight: '700', color: T.textPrimary },
+  rowSub: { fontSize: 13, color: T.textSecondary },
 
-  cancelBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
-  cancelText: { fontSize: 15, fontWeight: '700', color: C.outline },
+  cancelBtn: { alignItems: 'center', justifyContent: 'center', minHeight: HIT_TARGET, paddingVertical: spacing.md, marginTop: spacing.xs },
+  cancelText: { fontSize: 15, fontWeight: '700', color: T.textMuted },
 });

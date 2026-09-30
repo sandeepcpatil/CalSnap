@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -24,8 +24,10 @@ import {
   recommendedWaterMl,
   MAX_CUSTOM_ML,
   MIN_CUSTOM_ML,
+  MIN_GOAL_ML,
+  MAX_GOAL_ML,
 } from '../../utils/water';
-import { T } from '../../theme';
+import { T, HIT_TARGET, tabularNums } from '../../theme';
 
 interface Props {
   navigation: { goBack: () => void };
@@ -33,8 +35,17 @@ interface Props {
 
 /** Round litre values offered as one-tap goal presets. */
 const GOAL_PRESETS_ML = [2000, 2500, 3000, 3500, 4000] as const;
-const MIN_GOAL_ML = 1000;
-const MAX_GOAL_ML = 6000;
+
+const CUSTOM_HINT = `Between ${MIN_CUSTOM_ML} and ${MAX_CUSTOM_ML.toLocaleString()} ml`;
+const GOAL_HINT = `Between ${formatMl(MIN_GOAL_ML)} and ${formatMl(MAX_GOAL_ML)}`;
+
+/** A typed whole-ml value inside [min, max], or null when it is not one yet. */
+function parseMl(text: string, min: number, max: number): number | null {
+  if (!text) return null;
+  const n = Number(text);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return Math.round(n);
+}
 
 /**
  * The full hydration screen — reached from "More" in the log hub or the Home
@@ -44,7 +55,7 @@ const MAX_GOAL_ML = 6000;
  */
 export function WaterScreen({ navigation }: Props) {
   const { profile, updateProfile } = useAuthStore();
-  const { logs, consumedMl, goalMl, add, remove } = useWater();
+  const { logs, consumedMl, goalMl, isLoading, add, remove } = useWater();
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
   /** Set when the sheet is opened to (re)define "My bottle" rather than log once. */
@@ -57,6 +68,11 @@ export function WaterScreen({ navigation }: Props) {
   const explicitGoal = profile?.daily_water_ml_goal ?? null;
   const recommendedMl = recommendedWaterMl(profile?.weight_kg, profile?.activity_level);
 
+  const customMl = parseMl(customText, MIN_CUSTOM_ML, MAX_CUSTOM_ML);
+  const customInvalid = customText.length > 0 && customMl == null;
+  const goalCustomMl = parseMl(goalText, MIN_GOAL_ML, MAX_GOAL_ML);
+  const goalInvalid = goalText.length > 0 && goalCustomMl == null;
+
   const setGoal = async (ml: number | null) => {
     setGoalOpen(false);
     setGoalText('');
@@ -65,9 +81,8 @@ export function WaterScreen({ navigation }: Props) {
   };
 
   const submitGoalCustom = async () => {
-    const parsed = Number(goalText);
-    if (!Number.isFinite(parsed) || parsed < MIN_GOAL_ML) return;
-    await setGoal(Math.min(MAX_GOAL_ML, Math.round(parsed)));
+    if (goalCustomMl == null) return;
+    await setGoal(goalCustomMl);
   };
 
   const openCustom = (asVessel: boolean) => {
@@ -77,9 +92,8 @@ export function WaterScreen({ navigation }: Props) {
   };
 
   const submitCustom = async () => {
-    const parsed = Number(customText);
-    if (!Number.isFinite(parsed) || parsed < MIN_CUSTOM_ML) return;
-    const ml = clampCustomMl(parsed);
+    if (customMl == null) return;
+    const ml = clampCustomMl(customMl);
     setCustomOpen(false);
     setCustomText('');
 
@@ -92,6 +106,7 @@ export function WaterScreen({ navigation }: Props) {
 
   // Newest drink first — the row you're most likely to undo sits at the top.
   const todayRows = [...logs].reverse();
+  const showLoading = isLoading && todayRows.length === 0;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -116,7 +131,7 @@ export function WaterScreen({ navigation }: Props) {
           onPress={() => { setGoalText(''); setGoalOpen(true); }}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={`Daily goal ${formatMl(goalMl)}. Tap to change.`}
+          accessibilityLabel={`Daily goal ${formatMl(goalMl)}${explicitGoal ? '' : ', set automatically'}. Tap to change.`}
         >
           <Ionicons name="flag-outline" size={15} color={T.primary} />
           <Text style={styles.goalBtnText}>
@@ -129,10 +144,8 @@ export function WaterScreen({ navigation }: Props) {
         <Text style={styles.sectionLabel}>Add a drink</Text>
 
         {/* Your own size is a VESSEL, so it sits in the vessel row and looks
-            like one. Previously it lived in a separate row with different
-            styling, which made it read as a settings toggle — nobody could tell
-            that tapping it logs a drink. Labelled "Mine" to avoid colliding
-            with the 500 ml "Bottle" preset next to it. */}
+            like one. Labelled "Mine" to avoid colliding with the 500 ml
+            "Bottle" preset next to it. */}
         <View style={styles.vesselRow}>
           {VESSELS.map((v) => (
             <TouchableOpacity
@@ -196,12 +209,16 @@ export function WaterScreen({ navigation }: Props) {
           <Ionicons name="create-outline" size={18} color={T.textSecondary} />
           <View style={styles.customTileText}>
             <Text style={styles.customTileLabel}>Custom amount</Text>
-            <Text style={styles.customTileSub}>Type a one-off amount</Text>
+            <Text style={styles.customTileSub}>Type a one-off amount in ml</Text>
           </View>
         </TouchableOpacity>
 
         <Text style={styles.sectionLabel}>Today</Text>
-        {todayRows.length === 0 ? (
+        {showLoading ? (
+          <View style={styles.empty} accessibilityLabel="Loading today's water">
+            <ActivityIndicator color={T.primary} />
+          </View>
+        ) : todayRows.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="water-outline" size={26} color={T.textMuted} />
             <Text style={styles.emptyText}>No water logged yet today.</Text>
@@ -217,7 +234,7 @@ export function WaterScreen({ navigation }: Props) {
                 <Text style={styles.logTime}>{formatLogTime(log.logged_at)}</Text>
                 <TouchableOpacity
                   onPress={() => remove(log.id)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.removeBtn}
                   accessibilityRole="button"
                   accessibilityLabel={`Remove ${formatMl(log.amount_ml)} logged at ${formatLogTime(log.logged_at)}`}
                 >
@@ -237,7 +254,7 @@ export function WaterScreen({ navigation }: Props) {
           style={styles.modalRoot}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setCustomOpen(false)} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setCustomOpen(false)} accessibilityRole="button" accessibilityLabel="Close" />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{savingVessel ? 'Your bottle size' : 'Custom amount'}</Text>
             {savingVessel && (
@@ -255,22 +272,23 @@ export function WaterScreen({ navigation }: Props) {
                 style={styles.input}
                 autoFocus
                 maxLength={4}
-                onSubmitEditing={submitCustom}
+                onSubmitEditing={customMl != null ? submitCustom : undefined}
                 returnKeyType="done"
+                accessibilityLabel="Amount in millilitres"
               />
               <Text style={styles.inputUnit}>ml</Text>
             </View>
-            <Text style={styles.modalHint}>
-              Between {MIN_CUSTOM_ML} and {MAX_CUSTOM_ML} ml
-            </Text>
+            <Text style={[styles.modalHint, customInvalid && styles.modalHintError]}>{CUSTOM_HINT}</Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setCustomOpen(false)}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setCustomOpen(false)} accessibilityRole="button">
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirm, !customText && styles.modalConfirmDisabled]}
+                style={[styles.modalConfirm, customMl == null && styles.modalConfirmDisabled]}
                 onPress={submitCustom}
-                disabled={!customText}
+                disabled={customMl == null}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: customMl == null }}
               >
                 <Text style={styles.modalConfirmText}>{savingVessel ? 'Save size' : 'Log it'}</Text>
               </TouchableOpacity>
@@ -282,7 +300,7 @@ export function WaterScreen({ navigation }: Props) {
       {/* Daily goal */}
       <Modal visible={goalOpen} transparent animationType="fade" onRequestClose={() => setGoalOpen(false)}>
         <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setGoalOpen(false)} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setGoalOpen(false)} accessibilityRole="button" accessibilityLabel="Close" />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Daily water goal</Text>
             <Text style={styles.modalHint}>
@@ -296,6 +314,8 @@ export function WaterScreen({ navigation }: Props) {
                 style={[styles.goalChip, explicitGoal === null && styles.goalChipActive]}
                 onPress={() => setGoal(null)}
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: explicitGoal === null }}
               >
                 <Text style={[styles.goalChipText, explicitGoal === null && styles.goalChipTextActive]}>
                   Auto ({formatMl(recommendedMl)})
@@ -310,6 +330,8 @@ export function WaterScreen({ navigation }: Props) {
                     style={[styles.goalChip, active && styles.goalChipActive]}
                     onPress={() => setGoal(ml)}
                     activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                   >
                     <Text style={[styles.goalChipText, active && styles.goalChipTextActive]}>{formatMl(ml)}</Text>
                   </TouchableOpacity>
@@ -327,20 +349,24 @@ export function WaterScreen({ navigation }: Props) {
                 placeholderTextColor={T.textMuted}
                 style={styles.input}
                 maxLength={4}
-                onSubmitEditing={submitGoalCustom}
+                onSubmitEditing={goalCustomMl != null ? submitGoalCustom : undefined}
                 returnKeyType="done"
+                accessibilityLabel="Daily goal in millilitres"
               />
               <Text style={styles.inputUnit}>ml</Text>
             </View>
+            <Text style={[styles.modalHint, goalInvalid && styles.modalHintError]}>{GOAL_HINT}</Text>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setGoalOpen(false)}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setGoalOpen(false)} accessibilityRole="button">
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirm, !goalText && styles.modalConfirmDisabled]}
+                style={[styles.modalConfirm, goalCustomMl == null && styles.modalConfirmDisabled]}
                 onPress={submitGoalCustom}
-                disabled={!goalText}
+                disabled={goalCustomMl == null}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: goalCustomMl == null }}
               >
                 <Text style={styles.modalConfirmText}>Save</Text>
               </TouchableOpacity>
@@ -362,7 +388,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.2 },
 
   scroll: { paddingHorizontal: 16, paddingTop: 12, gap: 16 },
@@ -372,6 +398,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    minHeight: HIT_TARGET,
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 50,
@@ -380,26 +407,26 @@ const styles = StyleSheet.create({
     borderColor: T.border,
     marginTop: -4,
   },
-  goalBtnText: { fontSize: 13, fontWeight: '700', color: T.textSecondary },
+  goalBtnText: { fontSize: 13, fontWeight: '700', color: T.textSecondary, ...tabularNums },
 
   goalChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   goalChip: {
+    minHeight: 40,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 50,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
+    justifyContent: 'center',
   },
   goalChipActive: { backgroundColor: T.primary, borderColor: T.primary },
   goalChipText: { fontSize: 13, fontWeight: '700', color: T.textSecondary },
   goalChipTextActive: { color: T.textOnPrimary },
 
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontWeight: '700',
     color: T.textMuted,
     marginTop: 6,
   },
@@ -418,12 +445,12 @@ const styles = StyleSheet.create({
     borderColor: T.border,
   },
   /** The saved personal size — tinted so it reads as "yours". */
-  vesselMine: { borderColor: 'rgba(133,211,218,0.35)', backgroundColor: T.primaryTint },
+  vesselMine: { borderColor: T.primaryBorder, backgroundColor: T.primaryTint },
   /** Empty slot inviting you to save a size. */
   vesselAdd: { borderStyle: 'dashed', backgroundColor: 'transparent' },
   vesselLabel: { fontSize: 13, fontWeight: '700', color: T.textPrimary, marginTop: 2 },
-  vesselMl: { fontSize: 11.5, fontWeight: '600', color: T.textMuted },
-  vesselHint: { fontSize: 11.5, color: T.textMuted, marginTop: -6, lineHeight: 16 },
+  vesselMl: { fontSize: 12, fontWeight: '600', color: T.textMuted, ...tabularNums },
+  vesselHint: { fontSize: 12, color: T.textMuted, marginTop: -6, lineHeight: 16 },
 
   customTile: {
     flexDirection: 'row',
@@ -437,8 +464,8 @@ const styles = StyleSheet.create({
     borderColor: T.border,
   },
   customTileText: { flex: 1 },
-  customTileLabel: { fontSize: 13.5, fontWeight: '700', color: T.textPrimary },
-  customTileSub: { fontSize: 11.5, fontWeight: '600', color: T.textMuted, marginTop: 1 },
+  customTileLabel: { fontSize: 14, fontWeight: '700', color: T.textPrimary },
+  customTileSub: { fontSize: 12, fontWeight: '600', color: T.textMuted, marginTop: 1 },
 
   empty: {
     alignItems: 'center',
@@ -462,8 +489,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingLeft: 14,
+    paddingRight: 4,
+    paddingVertical: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: T.divider,
   },
@@ -475,8 +503,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: T.primaryTint,
   },
-  logAmount: { flex: 1, fontSize: 14.5, fontWeight: '700', color: T.textPrimary },
-  logTime: { fontSize: 12.5, fontWeight: '600', color: T.textMuted },
+  logAmount: { flex: 1, fontSize: 15, fontWeight: '700', color: T.textPrimary, ...tabularNums },
+  logTime: { fontSize: 13, fontWeight: '600', color: T.textMuted },
+  removeBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
 
   /* Custom amount modal */
   modalRoot: { flex: 1, backgroundColor: T.overlay, alignItems: 'center', justifyContent: 'center', padding: 28 },
@@ -501,7 +530,8 @@ const styles = StyleSheet.create({
     borderBottomColor: T.primary,
   },
   inputUnit: { fontSize: 16, fontWeight: '700', color: T.textSecondary, paddingBottom: 12 },
-  modalHint: { fontSize: 12, fontWeight: '600', color: T.textMuted },
+  modalHint: { fontSize: 12, lineHeight: 17, fontWeight: '600', color: T.textMuted },
+  modalHintError: { color: T.error },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   modalCancel: {
     flex: 1,
@@ -511,7 +541,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: T.surface2,
   },
-  modalCancelText: { fontSize: 14.5, fontWeight: '700', color: T.textSecondary },
+  modalCancelText: { fontSize: 15, fontWeight: '700', color: T.textSecondary },
   modalConfirm: {
     flex: 1,
     height: 46,
@@ -521,5 +551,5 @@ const styles = StyleSheet.create({
     backgroundColor: T.primary,
   },
   modalConfirmDisabled: { opacity: 0.4 },
-  modalConfirmText: { fontSize: 14.5, fontWeight: '800', color: T.textOnPrimary },
+  modalConfirmText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary },
 });

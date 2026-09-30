@@ -22,7 +22,7 @@ import {
   clearChatHistory,
   type ChatMessage,
 } from '../../services/api';
-import { T } from '../../theme';
+import { T, HIT_TARGET, tabularNums } from '../../theme';
 
 interface Props {
   navigation: { goBack: () => void };
@@ -37,6 +37,8 @@ const SUGGESTIONS = [
 ];
 
 const MAX_CHARS = 800;
+
+type HistoryStatus = 'loading' | 'ready' | 'error';
 
 /**
  * Animates a bottom offset that tracks the keyboard height.
@@ -79,7 +81,7 @@ export function CoachScreen({ navigation }: Props) {
   const token = useAuthStore((s) => s.session?.access_token);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [historyStatus, setHistoryStatus] = useState<HistoryStatus>('loading');
   const [sending, setSending] = useState(false);
   const [usage, setUsage] = useState({ used: 0, limit: 30 });
   const scrollRef = useRef<ScrollView>(null);
@@ -92,19 +94,24 @@ export function CoachScreen({ navigation }: Props) {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   }, []);
 
-  useEffect(() => {
+  // A failed history load is an error state, not a first run: showing the
+  // intro would invite a duplicate conversation on top of one that exists.
+  const loadHistory = useCallback(async () => {
     if (!token) return;
-    let active = true;
-    getChatHistory(token)
-      .then((h) => {
-        if (!active) return;
-        setMessages(h.messages);
-        setUsage({ used: h.used_today, limit: h.daily_limit });
-      })
-      .catch(() => {})
-      .finally(() => { if (active) { setLoading(false); scrollToEnd(); } });
-    return () => { active = false; };
+    setHistoryStatus('loading');
+    try {
+      const h = await getChatHistory(token);
+      setMessages(h.messages);
+      setUsage({ used: h.used_today, limit: h.daily_limit });
+      setHistoryStatus('ready');
+      scrollToEnd();
+    } catch (err) {
+      console.warn('[coach] history load failed', err);
+      setHistoryStatus('error');
+    }
   }, [token, scrollToEnd]);
+
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
 
   const send = async (text: string) => {
     const msg = text.trim();
@@ -122,14 +129,16 @@ export function CoachScreen({ navigation }: Props) {
       setMessages((prev) => [...prev, { role: 'assistant', content: r.reply, created_at: new Date().toISOString() }]);
       setUsage({ used: r.used_today, limit: r.daily_limit });
     } catch (err) {
-      const e = err as { statusCode?: number; message?: string };
+      const e = err as { statusCode?: number };
+      console.warn('[coach] send failed', err);
       // Roll the optimistic turn back so the transcript matches the server.
       setMessages((prev) => prev.slice(0, -1));
       setInput(msg);
-      Alert.alert(
-        e.statusCode === 429 ? 'Daily limit reached' : 'Could not send',
-        e.message ?? 'Please try again.',
-      );
+      if (e.statusCode === 429) {
+        Alert.alert('Daily limit reached', "You've used all your Coach messages for today. Try again tomorrow.");
+      } else {
+        Alert.alert("Couldn't send", 'Check your connection and try again.');
+      }
     } finally {
       setSending(false);
       scrollToEnd();
@@ -147,8 +156,9 @@ export function CoachScreen({ navigation }: Props) {
           try {
             await clearChatHistory(token);
             setMessages([]);
-          } catch {
-            Alert.alert('Could not clear', 'Please try again.');
+          } catch (err) {
+            console.warn('[coach] clear failed', err);
+            Alert.alert("Couldn't clear", 'Check your connection and try again.');
           }
         },
       },
@@ -156,6 +166,7 @@ export function CoachScreen({ navigation }: Props) {
   };
 
   const atLimit = usage.used >= usage.limit;
+  const canSend = !!input.trim() && !sending;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -165,7 +176,7 @@ export function CoachScreen({ navigation }: Props) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Coach</Text>
-          <View style={styles.betaTag}><Text style={styles.betaText}>BETA</Text></View>
+          <View style={styles.betaTag}><Text style={styles.betaText}>Beta</Text></View>
         </View>
         <TouchableOpacity onPress={confirmClear} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Clear conversation">
           <Ionicons name="trash-outline" size={19} color={T.textMuted} />
@@ -188,8 +199,21 @@ export function CoachScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={scrollToEnd}
         >
-          {loading ? (
+          {historyStatus === 'loading' ? (
             <View style={styles.center}><ActivityIndicator color={T.primary} /></View>
+          ) : historyStatus === 'error' ? (
+            <View style={styles.retryRow}>
+              <Ionicons name="cloud-offline-outline" size={18} color={T.textMuted} />
+              <Text style={styles.retryText}>Couldn't load your conversation.</Text>
+              <TouchableOpacity
+                onPress={() => void loadHistory()}
+                style={styles.retryBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading conversation"
+              >
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
           ) : messages.length === 0 ? (
             <View style={styles.intro}>
               <View style={styles.introIcon}>
@@ -222,11 +246,11 @@ export function CoachScreen({ navigation }: Props) {
             </View>
           )}
 
-          {/* Suggestions only while the conversation is empty. */}
-          {!loading && messages.length === 0 && (
+          {/* Suggestions only while the conversation is genuinely empty. */}
+          {historyStatus === 'ready' && messages.length === 0 && (
             <View style={styles.suggestions}>
               {SUGGESTIONS.map((s) => (
-                <TouchableOpacity key={s} style={styles.chip} onPress={() => send(s)} activeOpacity={0.85}>
+                <TouchableOpacity key={s} style={styles.chip} onPress={() => send(s)} activeOpacity={0.85} accessibilityRole="button">
                   <Text style={styles.chipText}>{s}</Text>
                 </TouchableOpacity>
               ))}
@@ -250,20 +274,23 @@ export function CoachScreen({ navigation }: Props) {
                 multiline
                 maxLength={MAX_CHARS}
                 editable={!sending}
+                accessibilityLabel="Message to Coach"
               />
               <TouchableOpacity
-                style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+                style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
                 onPress={() => send(input)}
-                disabled={!input.trim() || sending}
+                disabled={!canSend}
                 accessibilityRole="button"
                 accessibilityLabel="Send message"
+                accessibilityState={{ disabled: !canSend }}
               >
-                <Ionicons name="arrow-up" size={19} color={T.textOnPrimary} />
+                <Ionicons name="arrow-up" size={20} color={T.textOnPrimary} />
               </TouchableOpacity>
             </View>
           )}
           <Text style={styles.disclaimer}>
-            Coach gives general nutrition guidance, not medical advice. {usage.used}/{usage.limit} today.
+            Coach gives general nutrition guidance, not medical advice.{' '}
+            <Text style={styles.disclaimerCount}>{usage.used}/{usage.limit}</Text> messages used today.
           </Text>
         </View>
       </Animated.View>
@@ -276,26 +303,42 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 17, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.2 },
-  betaTag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: T.primaryTint },
-  betaText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8, color: T.primary },
+  betaTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: T.primaryTint },
+  betaText: { fontSize: 12, fontWeight: '700', color: T.primary },
 
   // flexGrow:1 so short conversations still fill the height (empty-state
   // intro + suggestions sit correctly above the composer).
   scroll: { flexGrow: 1, padding: 16, gap: 10, paddingBottom: 8 },
   center: { paddingVertical: 60, alignItems: 'center' },
 
+  retryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  retryText: { flex: 1, fontSize: 14, color: T.textSecondary },
+  retryBtn: { minHeight: HIT_TARGET, minWidth: HIT_TARGET, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: T.primaryTint },
+  retryBtnText: { fontSize: 14, fontWeight: '700', color: T.primary },
+
   intro: { alignItems: 'center', gap: 10, paddingVertical: 32, paddingHorizontal: 12 },
   introIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: T.primaryTint, alignItems: 'center', justifyContent: 'center' },
   introTitle: { fontSize: 18, fontWeight: '800', color: T.textPrimary },
-  introBody: { fontSize: 13.5, lineHeight: 21, color: T.textSecondary, textAlign: 'center' },
+  introBody: { fontSize: 14, lineHeight: 21, color: T.textSecondary, textAlign: 'center' },
 
   bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 18 },
   bubbleUser: { alignSelf: 'flex-end', backgroundColor: T.primary, borderBottomRightRadius: 6 },
   bubbleCoach: { alignSelf: 'flex-start', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderBottomLeftRadius: 6 },
-  bubbleText: { fontSize: 14.5, lineHeight: 21, color: T.textPrimary },
+  bubbleText: { fontSize: 15, lineHeight: 22, color: T.textPrimary },
   bubbleTextUser: { color: T.textOnPrimary, fontWeight: '600' },
 
   typing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -304,32 +347,35 @@ const styles = StyleSheet.create({
   suggestions: { gap: 8, marginTop: 4 },
   chip: {
     alignSelf: 'flex-start',
+    minHeight: HIT_TARGET,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 50,
     backgroundColor: T.surface2,
     borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.30)',
+    borderColor: T.primaryBorder,
+    justifyContent: 'center',
   },
-  chipText: { fontSize: 13.5, fontWeight: '600', color: T.primary },
+  chipText: { fontSize: 14, fontWeight: '600', color: T.primary },
 
   composer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, borderTopWidth: 1, borderTopColor: T.border, gap: 6 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   input: {
     flex: 1,
     maxHeight: 120,
-    fontSize: 14.5,
+    fontSize: 15,
     color: T.textPrimary,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
-    borderRadius: 20,
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingTop: 11,
-    paddingBottom: 11,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  sendBtn: { width: HIT_TARGET, height: HIT_TARGET, borderRadius: HIT_TARGET / 2, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },
-  limitNote: { fontSize: 13, color: T.textSecondary, textAlign: 'center', paddingVertical: 12 },
-  disclaimer: { fontSize: 10.5, color: T.textMuted, textAlign: 'center', lineHeight: 15 },
+  limitNote: { fontSize: 14, color: T.textSecondary, textAlign: 'center', paddingVertical: 12 },
+  disclaimer: { fontSize: 12, color: T.textMuted, textAlign: 'center', lineHeight: 16 },
+  disclaimerCount: { fontSize: 13, color: T.textMuted, ...tabularNums },
 });

@@ -18,19 +18,8 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store/authStore';
 import { useFoodLogStore } from '../store/foodLogStore';
 import { supabase } from '../services/supabase';
-import { T } from '../theme';
-
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  outlineVar: T.border,
-  inputBg: T.surface2,
-};
+import { ModalHeader } from './ModalHeader';
+import { T, withAlpha, spacing, radius, HIT_TARGET, tabularNums } from '../theme';
 
 /** Mirrors the CHECK constraint on `feedback.category`. */
 type Category = 'feature' | 'improvement' | 'bug' | 'other';
@@ -53,7 +42,7 @@ interface Props {
 /**
  * In-app feedback.
  *
- * Deliberately not a mailto (which Contact Support already covers): a mailto
+ * Deliberately not a mailto (which Contact support already covers): a mailto
  * silently fails when no mail client is configured, arrives unstructured, and
  * can't be counted or filtered. Writing to a table means feedback is triageable
  * by category, carries device/app context automatically, and shows up in the
@@ -103,15 +92,13 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
           body_goal: profile?.body_goal ?? null,
         },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw error;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSent(true);
     } catch (err) {
-      Alert.alert(
-        "Couldn't send",
-        err instanceof Error ? err.message : 'Please check your connection and try again.',
-      );
+      console.warn('[feedback] send failed', err);
+      Alert.alert("Couldn't send", 'Check your connection and try again.');
     } finally {
       setSending(false);
     }
@@ -121,13 +108,7 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={close}>
       <View style={styles.root}>
         <SafeAreaView edges={['top']} style={styles.headerSafe}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={close} style={styles.backBtn} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={22} color={C.primary} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Send feedback</Text>
-            <View style={{ width: 36 }} />
-          </View>
+          <ModalHeader title="Send feedback" onClose={close} />
         </SafeAreaView>
 
         {sent ? (
@@ -135,15 +116,15 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
             <View style={styles.doneIcon}>
               <Ionicons name="checkmark" size={34} color={T.textOnPrimary} />
             </View>
-            <Text style={styles.doneTitle}>Thank you — genuinely</Text>
+            <Text style={styles.doneTitle}>Thank you</Text>
             <Text style={styles.doneBody}>
               This goes straight to the person building CalVue and gets read. If it's something we
               can fix or add, it shapes what comes next.
             </Text>
-            <TouchableOpacity style={styles.doneBtn} onPress={close} activeOpacity={0.88}>
+            <TouchableOpacity style={styles.doneBtn} onPress={close} activeOpacity={0.88} accessibilityRole="button">
               <Text style={styles.doneBtnText}>Done</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={reset} activeOpacity={0.7} style={styles.againBtn}>
+            <TouchableOpacity onPress={reset} activeOpacity={0.7} style={styles.againBtn} accessibilityRole="button">
               <Text style={styles.againText}>Send something else</Text>
             </TouchableOpacity>
           </View>
@@ -165,16 +146,17 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
                     onPress={() => { Haptics.selectionAsync(); setCategory(c.key); }}
                     activeOpacity={0.85}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ selected: active, checked: active }}
+                    accessibilityLabel={`${c.label}. ${c.blurb}`}
                   >
                     <View style={[styles.catIcon, active && styles.catIconActive]}>
-                      <Ionicons name={c.icon} size={18} color={active ? C.primary : C.outline} />
+                      <Ionicons name={c.icon} size={18} color={active ? T.primary : T.textMuted} />
                     </View>
                     <View style={styles.catText}>
-                      <Text style={[styles.catLabel, active && { color: C.primary }]}>{c.label}</Text>
+                      <Text style={[styles.catLabel, active && { color: T.primary }]}>{c.label}</Text>
                       <Text style={styles.catBlurb}>{c.blurb}</Text>
                     </View>
-                    {active && <Ionicons name="checkmark-circle" size={20} color={C.primary} />}
+                    {active && <Ionicons name="checkmark-circle" size={20} color={T.primary} />}
                   </TouchableOpacity>
                 );
               })}
@@ -184,23 +166,24 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
                 value={message}
                 onChangeText={(t) => setMessage(t.slice(0, MAX_CHARS))}
                 placeholder="The more specific, the more useful — what happened, or what you'd like to see."
-                placeholderTextColor={C.outline}
+                placeholderTextColor={T.textMuted}
                 style={styles.input}
                 multiline
                 textAlignVertical="top"
                 maxLength={MAX_CHARS}
+                accessibilityLabel="Your feedback"
               />
               <Text style={styles.counter}>{message.length}/{MAX_CHARS}</Text>
 
               <View style={styles.privacy}>
-                <Ionicons name="information-circle-outline" size={15} color={C.outline} />
+                <Ionicons name="information-circle-outline" size={15} color={T.textMuted} />
                 <Text style={styles.privacyText}>
                   We also attach your app version and device type so we can reproduce issues. No
                   food photos or personal data are sent.
                 </Text>
               </View>
 
-              <View style={{ height: 24 }} />
+              <View style={{ height: spacing['2xl'] }} />
             </ScrollView>
 
             <View style={styles.footer}>
@@ -209,6 +192,8 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
                 onPress={submit}
                 disabled={!canSend}
                 activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canSend }}
               >
                 {sending ? (
                   <ActivityIndicator size={16} color={T.textOnPrimary} />
@@ -228,98 +213,80 @@ export function FeedbackModal({ visible, onDismiss }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: T.bg },
   flex: { flex: 1 },
+  headerSafe: { zIndex: 10, backgroundColor: T.bg },
 
-  headerSafe: { zIndex: 10, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.glassBorder,
-  },
-  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: C.onSurface },
+  content: { padding: spacing.xl, gap: spacing.sm },
+  intro: { fontSize: 15, lineHeight: 22, color: T.textSecondary, marginBottom: spacing.xs },
 
-  content: { padding: 20, gap: 10 },
-  intro: { fontSize: 14, lineHeight: 21, color: C.onSurfaceVar, marginBottom: 4 },
-
-  label: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: C.outline,
-    marginTop: 10,
-  },
+  label: { fontSize: 13, fontWeight: '700', color: T.textMuted, marginTop: spacing.sm },
 
   catRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: C.glass,
+    gap: spacing.md,
+    padding: spacing.md,
+    minHeight: HIT_TARGET + spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: T.surface,
     borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderColor: T.border,
   },
-  catRowActive: { borderColor: 'rgba(133,211,218,0.45)', backgroundColor: T.primaryTint },
+  catRowActive: { borderColor: T.primaryBorder, backgroundColor: T.primaryTint },
   catIcon: {
-    width: 36, height: 36, borderRadius: 11,
+    width: 36, height: 36, borderRadius: radius.sm,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: T.surface2,
   },
-  catIconActive: { backgroundColor: 'rgba(1,105,111,0.35)' },
+  catIconActive: { backgroundColor: withAlpha(T.primaryDeep, 0.35) },
   catText: { flex: 1, gap: 2 },
-  catLabel: { fontSize: 14.5, fontWeight: '700', color: C.onSurface },
-  catBlurb: { fontSize: 12, color: C.outline },
+  catLabel: { fontSize: 15, fontWeight: '700', color: T.textPrimary },
+  catBlurb: { fontSize: 13, color: T.textMuted },
 
   input: {
     minHeight: 130,
-    fontSize: 14.5,
-    lineHeight: 21,
-    color: C.onSurface,
-    backgroundColor: C.inputBg,
+    fontSize: 15,
+    lineHeight: 22,
+    color: T.textPrimary,
+    backgroundColor: T.surface2,
     borderWidth: 1,
-    borderColor: C.glassBorder,
-    borderRadius: 14,
-    padding: 14,
+    borderColor: T.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
-  counter: { fontSize: 11, color: C.outline, textAlign: 'right' },
+  counter: { fontSize: 13, color: T.textMuted, textAlign: 'right', ...tabularNums },
 
-  privacy: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 6 },
-  privacyText: { flex: 1, fontSize: 11.5, lineHeight: 17, color: C.outline },
+  privacy: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: 6 },
+  privacyText: { flex: 1, fontSize: 12, lineHeight: 17, color: T.textMuted },
 
-  footer: { padding: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.glassBorder },
+  footer: { padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: T.border },
   sendBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
     height: 52,
-    borderRadius: 15,
-    backgroundColor: C.primary,
+    borderRadius: radius.md,
+    backgroundColor: T.primary,
   },
   sendBtnDisabled: { opacity: 0.4 },
   sendText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary },
 
-  done: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  done: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing['3xl'] },
   doneIcon: {
     width: 68, height: 68, borderRadius: 34,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: C.primary, marginBottom: 4,
+    backgroundColor: T.primary, marginBottom: spacing.xs,
   },
-  doneTitle: { fontSize: 20, fontWeight: '800', color: C.onSurface },
-  doneBody: { fontSize: 14, lineHeight: 21, color: C.onSurfaceVar, textAlign: 'center' },
+  doneTitle: { fontSize: 20, fontWeight: '800', color: T.textPrimary },
+  doneBody: { fontSize: 15, lineHeight: 22, color: T.textSecondary, textAlign: 'center' },
   doneBtn: {
-    height: 50, paddingHorizontal: 40, borderRadius: 14,
+    height: 50, paddingHorizontal: 40, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: C.primary, marginTop: 12,
+    backgroundColor: T.primary, marginTop: spacing.md,
   },
   doneBtnText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary },
-  againBtn: { paddingVertical: 10 },
-  againText: { fontSize: 13.5, fontWeight: '600', color: C.primary },
+  againBtn: { minHeight: HIT_TARGET, justifyContent: 'center', paddingHorizontal: spacing.md },
+  againText: { fontSize: 14, fontWeight: '600', color: T.primary },
 });
