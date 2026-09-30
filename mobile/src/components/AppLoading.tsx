@@ -29,7 +29,7 @@ export function AppLoading() {
     <View style={styles.root}>
       <Animated.View style={{ opacity: pulse }}>
         <Text style={styles.brand}>
-          CAL<Text style={styles.brandSnap}>VUE</Text>
+          Cal<Text style={styles.brandSnap}>Vue</Text>
         </Text>
       </Animated.View>
     </View>
@@ -38,6 +38,6 @@ export function AppLoading() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
-  brand: { fontSize: 28, fontWeight: '800', letterSpacing: 3, color: T.textPrimary },
+  brand: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5, color: T.textPrimary },
   brandSnap: { color: T.primary },
 });

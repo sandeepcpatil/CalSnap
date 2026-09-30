@@ -44,27 +44,15 @@ if (GOOGLE_WEB_CLIENT_ID) {
   GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 }
 
-// ── Stitch dark / tech color tokens (matches HTML exactly) ────────────────
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.glass,
-  glassBorder: T.glassBorder,
-  primary: T.primary,
-  secondary: T.primary,
-  primaryContainer: T.primaryDeep,
-  onSurface: T.textPrimary,
-  onSurfaceVariant: T.textSecondary,
-  outline: T.textMuted,
-  outlineVariant: T.border,
-  surfaceLowest: T.bg,
-};
+// Google's light button spec: white fill, near-black label, sentence case.
+const GOOGLE_BTN_BG = '#FFFFFF';
+const GOOGLE_BTN_TEXT = '#1F1F1F';
 
-const FEATURES = [
-  { icon: 'camera-outline'    as const, label: 'AI Analysis',    desc: 'Snap a photo — get calories & macros in seconds.'   },
-  { icon: 'bar-chart-outline' as const, label: 'Macro Tracking', desc: 'Protein, carbs, fat & fiber, tracked automatically.' },
-  { icon: 'flame-outline'     as const, label: 'Daily Insights', desc: 'Smart nudges that keep you on target every day.'     },
+/** Three things the app actually does today — no marketing abstractions. */
+const PROOF_POINTS = [
+  'Log a meal by photo, voice or barcode',
+  'Health score for packaged-food labels',
+  'Daily calorie and protein targets built for you',
 ] as const;
 
 export function AuthScreen() {
@@ -76,15 +64,15 @@ export function AuthScreen() {
   useEffect(() => {
     Animated.timing(entrance, {
       toValue: 1,
-      duration: 700,
-      delay: 120,
+      duration: 650,
+      delay: 100,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [entrance]);
   const entranceStyle = {
     opacity: entrance,
-    transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [26, 0] }) }],
+    transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
   };
 
   const handleGoogleSignIn = async () => {
@@ -129,137 +117,86 @@ export function AuthScreen() {
 
   return (
     <View style={styles.root}>
-      {/* ── Cinematic hero background image ─────────────────────────────── */}
+      {/* Hero photo sits behind the top half; the gradient hands off to the
+          solid app background well before the text starts, so copy is always
+          on a dark, even ground. */}
       <Image
         source={require('../../../assets/auth-hero.png')}
         style={styles.heroBg}
         resizeMode="cover"
       />
-      {/* Dark gradient overlay — dims the photo so text stays legible */}
       <LinearGradient
-        colors={['rgba(10,16,21,0.55)', 'rgba(16,20,21,0.78)', T.bg]}
+        colors={['rgba(12,17,18,0.10)', 'rgba(12,17,18,0.72)', T.bg]}
+        locations={[0, 0.5, 0.82]}
         style={StyleSheet.absoluteFillObject}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
 
-      {/* Ambient cyan glow accents */}
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <Animated.View style={[{ flex: 1 }, entranceStyle]}>
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-          >
-
-            {/* ── Floating badge ─────────────────────────────────────────── */}
-            <View style={styles.badgeRow}>
-              <View style={[styles.floatingBadge, { backgroundColor: C.glass, borderColor: C.glassBorder }]}>
-                <Ionicons name="nutrition-outline" size={16} color={C.secondary} />
-                <Text style={styles.badgeText}>NEXT-GEN NUTRITION</Text>
-              </View>
-            </View>
-
-            {/* ── Brand block ────────────────────────────────────────────── */}
-            <View style={styles.brandBlock}>
-              <Text style={styles.brandName} numberOfLines={1} adjustsFontSizeToFit>
-                <Text style={styles.brandCal}>CAL</Text>
-                <Text style={{ color: C.secondary }}>VUE</Text>
-              </Text>
-              <Text style={[styles.tagline, { color: C.onSurfaceVariant }]}>
-                Snap. Track.{' '}
-                <Text style={{ color: C.primary }}>Thrive.</Text>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {/* ── Hero: brand + promise ─────────────────────────────────── */}
+          <Animated.View style={[styles.hero, entranceStyle]}>
+            <View style={styles.brandRow}>
+              <Image source={require('../../../assets/icon.png')} style={styles.appIcon} />
+              <Text style={styles.wordmark}>
+                Cal<Text style={styles.wordmarkAccent}>Vue</Text>
               </Text>
             </View>
 
-            {/* ── Feature bento stack (vertical) ─────────────────────── */}
-            <View style={styles.bentoGrid}>
-              {FEATURES.map((f) => (
-                <View
-                  key={f.label}
-                  style={[styles.bentoCard, { backgroundColor: C.glass, borderColor: C.glassBorder }]}
-                >
-                  <View style={[styles.bentoIcon, { backgroundColor: C.primaryContainer + '55' }]}>
-                    <Ionicons name={f.icon} size={20} color={C.secondary} />
-                  </View>
-                  <View style={styles.bentoText}>
-                    <Text style={[styles.bentoLabel, { color: C.onSurface }]}>{f.label}</Text>
-                    <Text style={[styles.bentoDesc, { color: C.onSurfaceVariant }]}>{f.desc}</Text>
-                  </View>
+            <Text style={styles.headline}>See what&apos;s on your plate.</Text>
+            <Text style={styles.subline}>
+              Point your camera at any meal and get calories, protein, carbs and fat in seconds.
+            </Text>
+
+            <View style={styles.proofList}>
+              {PROOF_POINTS.map((line) => (
+                <View key={line} style={styles.proofRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={T.primary} />
+                  <Text style={styles.proofText}>{line}</Text>
                 </View>
               ))}
             </View>
+          </Animated.View>
 
-            {/* ── Auth card ──────────────────────────────────────────────── */}
-            <View style={[styles.authCard, { backgroundColor: C.glass, borderColor: C.glassBorder }]}>
+          {/* ── Sign-in sheet ─────────────────────────────────────────── */}
+          <Animated.View style={[styles.sheet, entranceStyle]}>
+            <TouchableOpacity
+              onPress={handleGoogleSignIn}
+              style={styles.googleBtn}
+              activeOpacity={0.88}
+              disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+            >
+              {isLoading ? (
+                <ActivityIndicator animating color={GOOGLE_BTN_TEXT} size="small" />
+              ) : (
+                <>
+                  <GoogleLogo size={20} />
+                  <Text style={styles.googleLabel}>Continue with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-              <View style={styles.authHeader}>
-                <Text style={[styles.authTitle, { color: C.onSurface, textAlign:'center' }]}>Get Started</Text>
-                <Text style={[styles.authSubtitle, { color: C.onSurfaceVariant }]}>
-                  Access your high-performance nutrition dashboard.
-                </Text>
-              </View>
+            <Text style={styles.hint}>One tap. No password to remember.</Text>
 
-              {/* Google button */}
-              <TouchableOpacity
-                onPress={handleGoogleSignIn}
-                style={[styles.googleBtn, { backgroundColor: C.onSurface }]}
-                activeOpacity={0.88}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator animating color={C.bg} size="small" />
-                ) : (
-                  <>
-                    <GoogleLogo size={20} />
-                    <Text style={[styles.googleLabel, { color: C.bg }]}>CONTINUE WITH GOOGLE</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Terms */}
-              <Text style={[styles.terms, { color: C.onSurfaceVariant }]}>
-                By continuing, you agree to our{' '}
-                <Text
-                  style={[styles.termsLink, { color: C.secondary }]}
-                  onPress={() => setLegalDoc('privacy')}
-                >
-                  Privacy Policy
-                </Text>
-                {' '}and{' '}
-                <Text
-                  style={[styles.termsLink, { color: C.secondary }]}
-                  onPress={() => setLegalDoc('terms')}
-                >
-                  Terms of Service
-                </Text>.
+            <Text style={styles.terms}>
+              By continuing you agree to our{' '}
+              <Text style={styles.termsLink} onPress={() => setLegalDoc('terms')}>
+                Terms of Service
               </Text>
-            </View>
-
-            {/* ── System status indicator ────────────────────────────────── */}
-            {/* <View style={[styles.statusBar, {
-              backgroundColor: C.glass,
-              borderColor: C.glassBorder,
-              borderLeftColor: C.secondary,
-            }]}>
-              <View>
-                <Text style={[styles.statusLabel, { color: C.secondary }]}>SYSTEM STATUS</Text>
-                <View style={styles.statusRow}>
-                  <View style={[styles.statusDot, { backgroundColor: C.secondary }]} />
-                  <Text style={[styles.statusActive, { color: C.onSurface }]}>ACTIVE</Text>
-                </View>
-              </View>
-              <View style={styles.dotRow}>
-                {([0.3, 0.55, 1] as const).map((o, i) => (
-                  <View key={i} style={[styles.accentDot, { backgroundColor: C.secondary, opacity: o }]} />
-                ))}
-              </View>
-            </View> */}
-
-          </ScrollView>
-        </Animated.View>
+              {' '}and{' '}
+              <Text style={styles.termsLink} onPress={() => setLegalDoc('privacy')}>
+                Privacy Policy
+              </Text>.
+            </Text>
+          </Animated.View>
+        </ScrollView>
       </SafeAreaView>
 
       <LegalModal
@@ -273,82 +210,49 @@ export function AuthScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg },
-  heroBg: { ...StyleSheet.absoluteFillObject, opacity: 0.9 },
-
-  glowTop: {
-    position: 'absolute', top: -80, left: -80,
-    width: 260, height: 260, borderRadius: 130,
-    backgroundColor: T.primaryTint,
-  },
-  glowBottom: {
-    position: 'absolute', bottom: -60, right: -60,
-    width: 200, height: 200, borderRadius: 100,
-    backgroundColor: 'rgba(133,211,218,0.05)',
+  safe: { flex: 1 },
+  heroBg: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: '62%',
   },
 
-  scroll: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 32,
-    gap: 20,
-  },
+  // flexGrow + flex-end pins the sheet to the bottom on tall screens and lets
+  // the whole thing scroll on short ones instead of clipping.
+  scroll: { flexGrow: 1, justifyContent: 'flex-end' },
 
-  // Floating badge
-  badgeRow: { alignItems: 'center' },
-  floatingBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 9,
-    borderRadius: 100, borderWidth: 1,
+  // Hero
+  hero: { paddingHorizontal: 24, paddingBottom: 28, gap: 14 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 },
+  appIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    borderWidth: 1, borderColor: T.glassBorder,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: T.primary },
-
-  // Brand
-  brandBlock: { alignItems: 'center', gap: 6 },
-  brandName:  { fontSize: 56, fontWeight: '800', letterSpacing: -2, lineHeight: 62 },
-  brandCal:   { color: T.textPrimary },
-  tagline:    { fontSize: 18, fontWeight: '600', letterSpacing: 0.4 },
-
-  // Bento stack — one card per row, icon left + text right
-  bentoGrid: { flexDirection: 'column', gap: 8 },
-  bentoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 14, borderWidth: 1, padding: 14,
+  wordmark: { fontSize: 30, fontWeight: '800', letterSpacing: -0.5, color: T.textPrimary },
+  wordmarkAccent: { color: T.primary },
+  headline: {
+    fontSize: 34, lineHeight: 40, fontWeight: '800', letterSpacing: -0.8,
+    color: T.textPrimary, maxWidth: 320,
   },
-  bentoIcon: {
-    width: 44, height: 44, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  bentoText:  { flex: 1 },
-  bentoLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 2 },
-  bentoDesc:  { fontSize: 11, lineHeight: 15 },
+  subline: { fontSize: 16, lineHeight: 24, color: T.textSecondary, maxWidth: 340 },
+  proofList: { gap: 10, marginTop: 6 },
+  proofRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  proofText: { fontSize: 15, lineHeight: 20, color: T.textPrimary, flexShrink: 1 },
 
-  // Auth card
-  authCard: {
-    borderRadius: 20, borderWidth: 1, padding: 22, gap: 16,
-    shadowColor: T.primary, shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12, shadowRadius: 24, elevation: 4,
+  // Sheet
+  sheet: {
+    backgroundColor: T.surface,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    borderTopWidth: 1, borderColor: T.border,
+    paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16,
+    gap: 12,
   },
-  authHeader:   { gap: 4 },
-  authTitle:    { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
-  authSubtitle: { fontSize: 14, lineHeight: 20 },
-
   googleBtn: {
-    height: 56, borderRadius: 12,
+    height: 54, borderRadius: 14, backgroundColor: GOOGLE_BTN_BG,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
   },
-  googleLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
-
-  terms:     { fontSize: 11, textAlign: 'center', lineHeight: 16 },
-  termsLink: { fontWeight: '700' },
-
-  statusBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 14, borderRadius: 12, borderWidth: 1, borderLeftWidth: 4,
-  },
-  statusLabel:  { fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
-  statusRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot:    { width: 8, height: 8, borderRadius: 4 },
-  statusActive: { fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
-  dotRow:       { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  accentDot:    { width: 6, height: 6, borderRadius: 3 },
+  googleLabel: { fontSize: 16, fontWeight: '600', color: GOOGLE_BTN_TEXT },
+  hint: { fontSize: 13, textAlign: 'center', color: T.textMuted },
+  terms: { fontSize: 12, lineHeight: 18, textAlign: 'center', color: T.textMuted, marginTop: 4 },
+  termsLink: { color: T.primary, fontWeight: '600' },
 });
