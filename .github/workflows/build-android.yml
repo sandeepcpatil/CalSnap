@@ -1,4 +1,4 @@
-﻿name: Build Android AAB
+name: Build Android AAB
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'mobile/**'
+      - '.github/workflows/build-android.yml'
 
 jobs:
   build-android:
@@ -29,10 +30,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # The repo uses npm lockfiles everywhere; installing the EAS CLI with the
+      # action's default (yarn) is what failed on the last two runs.
       - name: Setup Expo & EAS CLI
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
+          packager: npm
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
@@ -54,9 +58,34 @@ jobs:
             echo "Plugin file not found, skipping patch"
           fi
 
-      - name: Calculate versionCode (run_number - 22, so run 26 = versionCode 4)
+      # app.config.js is the single source of truth for versionCode.
+      # android/app/build.gradle reads it from EXPO_PUBLIC_VERSION_CODE.
+      - name: Read versionCode from app.config.js
         id: vc
-        run: echo "VERSION_CODE=$(( ${{ github.run_number }} - 22 ))" >> $GITHUB_OUTPUT
+        working-directory: mobile
+        run: |
+          VC="$(node -p "require('./app.config.js').android.versionCode")"
+          echo "versionCode = $VC"
+          echo "VERSION_CODE=$VC" >> "$GITHUB_OUTPUT"
+
+      # Fail closed: an AAB built without these would ship with Google sign-in
+      # and RevenueCat unconfigured. Values are never printed.
+      - name: Check required public config is present
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
+        run: |
+          MISSING=0
+          for VAR in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_BACKEND_URL EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_REVENUECAT_ANDROID_KEY; do
+            if [ -z "${!VAR}" ]; then
+              echo "::error::Repository secret $VAR is not set (Settings → Secrets and variables → Actions)"
+              MISSING=1
+            fi
+          done
+          exit $MISSING
 
       - name: Build Android AAB (local)
         working-directory: mobile
@@ -67,11 +96,12 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
-          EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: calsnap-android-v${{ github.run_number }}
+          name: calsnap-android-v${{ steps.vc.outputs.VERSION_CODE }}
           path: mobile/calsnap.aab
           retention-days: 7

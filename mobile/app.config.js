@@ -35,7 +35,7 @@ module.exports = {
       backgroundColor: '#01696F',
     },
     package: IS_DEV ? 'com.sanverse.calsnapapp.dev' : 'com.sanverse.calsnapapp',
-    versionCode: 12,
+    versionCode: 32,
     permissions: [
       'CAMERA',
       'RECEIVE_BOOT_COMPLETED',
