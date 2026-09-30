@@ -4,7 +4,7 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useWater } from '../hooks/useWater';
 import { QUICK_ADD_ML, formatMl, waterProgress } from '../utils/water';
-import { T } from '../theme';
+import { T, spacing, radius, type, HIT_TARGET, tabularNums } from '../theme';
 
 interface Props {
   /** Opens the full Water screen. */
@@ -33,7 +33,7 @@ export function WaterCard({ onOpen }: Props) {
         accessibilityLabel={`Water: ${formatMl(consumedMl)} of ${formatMl(goalMl)}. Open water tracking.`}
       >
         <View style={styles.icon}>
-          <Ionicons name="water" size={17} color={T.primary} />
+          <Ionicons name="water-outline" size={18} color={T.textSecondary} />
         </View>
         <View style={styles.headText}>
           <Text style={styles.label}>Water</Text>
@@ -42,7 +42,7 @@ export function WaterCard({ onOpen }: Props) {
             <Text style={styles.goal}> / {formatMl(goalMl)}</Text>
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={17} color={T.textMuted} />
+        <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
       </TouchableOpacity>
 
       <View style={styles.track}>
@@ -64,7 +64,7 @@ export function WaterCard({ onOpen }: Props) {
             accessibilityRole="button"
             accessibilityLabel={`Add ${formatMl(ml)} of water`}
           >
-            <Ionicons name="add" size={14} color={T.primary} />
+            <Ionicons name="add" size={16} color={T.primary} />
             <Text style={styles.quickText}>{formatMl(ml)}</Text>
           </TouchableOpacity>
         ))}
@@ -75,49 +75,43 @@ export function WaterCard({ onOpen }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 16,
-    borderRadius: 20,
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.lg,
     backgroundColor: T.surface,
     borderWidth: 1,
     borderColor: T.border,
-    padding: 16,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: HIT_TARGET },
   icon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: T.primaryTint,
+    backgroundColor: T.surface2,
   },
   headText: { flex: 1, gap: 1 },
-  label: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-  },
-  value: { fontSize: 19, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.4 },
-  goal: { fontSize: 13, fontWeight: '600', color: T.textSecondary, letterSpacing: 0 },
+  label: { ...type.body, fontWeight: '600', color: T.textSecondary },
+  value: { ...type.titleSm, fontSize: 19, fontWeight: '800', color: T.textPrimary, ...tabularNums },
+  goal: { ...type.bodySm, fontWeight: '600', color: T.textSecondary },
 
   track: { height: 6, borderRadius: 3, backgroundColor: T.surface2, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 3 },
 
-  quickRow: { flexDirection: 'row', gap: 8 },
+  quickRow: { flexDirection: 'row', gap: spacing.sm },
   quickBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    height: 36,
-    borderRadius: 11,
+    gap: spacing.xs,
+    minHeight: HIT_TARGET,
+    borderRadius: radius.md,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
-  quickText: { fontSize: 12.5, fontWeight: '800', color: T.textPrimary },
+  quickText: { ...type.bodySm, fontWeight: '800', color: T.primary, ...tabularNums },
 });

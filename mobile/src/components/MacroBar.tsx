@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useTheme } from '../hooks/useTheme';
-import { T } from '../theme';
+import { T, spacing, type, tabularNums } from '../theme';
 
 interface Props {
   label: string;
@@ -16,29 +15,37 @@ interface Props {
 
 export function MacroBar({ label, current, goal, color, unit = 'g', percent }: Props) {
   const progress = goal > 0 ? Math.min(current / goal, 1) : 0;
-  const { theme } = useTheme();
+  const over = Math.round(current - goal);
+  const isOver = goal > 0 && over > 0;
+  // Once past the goal the bar is full and turns to the warning colour, and the
+  // overshoot is spelled out beside the numbers rather than hidden by the clamp.
+  const fillColor = isOver ? T.warning : color;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessible
+      accessibilityLabel={`${label}: ${Math.round(current)} of ${Math.round(goal)} ${unit}${isOver ? `, ${over} ${unit} over` : ''}`}
+    >
       <View style={styles.header}>
         <View style={styles.labelRow}>
           <View style={[styles.dot, { backgroundColor: color }]} />
-          <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
+          <Text style={styles.label}>{label}</Text>
           {percent !== undefined && (
             <Text style={[styles.percent, { color }]}>{Math.round(percent)}%</Text>
           )}
         </View>
         <View style={styles.valueRow}>
-          <Text style={[styles.valueCurrent, { color }]}>{Math.round(current)}{unit}</Text>
-          <Text style={[styles.valueSep, { color: theme.textMuted }]}> / </Text>
-          <Text style={[styles.valueGoal, { color: theme.textMuted }]}>{Math.round(goal)}{unit}</Text>
+          <Text style={[styles.valueCurrent, { color: fillColor }]}>{Math.round(current)}{unit}</Text>
+          <Text style={styles.valueGoal}> / {Math.round(goal)}{unit}</Text>
+          {isOver && <Text style={styles.overMarker}>  +{over} {unit}</Text>}
         </View>
       </View>
-      <View style={[styles.track, { backgroundColor: T.divider }]}>
+      <View style={styles.track}>
         <View
           style={[
             styles.fill,
-            { width: `${progress * 100}%`, backgroundColor: color },
+            { width: `${progress * 100}%`, backgroundColor: fillColor },
           ]}
         />
       </View>
@@ -47,16 +54,16 @@ export function MacroBar({ label, current, goal, color, unit = 'g', percent }: P
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 8 },
+  container: { gap: spacing.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  label: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
-  percent: { fontSize: 12, fontWeight: '800' },
+  label: { ...type.bodySm, fontWeight: '600', color: T.textSecondary },
+  percent: { ...type.bodySm, fontWeight: '800', ...tabularNums },
   valueRow: { flexDirection: 'row', alignItems: 'baseline' },
-  valueCurrent: { fontSize: 14, fontWeight: '700' },
-  valueSep: { fontSize: 13 },
-  valueGoal: { fontSize: 13, fontWeight: '500' },
-  track: { height: 12, borderRadius: 6, overflow: 'hidden' },
+  valueCurrent: { ...type.bodySm, fontSize: 14, fontWeight: '700', ...tabularNums },
+  valueGoal: { ...type.bodySm, color: T.textMuted, ...tabularNums },
+  overMarker: { ...type.bodySm, fontWeight: '700', color: T.warning, ...tabularNums },
+  track: { height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: T.divider },
   fill: { height: '100%', borderRadius: 6 },
 });

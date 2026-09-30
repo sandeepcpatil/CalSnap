@@ -37,7 +37,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
       tone: 'warning',
       icon: 'time-outline',
       title: trialDaysLeft <= 1 ? 'Trial ends today' : `Trial ends in ${trialDaysLeft} days`,
-      body: 'Subscribe to keep unlimited scans, macro insights and export.',
+      body: 'Subscribe to keep your daily AI scans, macro insights and export.',
     });
   }
 
@@ -49,7 +49,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
         tone: 'info',
         icon: 'restaurant-outline',
         title: 'No meals logged yet',
-        body: 'Snap your first meal to start tracking today.',
+        body: 'Log your first meal to start today.',
       });
     }
     return alerts; // nothing else meaningful to say with no data
@@ -65,7 +65,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
         tone: 'warning',
         icon: 'flame-outline',
         title: `${Math.round(totals.calories - calorieGoal).toLocaleString()} kcal over goal`,
-        body: `You've had ${Math.round(totals.calories).toLocaleString()} of your ${calorieGoal.toLocaleString()} kcal target.`,
+        body: `${Math.round(totals.calories).toLocaleString()} of your ${calorieGoal.toLocaleString()} kcal target so far.`,
       });
     } else if (totals.calories >= calorieGoal * 0.9) {
       alerts.push({
@@ -73,7 +73,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
         tone: 'success',
         icon: 'checkmark-circle-outline',
         title: 'On target for calories',
-        body: `Nicely balanced — ${Math.round(totals.calories).toLocaleString()} of ${calorieGoal.toLocaleString()} kcal.`,
+        body: `${Math.round(totals.calories).toLocaleString()} of ${calorieGoal.toLocaleString()} kcal.`,
       });
     } else if (hour >= 18 && remaining > 0) {
       alerts.push({
@@ -81,7 +81,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
         tone: 'info',
         icon: 'trending-down-outline',
         title: `${Math.round(remaining).toLocaleString()} kcal remaining`,
-        body: "You're under your goal — a balanced dinner can close the gap.",
+        body: 'Still under target with the evening to go.',
       });
     }
   }
@@ -94,7 +94,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
       tone: 'info',
       icon: 'barbell-outline',
       title: 'Protein is running low',
-      body: `${Math.round(totals.protein)}g of ${proteinGoal}g so far — add a protein-rich snack.`,
+      body: `${Math.round(totals.protein)} g of ${proteinGoal} g so far.`,
     });
   }
 
@@ -109,7 +109,7 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
       tone: 'info',
       icon: 'alert-circle-outline',
       title: `No ${missing.join(' or ')} logged`,
-      body: 'Log it while it’s fresh so your daily totals stay accurate.',
+      body: 'Logging it keeps today’s totals accurate.',
     });
   }
 
@@ -119,8 +119,8 @@ export function buildSmartAlerts(input: AlertInputs): SmartAlert[] {
       id: 'all-good',
       tone: 'success',
       icon: 'sparkles-outline',
-      title: "You're on track",
-      body: `${itemsLoggedToday} item${itemsLoggedToday !== 1 ? 's' : ''} logged today. Keep the streak going!`,
+      title: 'On track',
+      body: `${itemsLoggedToday} item${itemsLoggedToday !== 1 ? 's' : ''} logged today.`,
     });
   }
 

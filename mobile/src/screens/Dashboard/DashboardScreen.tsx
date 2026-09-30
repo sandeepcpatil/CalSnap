@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
-  Image,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,48 +23,31 @@ import { MacroDonut } from '../../components/MacroDonut';
 import { MealSection } from '../../components/MealSection';
 import { TrialBanner } from '../../components/TrialBanner';
 import { AlertsModal } from '../../components/AlertsModal';
-import { CoachFab, useHideOnScroll } from '../../components/CoachFab';
+import { CoachFab, useHideOnScroll, COACH_FAB_CLEARANCE } from '../../components/CoachFab';
 import { buildNutriInsight, macroCalorieSplit } from '../../utils/nutrition';
 import { buildSmartAlerts, alertsSignature } from '../../utils/alerts';
 import { useAlertsSeenStore } from '../../store/alertsSeenStore';
-import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { useConfirmExit } from '../../hooks/useConfirmExit';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useRecapStore } from '../../store/recapStore';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
+import { openLogHub } from '../../store/logHubStore';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
-import { T } from '../../theme';
-
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondary: T.primary,
-  tertiary: T.protein,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  outlineVar: T.border,
-  surfaceLowest: T.bg,
-  insightBg: T.primaryTint,
-  insightBorder: T.border,
-};
+import { T, spacing, radius, type, HIT_TARGET, withAlpha, tabularNums } from '../../theme';
 
 export function DashboardScreen() {
   const { profile, session } = useAuthStore();
-  const { todayLogs, selectedDate, isLoading, fetchLogsForDate } = useFoodLogStore();
-  const { theme } = useTheme();
+  const { todayLogs, selectedDate, isLoading, hasLoaded, error, fetchLogsForDate } = useFoodLogStore();
   const { isSubscribed, isOnTrial, trialDaysLeft, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   // Water is a root-stack screen, not a tab, so it is reached through the parent.
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const [alertsOpen, setAlertsOpen] = useState(false);
+  // Only a pull-to-refresh spins the control; background fetches stay silent.
+  const [refreshing, setRefreshing] = useState(false);
 
   // Home is the root of the back stack, so a single stray press would otherwise
   // close the app outright.
@@ -82,17 +64,28 @@ export function DashboardScreen() {
     if (session?.access_token) fetchRecap(session.access_token);
   }, [session?.access_token, fetchRecap]);
 
-  const loadLogs = useCallback(() => {
+  const loadLogs = useCallback(async () => {
     if (session?.user.id) {
-      fetchLogsForDate(session.user.id, selectedDate);
       // Water lives in its own table but shares this screen's refresh control —
       // pulling down must not leave the hydration card stale.
-      useWaterStore.getState().fetchForDate(session.user.id, selectedDate);
+      await Promise.all([
+        fetchLogsForDate(session.user.id, selectedDate),
+        useWaterStore.getState().fetchForDate(session.user.id, selectedDate),
+      ]);
     }
   }, [session?.user.id, selectedDate]);
 
   useEffect(() => {
     loadLogs();
+  }, [loadLogs]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadLogs();
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadLogs]);
 
   // Re-arm the streak nudge whenever today's logs change. Home is the landing
@@ -118,8 +111,8 @@ export function DashboardScreen() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-  const byMealType = (type: FoodLog['meal_type']) =>
-    todayLogs.filter((l) => l.meal_type === type);
+  const byMealType = (mealType: FoodLog['meal_type']) =>
+    todayLogs.filter((l) => l.meal_type === mealType);
 
   const insightMsg = buildNutriInsight(totals, { calorieGoal, proteinGoal });
   const macroSplit = macroCalorieSplit(totals.protein, totals.carbs, totals.fat);
@@ -156,44 +149,36 @@ export function DashboardScreen() {
   const greeting =
     currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
 
+  // No cache, first fetch still in flight: show a placeholder ring rather than
+  // the full goal masquerading as "remaining".
+  const firstLoad = !hasLoaded && isLoading;
+  const isEmptyDay = hasLoaded && todayLogs.length === 0;
+  const itemCount = `${todayLogs.length} ${todayLogs.length === 1 ? 'item' : 'items'}`;
+
   return (
     <View style={styles.root}>
       {/* ── Header ── */}
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <LinearGradient
-          colors={['rgba(12,17,18,1)', 'rgba(12,17,18,0.90)', 'rgba(12,17,18,0)']}
+          colors={[withAlpha(T.bg, 1), withAlpha(T.bg, 0.9), withAlpha(T.bg, 0)]}
           style={styles.headerGrad}
         >
           <View style={styles.header}>
-            {/* Avatar → Profile */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Profile')}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Open profile"
-            >
-              {profile?.avatar_url ? (
-                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Brand */}
-            <Text style={styles.brand}>
-              CAL<Text style={styles.brandSnap}>VUE</Text>
+            {/* Wordmark. The Profile tab already exists, so the old avatar
+                shortcut here was a duplicate route and has gone. */}
+            <Text style={styles.brand} accessibilityRole="header">
+              Cal<Text style={styles.brandAccent}>Vue</Text>
             </Text>
 
             {/* Bell → Alerts */}
             <TouchableOpacity
               style={styles.bellBtn}
               onPress={openAlerts}
+              hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Open alerts"
+              accessibilityLabel={badgeCount > 0 ? `Open alerts, ${badgeCount} new` : 'Open alerts'}
             >
-              <Ionicons name="notifications-outline" size={22} color={C.onSurfaceVar} />
+              <Ionicons name="notifications-outline" size={22} color={T.textSecondary} />
               {badgeCount > 0 && (
                 <View style={styles.bellBadge}>
                   <Text style={styles.bellBadgeText}>{badgeCount}</Text>
@@ -209,7 +194,7 @@ export function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={loadLogs} tintColor={C.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
         }
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -223,58 +208,79 @@ export function DashboardScreen() {
         {/* ── Trial countdown (only during the 7-day trial) ── */}
         <TrialBanner onPress={showPaywall} />
 
-        {/* ── Calorie Ring Card ── */}
-        <View style={styles.glassCard}>
-          <CalorieRing consumed={totals.calories} goal={calorieGoal} />
+        {/* ── Quiet inline note when the last refresh failed ── */}
+        {error && (
+          <View style={styles.noticeRow} accessibilityLiveRegion="polite">
+            <Ionicons name="cloud-offline-outline" size={16} color={T.textMuted} />
+            <Text style={styles.noticeText}>{error}</Text>
+          </View>
+        )}
+
+        {/* ── Calorie ring ── */}
+        <View style={styles.card}>
+          <CalorieRing consumed={totals.calories} goal={calorieGoal} loading={firstLoad} />
+
+          {isEmptyDay && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Nothing logged yet today.</Text>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={openLogHub}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel="Log your first meal"
+              >
+                <Ionicons name="add" size={20} color={T.textOnPrimary} />
+                <Text style={styles.primaryBtnText}>Log your first meal</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* ── Water ── high on the page on purpose: it's logged more often than
             meals, and burying it behind the hub would be too slow. ── */}
         <WaterCard onOpen={() => rootNavigation?.navigate('Water')} />
 
-        {/* Coach lives in a floating pill (see CoachFab below) rather than a card
-            here — a card scrolls away exactly when a question occurs to you. */}
-
-        {/* ── Macro Targets Card (Pro) ── */}
-        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macro Breakdown" borderRadius={20}>
-          <View style={styles.glassCard}>
-            <View style={styles.cardTitleRow}>
-              <Ionicons name="analytics-outline" size={16} color={C.primary} />
-              <Text style={styles.cardTitle}>Macro Targets</Text>
-            </View>
-            <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} showLegend={false} />
-            <View style={styles.macroDivider} />
-            <View style={styles.macroBars}>
-              <MacroBar label="Protein"       current={totals.protein} goal={proteinGoal} color={T.protein} unit="g" percent={macroSplit.proteinPct} />
-              <MacroBar label="Carbohydrates" current={totals.carbs}   goal={carbsGoal}   color={T.carbs}   unit="g" percent={macroSplit.carbsPct} />
-              <MacroBar label="Fat"           current={totals.fat}     goal={fatGoal}     color={T.fat}     unit="g" percent={macroSplit.fatPct} />
-            </View>
-          </View>
-        </ProGate>
-
-        {/* ── Nutri-Insight Card (Pro) ── */}
-        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="AI Nutri-Insight" borderRadius={20}>
-          <View style={[styles.glassCard, { borderColor: C.insightBorder, backgroundColor: C.insightBg }]}>
-            <View style={styles.cardTitleRow}>
-              <Ionicons name="sparkles-outline" size={16} color={C.primary} />
-              <Text style={styles.cardTitle}>Nutri-Insight</Text>
-            </View>
-            <Text style={styles.insightText}>{insightMsg}</Text>
-          </View>
-        </ProGate>
-
-        {/* ── Today's Log heading ── */}
+        {/* ── Today's log ── the diary comes before the Pro cards so a free
+            user is not scrolling past two locked panels to reach it. ── */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Today's Log</Text>
-          <Text style={styles.sectionSub}>{todayLogs.length} items</Text>
+          <Text style={styles.sectionTitle}>Today's log</Text>
+          <Text style={styles.sectionSub}>{itemCount}</Text>
         </View>
 
-        {/* ── Meal sections ── */}
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
           <MealSection key={meal} mealType={meal} logs={byMealType(meal)} />
         ))}
 
-        <View style={{ height: 100 }} />
+        {/* ── Pro: one gate over both analysis cards, not a badge on each ── */}
+        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macros and insight" borderRadius={radius.lg}>
+          <View style={styles.proStack}>
+            <View style={styles.card}>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="pie-chart-outline" size={18} color={T.textSecondary} />
+                <Text style={styles.cardTitle}>Macros</Text>
+              </View>
+              <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} showLegend={false} />
+              <View style={styles.macroDivider} />
+              <View style={styles.macroBars}>
+                <MacroBar label="Protein" current={totals.protein} goal={proteinGoal} color={T.protein} unit="g" percent={macroSplit.proteinPct} />
+                <MacroBar label="Carbs"   current={totals.carbs}   goal={carbsGoal}   color={T.carbs}   unit="g" percent={macroSplit.carbsPct} />
+                <MacroBar label="Fat"     current={totals.fat}     goal={fatGoal}     color={T.fat}     unit="g" percent={macroSplit.fatPct} />
+              </View>
+            </View>
+
+            <View style={styles.card}>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="bulb-outline" size={18} color={T.textSecondary} />
+                <Text style={styles.cardTitle}>Insight</Text>
+              </View>
+              <Text style={styles.insightText}>{insightMsg}</Text>
+            </View>
+          </View>
+        </ProGate>
+
+        {/* Coach lives in a floating pill (see CoachFab below) rather than a card
+            here — a card scrolls away exactly when a question occurs to you. */}
       </ScrollView>
 
       <CoachFab hidden={fabHidden} />
@@ -286,125 +292,117 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: T.bg },
 
   /* Header */
   headerSafe:  { zIndex: 10 },
-  headerGrad:  { paddingBottom: 8 },
+  headerGrad:  { paddingBottom: spacing.sm },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xs,
+    minHeight: HIT_TARGET + spacing.xs,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: C.primary + '55',
-  },
-  avatarFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: C.outlineVar,
-    borderWidth: 2,
-    borderColor: C.primary + '55',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: { color: C.primary, fontSize: 16, fontWeight: '700' },
-  brand: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 2,
-    color: C.onSurface,
-  },
-  brandSnap: { color: C.secondary },
+  brand: { ...type.titleSm, fontWeight: '800', color: T.textPrimary },
+  brandAccent: { color: T.primary },
   bellBtn: {
-    width: 40,
-    height: 40,
+    width: HIT_TARGET,
+    height: HIT_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+    // Optically right-align the glyph with the card edge below.
+    marginRight: -spacing.md,
   },
   bellBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
     backgroundColor: T.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bellBadgeText: { fontSize: 11, fontWeight: '800', color: T.textOnPrimary },
+  bellBadgeText: { ...type.bodySm, fontSize: 12, fontWeight: '800', color: T.textOnPrimary, ...tabularNums },
 
   /* Scroll */
   scroll:        { flex: 1 },
-  scrollContent: { paddingTop: 4, paddingBottom: 40, gap: 12 },
+  // The tail clearance keeps the last row's kcal column out from under the
+  // floating Coach pill.
+  scrollContent: { paddingTop: spacing.xs, paddingBottom: COACH_FAB_CLEARANCE, gap: spacing.md },
 
   /* Greeting */
-  greetingBlock: { paddingHorizontal: 20, paddingTop: 2 },
-  greetingSmall: { fontSize: 13, fontWeight: '600', color: C.onSurfaceVar, letterSpacing: 0.3 },
-  greetingName:  { fontSize: 24, fontWeight: '800', color: C.onSurface, letterSpacing: -0.4 },
+  greetingBlock: { paddingHorizontal: spacing.xl, paddingTop: 2 },
+  greetingSmall: { ...type.bodySm, fontWeight: '600', color: T.textSecondary },
+  greetingName:  { ...type.headline, fontSize: 24, lineHeight: 30, color: T.textPrimary },
 
-  /* Glass card */
-  glassCard: {
-    marginHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: C.glass,
+  /* Inline notice */
+  noticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xs,
+  },
+  noticeText: { ...type.bodySm, color: T.textMuted },
+
+  /* Card */
+  card: {
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: T.surface,
     borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderColor: T.border,
     overflow: 'hidden',
-    padding: 20,
+    padding: spacing.xl,
   },
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
+    gap: spacing.sm - 2,
+    marginBottom: spacing.lg,
   },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: C.primary,
-  },
-  macroBars: { gap: 16 },
+  cardTitle: { ...type.body, fontWeight: '600', color: T.textSecondary },
+  proStack: { gap: spacing.md },
+  macroBars: { gap: spacing.lg },
   macroDivider: { height: 1, backgroundColor: T.divider, marginVertical: 18 },
 
-  /* Insight */
-  insightText: {
-    color: C.onSurfaceVar,
-    fontSize: 14,
-    lineHeight: 22,
+  /* Empty day */
+  emptyState: {
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
   },
+  emptyTitle: { ...type.body, color: T.textSecondary, textAlign: 'center' },
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm - 2,
+    minHeight: 48,
+    paddingHorizontal: spacing['2xl'],
+    borderRadius: radius.md,
+    backgroundColor: T.primary,
+    alignSelf: 'stretch',
+  },
+  primaryBtnText: { ...type.body, fontWeight: '700', color: T.textOnPrimary },
+
+  /* Insight */
+  insightText: { ...type.body, color: T.textPrimary },
 
   /* Section header */
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginTop: 4,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xs,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: C.onSurface,
-    letterSpacing: 0.3,
-  },
-  sectionSub: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.outline,
-  },
+  sectionTitle: { ...type.title, fontSize: 18, lineHeight: 24, color: T.textPrimary },
+  sectionSub: { ...type.bodySm, fontWeight: '600', color: T.textMuted, ...tabularNums },
 });
-

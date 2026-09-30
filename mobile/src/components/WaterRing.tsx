@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { formatMl, glassesOf, waterProgress } from '../utils/water';
-import { T } from '../theme';
+import { T, type, tabularNums } from '../theme';
 
 interface Props {
   consumedMl: number;
@@ -23,9 +23,14 @@ export function WaterRing({ consumedMl, goalMl, size = 200 }: Props) {
   const progress = waterProgress(consumedMl, goalMl);
   const remaining = Math.max(goalMl - consumedMl, 0);
   const met = consumedMl >= goalMl;
+  const glasses = glassesOf(consumedMl);
 
   return (
-    <View style={styles.wrap}>
+    <View
+      style={styles.wrap}
+      accessible
+      accessibilityLabel={`Water: ${formatMl(consumedMl)} of ${formatMl(goalMl)}`}
+    >
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={size} height={size} style={styles.svg}>
           <Defs>
@@ -67,8 +72,8 @@ export function WaterRing({ consumedMl, goalMl, size = 200 }: Props) {
 
       <Text style={styles.caption}>
         {met
-          ? `Goal met · ${glassesOf(consumedMl)} glasses logged`
-          : `${formatMl(remaining)} to go · ${glassesOf(consumedMl)} glass${glassesOf(consumedMl) === 1 ? '' : 'es'} logged`}
+          ? `Goal met · ${glasses} ${glasses === 1 ? 'glass' : 'glasses'} logged`
+          : `${formatMl(remaining)} to go · ${glasses} ${glasses === 1 ? 'glass' : 'glasses'} logged`}
       </Text>
     </View>
   );
@@ -78,7 +83,7 @@ const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: 14 },
   svg: { position: 'absolute' },
   center: { alignItems: 'center', gap: 2 },
-  value: { fontWeight: '800', letterSpacing: -1.5 },
-  goal: { fontSize: 14, fontWeight: '600', color: T.textSecondary },
-  caption: { fontSize: 13, fontWeight: '600', color: T.textMuted },
+  value: { fontWeight: '800', letterSpacing: -1.5, ...tabularNums },
+  goal: { ...type.body, fontSize: 14, fontWeight: '600', color: T.textSecondary },
+  caption: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
 });

@@ -7,7 +7,7 @@ import {
   computeStreak, buildStreakGrid, localDayKey, streakMessage,
   type GridDay, type StreakResult,
 } from '../utils/streak';
-import { T } from '../theme';
+import { T, spacing, radius, type, withAlpha, tabularNums } from '../theme';
 
 interface Props {
   userId: string;
@@ -73,19 +73,23 @@ export function StreakCard({ userId, refreshKey = 0 }: Props) {
               {streak.current}
             </Text>
           </View>
-          <Text style={styles.streakLabel}>DAY STREAK</Text>
+          <Text style={styles.streakLabel}>Day streak</Text>
         </View>
 
         <View style={styles.bestBlock}>
           <Text style={styles.bestNum}>{streak.longest}</Text>
-          <Text style={styles.bestLabel}>LONGEST</Text>
+          <Text style={styles.bestLabel}>Longest</Text>
         </View>
       </View>
 
       <Text style={styles.message}>{streakMessage(streak)}</Text>
 
       {/* Rolling 5-week grid */}
-      <View style={styles.gridWrap}>
+      <View
+        style={styles.gridWrap}
+        accessible
+        accessibilityLabel={`Last ${WEEKS} weeks: ${loggedDays.size} days logged`}
+      >
         <View style={styles.dowRow}>
           {DOW.map((d, i) => (
             <Text key={`${d}-${i}`} style={styles.dowLabel}>{d}</Text>
@@ -116,44 +120,36 @@ const DOT = 13;
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 20,
+    marginHorizontal: spacing.xl,
     backgroundColor: T.surface,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: T.border,
-    padding: 20,
+    padding: spacing.xl,
     gap: 14,
   },
 
   topRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   streakBlock: { gap: 2 },
-  flameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  streakNum: {
-    fontSize: 40, fontWeight: '800', color: T.textPrimary,
-    letterSpacing: -1, lineHeight: 44, fontVariant: ['tabular-nums'],
-  },
-  streakLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4, color: T.textMuted },
+  flameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  streakNum: { ...type.display, fontSize: 40, lineHeight: 44, color: T.textPrimary },
+  streakLabel: { ...type.label, color: T.textMuted },
 
   bestBlock: { alignItems: 'flex-end', gap: 2 },
-  bestNum: {
-    fontSize: 20, fontWeight: '800', color: T.textSecondary,
-    fontVariant: ['tabular-nums'], lineHeight: 24,
-  },
-  bestLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, color: T.textMuted },
+  bestNum: { ...type.title, fontWeight: '800', color: T.textSecondary, ...tabularNums },
+  bestLabel: { ...type.label, color: T.textMuted },
 
-  message: { fontSize: 13, color: T.textSecondary, fontWeight: '500', marginTop: -4 },
+  message: { ...type.bodySm, color: T.textSecondary, marginTop: -4 },
 
   gridWrap: { gap: 6 },
   dowRow: { flexDirection: 'row', marginBottom: 2 },
-  dowLabel: {
-    flex: 1, textAlign: 'center', fontSize: 11,
-    fontWeight: '700', color: T.textMuted,
-  },
+  dowLabel: { ...type.bodySm, fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'center', color: T.textMuted },
   weekRow: { flexDirection: 'row' },
   dotCell: { flex: 1, alignItems: 'center' },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
   dotLogged: { backgroundColor: T.primary },
-  dotMissed: { backgroundColor: T.surface2 },
+  // Was `surface2` — one step from the card and effectively invisible.
+  dotMissed: { backgroundColor: withAlpha(T.textMuted, 0.4) },
   dotToday: { backgroundColor: 'transparent', borderWidth: 2, borderColor: T.primary },
   dotFuture: { backgroundColor: 'transparent' },
 });

@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useLogHubStore, openLogHub } from '../store/logHubStore';
 import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { HistoryScreen } from '../screens/History/HistoryScreen';
 import { ProfileScreen } from '../screens/Profile/ProfileScreen';
 import type { ScanMode } from './ScanNavigator';
 import { LogHubSheet } from '../components/LogHubSheet';
-import { useTheme } from '../hooks/useTheme';
 import type { RootStackParamList } from './RootNavigator';
+import { T, spacing } from '../theme';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -30,7 +32,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 /** Never rendered — see `LogButton` above. */
 const NoopScreen = () => null;
 
-function ScanTabButton({ onPress, color }: { onPress: () => void; color: string }) {
+function ScanTabButton({ onPress }: { onPress: () => void }) {
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onPress();
@@ -39,24 +41,25 @@ function ScanTabButton({ onPress, color }: { onPress: () => void; color: string 
   return (
     <TouchableOpacity
       onPress={handlePress}
-      style={[styles.scanButton, { backgroundColor: color, shadowColor: color }]}
+      style={styles.scanButton}
       activeOpacity={0.85}
       accessibilityRole="button"
       accessibilityLabel="Log something"
     >
       <View style={styles.scanButtonInner}>
-        <Ionicons name="add" size={32} color="#ffffff" />
+        <Ionicons name="add" size={32} color={T.textOnPrimary} />
       </View>
     </TouchableOpacity>
   );
 }
 
 export function MainTabNavigator() {
-  const { theme } = useTheme();
   // MainTabNavigator is itself a root-stack screen, so this is the root
   // navigator — which is what Water and LogFromHistory live on.
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [hubOpen, setHubOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const hubOpen = useLogHubStore((s) => s.open);
+  const setHubOpen = useLogHubStore((s) => s.setOpen);
 
   const openScan = (mode: ScanMode) => rootNav.navigate('Scan', { mode });
 
@@ -70,12 +73,12 @@ export function MainTabNavigator() {
           headerShown: false,
           tabBarStyle: {
             ...styles.tabBar,
-            backgroundColor: theme.tabBarBg,
-            borderTopColor: theme.tabBarBorder,
+            // Home-indicator phones get their inset; everything else a 12px floor.
+            paddingBottom: Math.max(insets.bottom, spacing.md),
           },
-          tabBarActiveTintColor:   theme.tabBarActive,
-          tabBarInactiveTintColor: theme.tabBarInactive,
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+          tabBarActiveTintColor:   T.primary,
+          tabBarInactiveTintColor: T.textMuted,
+          tabBarLabelStyle: styles.tabLabel,
         }}
       >
         <Tab.Screen
@@ -83,8 +86,8 @@ export function MainTabNavigator() {
           component={DashboardScreen}
           options={{
             tabBarLabel: 'Home',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -97,9 +100,7 @@ export function MainTabNavigator() {
             // four ways to log now and only one of them needs a lens, so it opens
             // the hub instead — the tab's own `onPress` is never called, which is
             // why the screen behind it is a no-op.
-            tabBarButton: () => (
-              <ScanTabButton onPress={() => setHubOpen(true)} color={theme.primary} />
-            ),
+            tabBarButton: () => <ScanTabButton onPress={openLogHub} />,
           }}
         />
         <Tab.Screen
@@ -107,8 +108,8 @@ export function MainTabNavigator() {
           component={HistoryScreen}
           options={{
             tabBarLabel: 'History',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -117,8 +118,8 @@ export function MainTabNavigator() {
           component={ProfileScreen}
           options={{
             tabBarLabel: 'Profile',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -138,11 +139,12 @@ export function MainTabNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 80,
-    paddingBottom: 16,
-    paddingTop: 8,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
+    backgroundColor: T.surface,
+    borderTopColor: T.border,
   },
+  tabLabel: { fontSize: 12, fontWeight: '600' },
   scanButton: {
     top: -20,
     justifyContent: 'center',
@@ -150,6 +152,8 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
+    backgroundColor: T.primary,
+    shadowColor: T.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,

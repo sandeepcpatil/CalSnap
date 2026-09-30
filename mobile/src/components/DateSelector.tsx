@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { T } from '../theme';
+import { T, spacing, type, HIT_TARGET } from '../theme';
 
 interface Props {
   selectedDate: string; // YYYY-MM-DD
@@ -29,24 +29,35 @@ function formatDisplay(dateStr: string): string {
   });
 }
 
+/** Not mounted anywhere today; kept usable for when a day picker returns. */
 export function DateSelector({ selectedDate, onDateChange }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const isToday = selectedDate === today;
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => onDateChange(addDays(selectedDate, -1))} style={styles.arrow}>
-        <Ionicons name="chevron-back" size={20} color={T.textMuted} />
+      <TouchableOpacity
+        onPress={() => onDateChange(addDays(selectedDate, -1))}
+        style={styles.arrow}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Previous day"
+      >
+        <Ionicons name="chevron-back" size={22} color={T.textSecondary} />
       </TouchableOpacity>
 
-      <Text variant="titleMedium" style={styles.date}>{formatDisplay(selectedDate)}</Text>
+      <Text style={styles.date}>{formatDisplay(selectedDate)}</Text>
 
       <TouchableOpacity
         onPress={() => !isToday && onDateChange(addDays(selectedDate, 1))}
         style={[styles.arrow, isToday && styles.arrowDisabled]}
         disabled={isToday}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Next day"
+        accessibilityState={{ disabled: isToday }}
       >
-        <Ionicons name="chevron-forward" size={20} color={isToday ? T.border : T.textSecondary} />
+        <Ionicons name="chevron-forward" size={22} color={isToday ? T.textMuted : T.textSecondary} />
       </TouchableOpacity>
     </View>
   );
@@ -57,10 +68,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    paddingHorizontal: 20,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
-  arrow: { padding: 8 },
+  arrow: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
   arrowDisabled: { opacity: 0.4 },
-  date: { color: T.textPrimary, fontWeight: '600', minWidth: 100, textAlign: 'center' },
+  date: { ...type.body, fontWeight: '600', color: T.textPrimary, minWidth: 100, textAlign: 'center' },
 });

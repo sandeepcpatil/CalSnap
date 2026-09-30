@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Svg, { Circle, G } from 'react-native-svg';
 import { macroCalorieSplit } from '../utils/nutrition';
-import { T } from '../theme';
+import { T, spacing, type, tabularNums } from '../theme';
 
 interface Props {
   protein: number;
@@ -18,35 +18,38 @@ const STROKE = 16;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-const COLORS = {
-  protein: T.protein,
-  carbs: T.carbs,
-  fat: T.fat,
-  track: T.surface2,
-  label: T.textSecondary,
-  value: T.textPrimary,
-};
-
 /**
  * Donut showing how today's calories split across protein / carbs / fat.
  * Percentages are of *calories* (protein·4, carbs·4, fat·9), which is the
  * meaningful nutritional split — not raw grams.
+ *
+ * The centre shows protein's share only: the card already has a calorie
+ * number in the ring above it, so a second "macro kcal" total was one number
+ * too many for the card to be about.
  */
 export function MacroDonut({ protein, carbs, fat, showLegend = true }: Props) {
   const split = macroCalorieSplit(protein, carbs, fat);
   const hasData = split.total > 0;
 
   const segments = [
-    { key: 'protein', pct: split.proteinPct, color: COLORS.protein, label: 'Protein', grams: protein },
-    { key: 'carbs', pct: split.carbsPct, color: COLORS.carbs, label: 'Carbs', grams: carbs },
-    { key: 'fat', pct: split.fatPct, color: COLORS.fat, label: 'Fat', grams: fat },
+    { key: 'protein', pct: split.proteinPct, color: T.protein, label: 'Protein', grams: protein },
+    { key: 'carbs', pct: split.carbsPct, color: T.carbs, label: 'Carbs', grams: carbs },
+    { key: 'fat', pct: split.fatPct, color: T.fat, label: 'Fat', grams: fat },
   ] as const;
 
   // Accumulate rotation so each arc starts where the previous ended (12 o'clock origin).
   let offsetPct = 0;
 
   return (
-    <View style={showLegend ? styles.row : styles.rowCentered}>
+    <View
+      style={showLegend ? styles.row : styles.rowCentered}
+      accessible
+      accessibilityLabel={
+        hasData
+          ? `Macros: ${Math.round(split.proteinPct)} percent protein, ${Math.round(split.carbsPct)} percent carbs, ${Math.round(split.fatPct)} percent fat`
+          : 'Macros: nothing logged yet'
+      }
+    >
       <View style={styles.donutWrap}>
         <Svg width={SIZE} height={SIZE}>
           <G rotation={-90} originX={SIZE / 2} originY={SIZE / 2}>
@@ -54,7 +57,7 @@ export function MacroDonut({ protein, carbs, fat, showLegend = true }: Props) {
               cx={SIZE / 2}
               cy={SIZE / 2}
               r={RADIUS}
-              stroke={COLORS.track}
+              stroke={T.surface2}
               strokeWidth={STROKE}
               fill="none"
             />
@@ -84,8 +87,8 @@ export function MacroDonut({ protein, carbs, fat, showLegend = true }: Props) {
           </G>
         </Svg>
         <View style={styles.centerLabel} pointerEvents="none">
-          <Text style={styles.centerNum}>{hasData ? `${Math.round(split.total)}` : '--'}</Text>
-          <Text style={styles.centerUnit}>macro kcal</Text>
+          <Text style={styles.centerNum}>{hasData ? `${Math.round(split.proteinPct)}%` : '—'}</Text>
+          <Text style={styles.centerUnit}>protein</Text>
         </View>
       </View>
 
@@ -95,7 +98,7 @@ export function MacroDonut({ protein, carbs, fat, showLegend = true }: Props) {
             <View key={seg.key} style={styles.legendRow}>
               <View style={[styles.legendDot, { backgroundColor: seg.color }]} />
               <Text style={styles.legendLabel}>{seg.label}</Text>
-              <Text style={styles.legendPct}>{hasData ? `${Math.round(seg.pct)}%` : '--'}</Text>
+              <Text style={styles.legendPct}>{hasData ? `${Math.round(seg.pct)}%` : '—'}</Text>
               <Text style={styles.legendGrams}>{Math.round(seg.grams)}g</Text>
             </View>
           ))}
@@ -110,13 +113,13 @@ const styles = StyleSheet.create({
   rowCentered: { alignItems: 'center' },
   donutWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
   centerLabel: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  centerNum: { fontSize: 26, fontWeight: '800', color: COLORS.value, letterSpacing: -0.5 },
-  centerUnit: { fontSize: 11, fontWeight: '600', color: COLORS.label, letterSpacing: 0.5, textTransform: 'uppercase' },
+  centerNum: { ...type.title, fontSize: 24, lineHeight: 28, fontWeight: '800', color: T.textPrimary, ...tabularNums },
+  centerUnit: { ...type.bodySm, color: T.textSecondary },
 
-  legend: { flex: 1, gap: 12 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legend: { flex: 1, gap: spacing.md },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { flex: 1, fontSize: 13, color: COLORS.label, fontWeight: '500' },
-  legendPct: { fontSize: 14, fontWeight: '800', color: COLORS.value, minWidth: 38, textAlign: 'right' },
-  legendGrams: { fontSize: 11, color: COLORS.label, minWidth: 40, textAlign: 'right' },
+  legendLabel: { ...type.bodySm, flex: 1, color: T.textSecondary },
+  legendPct: { ...type.bodySm, fontSize: 14, fontWeight: '800', color: T.textPrimary, minWidth: 38, textAlign: 'right', ...tabularNums },
+  legendGrams: { ...type.bodySm, color: T.textSecondary, minWidth: 40, textAlign: 'right', ...tabularNums },
 });
