@@ -166,7 +166,7 @@ export function AuthScreen() {
             <View style={styles.brandBlock}>
               <Text style={styles.brandName} numberOfLines={1} adjustsFontSizeToFit>
                 <Text style={styles.brandCal}>CAL</Text>
-                <Text style={{ color: C.secondary }}>SNAP</Text>
+                <Text style={{ color: C.secondary }}>VUE</Text>
               </Text>
               <Text style={[styles.tagline, { color: C.onSurfaceVariant }]}>
                 Snap. Track.{' '}

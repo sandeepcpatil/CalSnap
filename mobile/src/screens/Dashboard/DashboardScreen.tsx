@@ -183,7 +183,7 @@ export function DashboardScreen() {
 
             {/* Brand */}
             <Text style={styles.brand}>
-              CAL<Text style={styles.brandSnap}>SNAP</Text>
+              CAL<Text style={styles.brandSnap}>VUE</Text>
             </Text>
 
             {/* Bell → Alerts */}

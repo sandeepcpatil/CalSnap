@@ -122,7 +122,7 @@ export function ProfileScreen() {
         <View style={styles.header}>
           {/* Spacer keeps the brand centered (no drawer menu in this app) */}
           <View style={{ width: 24 }} />
-          <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Snap</Text></Text>
+          <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Vue</Text></Text>
           <View style={styles.headerAvatar}>
             {profile?.avatar_url
               ? <Image source={{ uri: profile.avatar_url }} style={styles.headerAvatarImg} />

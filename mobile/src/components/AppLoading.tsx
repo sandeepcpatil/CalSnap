@@ -29,7 +29,7 @@ export function AppLoading() {
     <View style={styles.root}>
       <Animated.View style={{ opacity: pulse }}>
         <Text style={styles.brand}>
-          CAL<Text style={styles.brandSnap}>SNAP</Text>
+          CAL<Text style={styles.brandSnap}>VUE</Text>
         </Text>
       </Animated.View>
     </View>

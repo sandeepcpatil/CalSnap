@@ -187,7 +187,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
             <TouchableOpacity onPress={onDismiss} style={styles.backBtn} activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={22} color={C.primary} />
             </TouchableOpacity>
-            <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Snap</Text></Text>
+            <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Vue</Text></Text>
             <View style={styles.headerAvatar}>
               {profile?.avatar_url
                 ? <Image source={{ uri: profile.avatar_url }} style={styles.headerAvatarImg} />

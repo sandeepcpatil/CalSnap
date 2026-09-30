@@ -239,7 +239,7 @@ export function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 px-5 py-10 sm:flex-row">
           <div className="text-center sm:text-left">
             <p className="text-base font-extrabold tracking-widest">
-              CAL<span className="text-brand">SNAP</span>
+              CAL<span className="text-brand">VUE</span>
             </p>
             <p className="mt-1 text-xs text-content-muted">
               © {new Date().getFullYear()} CalVue. Made in India.

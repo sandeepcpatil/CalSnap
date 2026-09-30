@@ -35,7 +35,7 @@ export function SiteNav() {
     <header className="sticky top-0 z-50 border-b border-hairline bg-ink-bg/80 backdrop-blur-lg">
       <nav className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-4">
         <Link to="/" className="text-lg font-extrabold tracking-widest text-content-primary">
-          CAL<span className="text-brand">SNAP</span>
+          CAL<span className="text-brand">VUE</span>
         </Link>
 
         <div className="ml-auto hidden items-center gap-7 md:flex">
