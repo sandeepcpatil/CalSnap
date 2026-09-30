@@ -143,7 +143,9 @@ const WEIGHT_ANCHORS = `Anchors:
    • 1 katori / small bowl ≈ 180 g · 1 cup cooked rice ≈ 150 g
    • 1 idli ≈ 50 g · 1 plain dosa ≈ 100 g · 1 samosa ≈ 60 g
    • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g · 1 glass ≈ 250 ml
-   • A standard Indian dinner plate is 26–28 cm across — use it to judge scale.`;
+   • 1 slice pizza ≈ 100 g · 1 tortilla ≈ 45 g · 1 cup cooked pasta ≈ 140 g
+   • 1 medium banana ≈ 120 g · 1 medium apple ≈ 180 g · 1 cup cooked oats ≈ 240 g
+   • A standard dinner plate is 26–28 cm across — use it to judge scale.`;
 
 const CALIBRATION = `CALIBRATION — typical values for one standard serving:
 • Dal (1 katori, 180 g, medium thickness): 140 kcal · P 9 · C 20 · F 3 · Fib 5
@@ -158,20 +160,26 @@ const CALIBRATION = `CALIBRATION — typical values for one standard serving:
 • Plain dosa (1): 170 kcal · P 4 · C 30 · F 4 · Fib 1.5
 • Poha (1 plate, 180 g): 250 kcal · P 5 · C 45 · F 6 · Fib 3
 • Samosa (1): 180 kcal · P 3 · C 22 · F 9 · Fib 2
+• Grilled chicken breast (100 g): 165 kcal · P 31 · C 0 · F 3.5 · Fib 0
+• Pasta with tomato sauce (1 cup, 200 g): 260 kcal · P 9 · C 48 · F 4 · Fib 4
+• Pizza, cheese (1 slice, 100 g): 270 kcal · P 11 · C 33 · F 10 · Fib 2
+• Green salad with dressing (1 bowl, 150 g): 120 kcal · P 2 · C 8 · F 9 · Fib 3
+• Oatmeal, cooked (1 cup, 240 g): 160 kcal · P 6 · C 27 · F 3 · Fib 4
 
 Also estimate, per item:
-• sodium_mg — Indian home cooking is salted: assume ≈ 350–500 mg per savoury
-  katori/serving. Pickle, papad, namkeen, chutney, instant noodles and
+• sodium_mg — home-cooked savoury dishes are salted: assume ≈ 350–500 mg per
+  serving. Pickles, cured meats, cheese, chutney, sauces, instant noodles and
   restaurant/packaged food are far higher (800–1500+ mg). Sweets, fruit and
   plain rice are low. When unsure, assume a normally-salted home portion.
-• sat_fat_g — high in ghee, butter, coconut, paneer, cream, and fried food.
-• sugar_g — from added sugar and naturally sweet items (fruit, sweets, chai).`;
+• sat_fat_g — high in ghee, butter, coconut, paneer, cheese, cream, and fried food.
+• sugar_g — from added sugar and naturally sweet items (fruit, desserts, sweetened drinks).`;
 
-const SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
+const SYSTEM_PROMPT = `You are a professional nutritionist AI. You know home cooking from every
+cuisine and are especially well calibrated on South Asian dishes.
 
 TASK
 Break the meal in the photo into its distinct food items (like a nutritionist
-itemising a thali), then estimate nutrition per item.
+itemising a plate), then estimate nutrition per item.
 
 METHOD — follow in order:
 1. List each DISTINCT food as its own entry in "items" — dal, rice, each bread
@@ -189,8 +197,8 @@ METHOD — follow in order:
 ${CALIBRATION}
 
 RULES
-- Indian gravies usually carry more oil than they look — do not under-estimate fat.
-- Do not assume a large portion by default; most home servings are one katori.
+- Gravies, curries and sauces usually carry more oil than they look — do not under-estimate fat.
+- Do not assume a large portion by default; most home servings are one small bowl or cup.
 - confidence: "high" only when both the dish AND the portion are clear;
   "medium" when the dish is clear but the portion is ambiguous;
   "low" when the dish itself is uncertain.
@@ -203,7 +211,8 @@ RULES
 // differs. The user's own words are ground truth for quantities, which makes
 // this MORE reliable than a photo for portions: nobody has to guess bowl depth.
 
-const TEXT_SYSTEM_PROMPT = `You are a professional nutritionist AI specialising in Indian home cooking.
+const TEXT_SYSTEM_PROMPT = `You are a professional nutritionist AI. You know home cooking from every
+cuisine and are especially well calibrated on South Asian dishes.
 
 TASK
 The user described a meal in their own words (often dictated by voice, so expect
@@ -228,7 +237,7 @@ METHOD — follow in order:
 ${CALIBRATION}
 
 RULES
-- Indian gravies usually carry more oil than they sound — do not under-estimate fat.
+- Gravies, curries and sauces usually carry more oil than they sound — do not under-estimate fat.
 - Ignore filler words and any text unrelated to food.
 - confidence: "high" when foods AND quantities were stated clearly;
   "medium" when foods are clear but amounts were vague;

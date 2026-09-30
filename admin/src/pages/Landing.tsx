@@ -15,7 +15,7 @@ const FEATURES = [
   {
     icon: '📸',
     title: 'Snap a meal, get the numbers',
-    body: 'Point your camera at a plate and CalVue breaks it into individual items — dal, rice, two rotis — each with its own calories and macros. Fix any portion before you log it.',
+    body: 'Point your camera at a plate and CalVue breaks it into individual items — rice, curry, a side salad — each with its own calories and macros. Fix any portion before you log it.',
     accent: 'text-brand',
   },
   {
@@ -27,13 +27,13 @@ const FEATURES = [
   {
     icon: '🎙️',
     title: 'Just say what you ate',
-    body: 'No camera handy? Describe the meal out loud. "Two rotis, a katori of dal and curd" is a complete log.',
+    body: 'No camera handy? Describe the meal out loud. "Two eggs, toast and a glass of orange juice" is a complete log.',
     accent: 'text-macro-protein',
   },
   {
-    icon: '🇮🇳',
-    title: 'Built for Indian food',
-    body: 'Portions in katori, roti and glass — not cups and ounces. Backed by 7,900+ foods from IFCT and USDA, so dal and poha are as accurate as oats.',
+    icon: '🌍',
+    title: 'Real portions, any cuisine',
+    body: 'Log in the units you actually use — cup, slice, bowl, katori or grams. Backed by 7,900+ foods from USDA and IFCT, so oats, tacos and dal are all covered.',
     accent: 'text-macro-fiber',
   },
   {
@@ -91,7 +91,7 @@ export function Landing() {
 
           <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-content-secondary sm:text-lg">
             One photo turns your meal into calories, protein, carbs and fat — in seconds.
-            Built for the way India actually eats.
+            Works with home cooking from any kitchen.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -242,7 +242,7 @@ export function Landing() {
               CAL<span className="text-brand">VUE</span>
             </p>
             <p className="mt-1 text-xs text-content-muted">
-              © {new Date().getFullYear()} CalVue. Made in India.
+              © {new Date().getFullYear()} CalVue. All rights reserved.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-content-secondary">

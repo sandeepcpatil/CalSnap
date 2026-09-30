@@ -36,7 +36,7 @@ Alternatives:
 Stop guessing what's on your plate. CalVue turns a single photo into a complete nutrition breakdown — calories, protein, carbs, fat and fibre — in seconds.
 
 📸 SNAP A MEAL, GET INSTANT NUTRITION
-Point your camera at your food and let CalVue's AI do the rest. No searching endless databases, no weighing every ingredient, no manual entry. Works beautifully with Indian meals — dal, roti, biryani, sabzi and everything in between.
+Point your camera at your food and let CalVue's AI do the rest. No searching endless databases, no weighing every ingredient, no manual entry. Works with home cooking from any kitchen — curries, pasta, salads, rice bowls and everything in between.
 
 🏷️ SCAN PACKAGED FOOD LABELS
 Not sure if that biscuit packet is actually healthy? Scan the nutrition label and get a clear Health Score from 0 to 100, plus the reason behind it. CalVue reads the label and flags what matters — added sugars, palm oil, high sodium, saturated fat — so you can make a confident choice in the aisle.
@@ -58,15 +58,15 @@ Set daily reminders for each meal so logging becomes a habit, not a chore.
 • Fast — a photo takes seconds, not minutes
 • Honest — every health score is calculated from the actual label, with a clear explanation
 • Clean, distraction-free design
-• Built for real Indian eating habits
+• Built for the way you actually eat, in the portions you actually use
 
 🌟 CALVUE PRO
 Start with a 7-day free trial. Pro unlocks:
-• Unlimited AI scans
+• Up to 20 AI scans a day
 • Full nutrition breakdown on every scan
-• AI Nutri-Insights — daily personalised guidance
+• Daily insights — personalised guidance from your own logs
 • 30 and 90-day history
-• Excel data export for your complete nutrition log
+• Spreadsheet export of your complete nutrition log
 • Complete health breakdown for packaged foods
 
 Free accounts include 2 AI scans per day.
