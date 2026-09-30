@@ -52,6 +52,13 @@ interface AuthState {
   setProfile: (profile: Profile | null) => void;
   setHydrated: () => void;
   fetchProfile: () => Promise<void>;
+  /**
+   * Writes profile fields and REJECTS on failure (no session, network or
+   * database error). Use this wherever the caller must know the write landed,
+   * such as onboarding, where `onboarding_complete` must never be assumed.
+   */
+  saveProfile: (updates: Partial<Profile>) => Promise<void>;
+  /** Best-effort write: same as `saveProfile` but swallows failures. */
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -132,9 +139,9 @@ export const useAuthStore = create<AuthState>()(
     }
   },
 
-  updateProfile: async (updates) => {
+  saveProfile: async (updates) => {
     const { session, profile } = get();
-    if (!session?.user.id) return;
+    if (!session?.user.id) throw new Error('No active session');
 
     const { data, error } = await supabase
       .from('profiles')
@@ -143,8 +150,17 @@ export const useAuthStore = create<AuthState>()(
       .select()
       .single();
 
-    if (!error && data) {
-      set({ profile: { ...profile, ...data } as Profile });
+    if (error || !data) throw error ?? new Error('Profile update returned no row');
+    set({ profile: { ...profile, ...data } as Profile });
+  },
+
+  updateProfile: async (updates) => {
+    try {
+      await get().saveProfile(updates);
+    } catch {
+      // Fire-and-forget callers (weight sync, water goal) tolerate a missed
+      // write; the next fetchProfile reconciles. Callers that cannot use
+      // saveProfile instead.
     }
   },
 

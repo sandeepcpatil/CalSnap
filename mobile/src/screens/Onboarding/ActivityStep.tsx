@@ -1,30 +1,22 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
-import { useAuthStore } from '../../store/authStore';
+import { useOnboardingStore } from '../../store/onboardingStore';
+import { ACTIVITY_LABELS, ACTIVITY_ORDER } from '../../constants/profileLabels';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
-import { T } from '../../theme';
+import { OptionCard } from '../../components/OptionCard';
+import { T, spacing, radius, type } from '../../theme';
 
-type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 type Props = { navigation: NativeStackNavigationProp<OnboardingStackParamList, 'Activity'> };
 
-const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string; description: string; emoji: string }[] = [
-  { value: 'sedentary', label: 'Sedentary', description: 'Little to no exercise', emoji: '🛋️' },
-  { value: 'light', label: 'Lightly active', description: 'Light exercise 1–3 days/week', emoji: '🚶' },
-  { value: 'moderate', label: 'Moderately active', description: 'Moderate exercise 3–5 days/week', emoji: '🏃' },
-  { value: 'active', label: 'Very active', description: 'Hard exercise 6–7 days/week', emoji: '🏋️' },
-  { value: 'very_active', label: 'Extra active', description: 'Very hard exercise + physical job', emoji: '⚡' },
-];
-
 export function ActivityStep({ navigation }: Props) {
-  const [selected, setSelected] = useState<ActivityLevel | null>(null);
+  const { activity, setFields } = useOnboardingStore();
 
   const handleNext = () => {
-    if (!selected) return;
-    useAuthStore.getState().updateProfile({ activity_level: selected });
+    if (!activity) return;
     navigation.navigate('Goal');
   };
 
@@ -32,41 +24,53 @@ export function ActivityStep({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <OnboardingProgress step={3} total={5} />
 
-      <View style={styles.content}>
-        <Text variant="headlineMedium" style={styles.title}>Activity level 🏃</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>How active are you day-to-day?</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Activity level</Text>
+        <Text style={styles.subtitle}>How active are you on a typical day?</Text>
 
-        <View style={styles.options}>
-          {ACTIVITY_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              onPress={() => setSelected(opt.value)}
-              style={[styles.option, selected === opt.value && styles.optionSelected]}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-              <View style={styles.optionText}>
-                <Text variant="titleSmall" style={[styles.optionLabel, selected === opt.value && styles.optionLabelSelected]}>
-                  {opt.label}
-                </Text>
-                <Text variant="bodySmall" style={styles.optionDesc}>{opt.description}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.options} accessibilityRole="radiogroup">
+          {ACTIVITY_ORDER.map((value) => {
+            const opt = ACTIVITY_LABELS[value];
+            return (
+              <OptionCard
+                key={value}
+                label={opt.label}
+                description={opt.description}
+                icon={opt.icon}
+                selected={activity === value}
+                onPress={() => setFields({ activity: value })}
+              />
+            );
+          })}
         </View>
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
-        <Button mode="outlined" onPress={() => navigation.goBack()} style={styles.backButton}>Back</Button>
-        <Button
-          mode="contained"
-          onPress={handleNext}
-          disabled={!selected}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-        >
-          Continue
-        </Button>
+        {!activity && <Text style={styles.hint}>Choose one to continue.</Text>}
+        <View style={styles.footerRow}>
+          <Button
+            mode="outlined"
+            onPress={() => navigation.goBack()}
+            textColor={T.primary}
+            style={styles.backButton}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
+          >
+            Back
+          </Button>
+          <Button
+            mode="contained"
+            onPress={handleNext}
+            disabled={!activity}
+            buttonColor={T.primary}
+            textColor={T.textOnPrimary}
+            style={styles.button}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
+          >
+            Continue
+          </Button>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -74,28 +78,15 @@ export function ActivityStep({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: T.textSecondary, marginBottom: 24 },
-  options: { gap: 10 },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: T.border,
-    backgroundColor: T.surface,
-    gap: 12,
-  },
-  optionSelected: { borderColor: T.primary, backgroundColor: T.primaryTint },
-  optionEmoji: { fontSize: 24, width: 32, textAlign: 'center' },
-  optionText: { flex: 1 },
-  optionLabel: { color: T.textPrimary, fontWeight: '600' },
-  optionLabelSelected: { color: T.primary },
-  optionDesc: { color: T.textMuted, marginTop: 2 },
-  footer: { padding: 24, flexDirection: 'row', gap: 12 },
-  backButton: { flex: 1, borderColor: T.primary },
-  button: { flex: 2, borderRadius: 12, backgroundColor: T.primary },
+  content: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing['2xl'] },
+  title: { ...type.headline, color: T.textPrimary, marginBottom: spacing.sm },
+  subtitle: { ...type.body, color: T.textSecondary, marginBottom: spacing['2xl'] },
+  options: { gap: spacing.md },
+  footer: { padding: spacing.xl, gap: spacing.md },
+  footerRow: { flexDirection: 'row', gap: spacing.md },
+  hint: { ...type.bodySm, color: T.textMuted, textAlign: 'center' },
+  backButton: { flex: 1, borderRadius: radius.md, borderColor: T.primaryBorder },
+  button: { flex: 2, borderRadius: radius.md },
   buttonContent: { height: 52 },
+  buttonLabel: { ...type.body, fontWeight: '700' },
 });

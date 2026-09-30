@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscriptionGate } from '../hooks/useSubscriptionGate';
-import { useTheme } from '../hooks/useTheme';
+import { T, spacing, radius, type, HIT_TARGET } from '../theme';
 
 interface TrialBannerProps {
   /** Optional: tapping the banner (e.g. to open the paywall). */
@@ -18,7 +18,6 @@ interface TrialBannerProps {
  */
 export function TrialBanner({ onPress }: TrialBannerProps) {
   const { isOnTrial, trialDaysLeft } = useSubscriptionGate();
-  const { theme } = useTheme();
 
   if (!isOnTrial || trialDaysLeft === null) return null;
 
@@ -27,23 +26,31 @@ export function TrialBanner({ onPress }: TrialBannerProps) {
       ? 'Pro trial ends today'
       : `Pro trial · ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left`;
 
-  const Container: React.ComponentType<any> = onPress ? TouchableOpacity : View;
-
-  return (
-    <Container
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={[styles.banner, { backgroundColor: theme.primaryTint, borderColor: theme.primary }]}
-    >
+  const inner = (
+    <>
       <View style={styles.left}>
-        <Ionicons name="sparkles" size={16} color={theme.primary} />
-        <Text style={[styles.label, { color: theme.textPrimary }]}>{label}</Text>
+        <Ionicons name="sparkles" size={16} color={T.primary} />
+        <Text style={styles.label}>{label}</Text>
       </View>
-      {onPress ? (
-        <Text style={[styles.cta, { color: theme.primary }]}>Upgrade</Text>
-      ) : null}
-    </Container>
+      {onPress ? <Text style={styles.cta}>Upgrade</Text> : null}
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.85}
+        style={styles.banner}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}. Upgrade`}
+      >
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={styles.banner}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -51,12 +58,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
+    backgroundColor: T.primaryTint,
+    borderColor: T.primaryBorder,
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  label: { fontSize: 13, fontWeight: '700' },
-  cta: { fontSize: 13, fontWeight: '800' },
+  left: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
+  label: { ...type.bodySm, fontWeight: '700', color: T.textPrimary, flexShrink: 1 },
+  cta: { ...type.bodySm, fontWeight: '800', color: T.primary },
 });

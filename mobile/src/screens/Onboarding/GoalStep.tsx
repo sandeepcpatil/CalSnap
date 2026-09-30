@@ -1,28 +1,22 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
-import { useAuthStore } from '../../store/authStore';
+import { useOnboardingStore } from '../../store/onboardingStore';
+import { GOAL_LABELS, GOAL_ORDER } from '../../constants/profileLabels';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
-import { T } from '../../theme';
+import { OptionCard } from '../../components/OptionCard';
+import { T, spacing, radius, type } from '../../theme';
 
-type BodyGoal = 'lose_weight' | 'maintain' | 'gain_muscle';
 type Props = { navigation: NativeStackNavigationProp<OnboardingStackParamList, 'Goal'> };
 
-const GOALS: { value: BodyGoal; label: string; description: string; emoji: string }[] = [
-  { value: 'lose_weight', label: 'Lose Weight', description: '500 kcal deficit — steady fat loss', emoji: '🔥' },
-  { value: 'maintain', label: 'Maintain Weight', description: 'Stay at your current weight', emoji: '⚖️' },
-  { value: 'gain_muscle', label: 'Build Muscle', description: '300 kcal surplus — lean muscle gain', emoji: '💪' },
-];
-
 export function GoalStep({ navigation }: Props) {
-  const [selected, setSelected] = useState<BodyGoal | null>(null);
+  const { goal, setFields } = useOnboardingStore();
 
   const handleNext = () => {
-    if (!selected) return;
-    useAuthStore.getState().updateProfile({ body_goal: selected });
+    if (!goal) return;
     navigation.navigate('Summary');
   };
 
@@ -30,44 +24,53 @@ export function GoalStep({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <OnboardingProgress step={4} total={5} />
 
-      <View style={styles.content}>
-        <Text variant="headlineMedium" style={styles.title}>Your goal 🎯</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>What would you like to achieve?</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Your goal</Text>
+        <Text style={styles.subtitle}>What would you like to work towards?</Text>
 
-        <View style={styles.options}>
-          {GOALS.map((goal) => (
-            <TouchableOpacity
-              key={goal.value}
-              onPress={() => setSelected(goal.value)}
-              style={[styles.option, selected === goal.value && styles.optionSelected]}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.optionEmoji}>{goal.emoji}</Text>
-              <View style={styles.optionText}>
-                <Text variant="titleMedium" style={[styles.optionLabel, selected === goal.value && styles.optionLabelSelected]}>
-                  {goal.label}
-                </Text>
-                <Text variant="bodySmall" style={styles.optionDesc}>{goal.description}</Text>
-              </View>
-              {selected === goal.value && (
-                <Text style={styles.checkmark}>✓</Text>
-              )}
-            </TouchableOpacity>
-          ))}
+        <View style={styles.options} accessibilityRole="radiogroup">
+          {GOAL_ORDER.map((value) => {
+            const opt = GOAL_LABELS[value];
+            return (
+              <OptionCard
+                key={value}
+                label={opt.label}
+                description={opt.description}
+                icon={opt.icon}
+                selected={goal === value}
+                onPress={() => setFields({ goal: value })}
+              />
+            );
+          })}
         </View>
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
-        <Button mode="outlined" onPress={() => navigation.goBack()} style={styles.backButton}>Back</Button>
-        <Button
-          mode="contained"
-          onPress={handleNext}
-          disabled={!selected}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-        >
-          Calculate Goals
-        </Button>
+        {!goal && <Text style={styles.hint}>Choose one to continue.</Text>}
+        <View style={styles.footerRow}>
+          <Button
+            mode="outlined"
+            onPress={() => navigation.goBack()}
+            textColor={T.primary}
+            style={styles.backButton}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
+          >
+            Back
+          </Button>
+          <Button
+            mode="contained"
+            onPress={handleNext}
+            disabled={!goal}
+            buttonColor={T.primary}
+            textColor={T.textOnPrimary}
+            style={styles.button}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
+          >
+            Continue
+          </Button>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -75,29 +78,15 @@ export function GoalStep({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { color: T.primary, fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: T.textSecondary, marginBottom: 32 },
-  options: { gap: 14 },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: T.border,
-    backgroundColor: T.surface,
-    gap: 14,
-  },
-  optionSelected: { borderColor: T.primary, backgroundColor: T.primaryTint },
-  optionEmoji: { fontSize: 30, width: 36, textAlign: 'center' },
-  optionText: { flex: 1 },
-  optionLabel: { color: T.textPrimary, fontWeight: '600' },
-  optionLabelSelected: { color: T.primary },
-  optionDesc: { color: T.textMuted, marginTop: 2 },
-  checkmark: { color: T.primary, fontSize: 20, fontWeight: '700' },
-  footer: { padding: 24, flexDirection: 'row', gap: 12 },
-  backButton: { flex: 1, borderColor: T.primary },
-  button: { flex: 2, borderRadius: 12, backgroundColor: T.primary },
+  content: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing['2xl'] },
+  title: { ...type.headline, color: T.textPrimary, marginBottom: spacing.sm },
+  subtitle: { ...type.body, color: T.textSecondary, marginBottom: spacing['2xl'] },
+  options: { gap: spacing.md },
+  footer: { padding: spacing.xl, gap: spacing.md },
+  footerRow: { flexDirection: 'row', gap: spacing.md },
+  hint: { ...type.bodySm, color: T.textMuted, textAlign: 'center' },
+  backButton: { flex: 1, borderRadius: radius.md, borderColor: T.primaryBorder },
+  button: { flex: 2, borderRadius: radius.md },
   buttonContent: { height: 52 },
+  buttonLabel: { ...type.body, fontWeight: '700' },
 });

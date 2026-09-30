@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { T } from '../theme';
+import { T, spacing, radius, type } from '../theme';
 
 interface Props {
   isSubscribed: boolean;
@@ -21,8 +21,8 @@ interface Props {
 export function ProGate({
   isSubscribed,
   onUpgrade,
-  label = 'Pro Feature',
-  borderRadius = 16,
+  label = 'Pro feature',
+  borderRadius = radius.lg,
   children,
 }: Props) {
   if (isSubscribed) return <>{children}</>;
@@ -39,6 +39,8 @@ export function ProGate({
         style={StyleSheet.absoluteFill}
         onPress={onUpgrade}
         activeOpacity={0.95}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}. Upgrade to Pro`}
       >
         <View style={styles.overlay}>
           <View style={styles.lockCard}>
@@ -47,8 +49,8 @@ export function ProGate({
             </View>
             <Text style={styles.lockLabel}>{label}</Text>
             <View style={styles.upgradeBadge}>
-              <Ionicons name="star" size={10} color={T.textOnPrimary} />
-              <Text style={styles.upgradeText}>UPGRADE TO PRO</Text>
+              <Ionicons name="star" size={12} color={T.textOnPrimary} />
+              <Text style={styles.upgradeText}>Upgrade to Pro</Text>
             </View>
           </View>
         </View>
@@ -65,18 +67,18 @@ const styles = StyleSheet.create({
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(16,20,21,0.72)',
+    backgroundColor: T.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   lockCard: {
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing['2xl'],
     backgroundColor: T.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: T.border,
   },
@@ -84,34 +86,33 @@ const styles = StyleSheet.create({
   lockIconCircle: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     backgroundColor: T.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   lockLabel: {
-    fontSize: 13,
+    ...type.bodySm,
     fontWeight: '700',
     color: T.textPrimary,
-    letterSpacing: 0.3,
   },
 
   upgradeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     backgroundColor: T.primary,
-    borderRadius: 20,
+    borderRadius: radius.pill,
     marginTop: 2,
   },
 
   upgradeText: {
-    fontSize: 11,
-    fontWeight: '800',
+    ...type.bodySm,
+    fontWeight: '700',
     color: T.textOnPrimary,
-    letterSpacing: 1,
   },
 });

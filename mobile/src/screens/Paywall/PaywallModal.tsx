@@ -19,38 +19,23 @@ import { LegalModal, type LegalDoc } from "../../components/LegalModal";
 import { useSubscriptionGate } from "../../hooks/useSubscriptionGate";
 import { supabase } from "../../services/supabase";
 import { syncSubscription } from "../../services/api";
-import { T } from '../../theme';
+import { T, spacing, radius, type, HIT_TARGET } from '../../theme';
 import {
   getCurrentOffering,
   purchasePackage,
   restorePurchases,
 } from "../../services/purchases";
 
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondary: T.primary,
-  primaryCont: T.primaryDeep,
-  onPrimaryCont: T.primary,
-  onPrimary: T.textOnPrimary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  outlineVar: T.border,
-  surfaceCont: T.surface2,
-  header: T.bg,
-};
+// The backend caps Pro at 20 scans a day and the Terms describe fair use, so
+// the paywall must never say "unlimited".
+const PRO_SCANS_PER_DAY = 20;
 
 const BENEFITS = [
-  { icon: 'infinite-outline',     label: 'Unlimited AI Scans'        },
-  { icon: 'stats-chart-outline',  label: 'Full Nutrition Breakdown'  },
-  { icon: 'sparkles-outline',     label: 'AI Nutri-Insights'         },
-  { icon: 'calendar-outline',     label: '30 & 90-Day History'       },
-  { icon: 'download-outline',     label: 'Excel Data Export'         },
+  { icon: 'camera-outline',       label: `Up to ${PRO_SCANS_PER_DAY} AI scans a day` },
+  { icon: 'stats-chart-outline',  label: 'Full nutrition breakdown'  },
+  { icon: 'sparkles-outline',     label: 'Daily insights'            },
+  { icon: 'calendar-outline',     label: '30 and 90-day history'     },
+  { icon: 'download-outline',     label: 'Export your data (spreadsheet)' },
 ] as const;
 
 interface Props {
@@ -143,19 +128,23 @@ export function PaywallModal({ visible, onDismiss }: Props) {
 
   const handleSubscribe = async () => {
     if (!selectedPkg) {
-      Alert.alert("Unavailable", "Plans are still loading. Please try again in a moment.");
+      Alert.alert("Plans still loading", "Please try again in a moment.");
       return;
     }
     setIsLoading(true);
     try {
       const isPro = await purchasePackage(selectedPkg);
       if (isPro) {
-        await activatePro("Welcome to Pro! 🎉", "Your CalVue Pro subscription is now active. Scan unlimited food!");
+        await activatePro(
+          "Welcome to Pro",
+          `Your CalVue Pro subscription is active. You can now scan up to ${PRO_SCANS_PER_DAY} meals a day.`,
+        );
       }
     } catch (err: any) {
       // RevenueCat sets userCancelled on user-dismissed purchases — stay silent.
+      // Store error messages are not shown verbatim; they are logged by the SDK.
       if (!err?.userCancelled) {
-        Alert.alert("Payment failed", err?.message ?? "Please try again.");
+        Alert.alert("Payment didn't go through", "You haven't been charged. Please try again.");
       }
     } finally {
       setIsLoading(false);
@@ -171,11 +160,73 @@ export function PaywallModal({ visible, onDismiss }: Props) {
       } else {
         Alert.alert("Nothing to restore", "We couldn't find an active subscription for this account.");
       }
-    } catch (err: any) {
-      Alert.alert("Restore failed", err?.message ?? "Please try again.");
+    } catch {
+      Alert.alert("Couldn't restore purchases", "Check your connection and try again.");
     } finally {
       setIsRestoring(false);
     }
+  };
+
+  const busy = isLoading || loadingOffering || !selectedPkg;
+
+  const renderPlan = (
+    plan: "monthly" | "annual",
+    pkg: PurchasesPackage | null,
+  ) => {
+    const active = selectedPlan === plan;
+    const isAnnual = plan === "annual";
+    const price = pkg?.product.priceString ?? "—";
+    const unit = isAnnual ? "yr" : "mo";
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setSelectedPlan(plan)}
+        style={[styles.planCard, active && styles.planCardActive]}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: active, checked: active }}
+        accessibilityLabel={`${isAnnual ? "Annual" : "Monthly"} plan, ${price} per ${isAnnual ? "year" : "month"}`}
+      >
+        {isAnnual && (
+          <View style={styles.bestValueBadge}>
+            <Text style={styles.bestValueText}>
+              {savingsPct !== null ? `Save ${savingsPct}%` : 'Best value'}
+            </Text>
+          </View>
+        )}
+        <View style={styles.planRow}>
+          <View style={styles.planInfo}>
+            <Text style={[styles.planPeriodLabel, active && styles.planPeriodLabelActive]}>
+              {isAnnual ? "Annual" : "Monthly"}
+            </Text>
+            <View style={styles.planPriceRow}>
+              <Text style={styles.planPrice}>{price}</Text>
+              <Text style={styles.planPriceSub}> / {unit}</Text>
+            </View>
+
+            {isAnnual && !!annualPerMonth && (
+              // Same unit as the monthly card, so the two are comparable at a glance
+              <Text style={styles.perMonthLabel}>
+                {annualPerMonth} / mo, billed yearly
+              </Text>
+            )}
+            {isAnnual && savingsPct !== null && annualPkg && (
+              // The rupee amount is what people actually decide on
+              <Text style={styles.savingsLabel}>
+                You save {money(savingsAmount, annualPkg)} a year
+              </Text>
+            )}
+            {isAnnual && savingsPct !== null && monthlyPkg && (
+              <Text style={styles.compareLabel}>
+                vs {money(yearAtMonthlyRate, monthlyPkg)} paying monthly
+              </Text>
+            )}
+          </View>
+          <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
+            {active && <View style={styles.radioInner} />}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -184,15 +235,22 @@ export function PaywallModal({ visible, onDismiss }: Props) {
         {/* ── Top Bar ── */}
         <SafeAreaView edges={["top"]} style={styles.headerSafe}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={onDismiss} style={styles.backBtn} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={22} color={C.primary} />
+            <TouchableOpacity
+              onPress={onDismiss}
+              style={styles.closeBtn}
+              hitSlop={8}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={24} color={T.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.brand}>Cal<Text style={styles.brandSnap}>Vue</Text></Text>
+            <Text style={styles.brand}>Cal<Text style={styles.brandAccent}>Vue</Text></Text>
             <View style={styles.headerAvatar}>
               {profile?.avatar_url
-                ? <Image source={{ uri: profile.avatar_url }} style={styles.headerAvatarImg} />
-                : <View style={[styles.headerAvatarImg, { backgroundColor: C.outlineVar, alignItems: 'center', justifyContent: 'center' }]}>
-                    <Text style={{ color: C.primary, fontWeight: '700', fontSize: 12 }}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
+                ? <Image source={{ uri: profile.avatar_url }} style={styles.headerAvatarImg} accessibilityIgnoresInvertColors />
+                : <View style={[styles.headerAvatarImg, styles.headerAvatarFallback]}>
+                    <Text style={styles.headerAvatarInitial}>{(profile?.name ?? 'U')[0].toUpperCase()}</Text>
                   </View>
               }
             </View>
@@ -203,22 +261,22 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           {/* ── Hero ── */}
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
-              <Ionicons name="star" size={32} color={C.primary} />
+              <Ionicons name="star" size={32} color={T.primary} />
             </View>
             <Text style={styles.heroTitle}>CalVue <Text style={styles.heroTitlePro}>Pro</Text></Text>
             <Text style={styles.heroSubtitle}>
               {scansRemaining === 0
-                ? "You've used all your free scans"
-                : "Precision nutrition for peak human performance."}
+                ? "You've used all your free scans for today."
+                : "Log meals faster and see the full picture."}
             </Text>
           </View>
 
           {/* ── Benefits ── */}
           <View style={styles.benefitsCard}>
             {BENEFITS.map((item, i) => (
-              <View key={item.label} style={[styles.benefitRow, i > 0 && { marginTop: 16 }]}>
+              <View key={item.label} style={[styles.benefitRow, i > 0 && styles.benefitRowGap]}>
                 <View style={styles.benefitIcon}>
-                  <Ionicons name={item.icon} size={18} color={C.onPrimaryCont} />
+                  <Ionicons name={item.icon} size={18} color={T.primary} />
                 </View>
                 <Text style={styles.benefitLabel}>{item.label}</Text>
               </View>
@@ -226,124 +284,65 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           </View>
 
           {/* ── Plan Selection ── */}
-          <View style={styles.plansBlock}>
-            {/* Monthly */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setSelectedPlan("monthly")}
-              style={[styles.planCard, selectedPlan === "monthly" && styles.planCardActive]}
-            >
-              <View style={styles.planRow}>
-                <View>
-                  <Text style={[styles.planPeriodLabel, { color: C.outline }]}>MONTHLY</Text>
-                  <View style={styles.planPriceRow}>
-                    <Text style={styles.planPrice}>{monthlyPkg?.product.priceString ?? "—"}</Text>
-                    <Text style={styles.planPriceSub}> / mo</Text>
-                  </View>
-                </View>
-                <View style={[styles.radioOuter, selectedPlan === "monthly" && { borderColor: C.primary, backgroundColor: C.primary }]}>
-                  {selectedPlan === "monthly" && <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />}
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Annual */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setSelectedPlan("annual")}
-              style={[styles.planCard, selectedPlan === "annual" && styles.planCardActive]}
-            >
-              {/* Best Value badge */}
-              <View style={styles.bestValueBadge}>
-                <Text style={styles.bestValueText}>
-                  {savingsPct !== null ? `SAVE ${savingsPct}%` : 'BEST VALUE'}
-                </Text>
-              </View>
-              <View style={styles.planRow}>
-                <View>
-                  <Text style={[styles.planPeriodLabel, { color: selectedPlan === "annual" ? C.primary : C.outline }]}>ANNUAL</Text>
-                  <View style={styles.planPriceRow}>
-                    <Text style={styles.planPrice}>{annualPkg?.product.priceString ?? "—"}</Text>
-                    <Text style={styles.planPriceSub}> / yr</Text>
-                  </View>
-
-                  {/* Same unit as the monthly card, so the two are comparable at a glance */}
-                  {!!annualPerMonth && (
-                    <Text style={styles.perMonthLabel}>
-                      Just {annualPerMonth} / mo · billed yearly
-                    </Text>
-                  )}
-
-                  {/* The rupee amount is what people actually decide on */}
-                  {savingsPct !== null && annualPkg && (
-                    <Text style={styles.savingsLabel}>
-                      You save {money(savingsAmount, annualPkg)} a year
-                    </Text>
-                  )}
-                  {savingsPct !== null && monthlyPkg && (
-                    <Text style={styles.compareLabel}>
-                      vs {money(yearAtMonthlyRate, monthlyPkg)} paying monthly
-                    </Text>
-                  )}
-                </View>
-                <View style={[styles.radioOuter, selectedPlan === "annual" && { borderColor: C.primary, backgroundColor: C.primary }]}>
-                  {selectedPlan === "annual" && <View style={[styles.radioInner, { backgroundColor: C.onPrimary }]} />}
-                </View>
-              </View>
-            </TouchableOpacity>
+          <View style={styles.plansBlock} accessibilityRole="radiogroup">
+            {renderPlan("monthly", monthlyPkg)}
+            {renderPlan("annual", annualPkg)}
           </View>
 
-          {/* ── Assurance / Restore ── */}
-          <View style={styles.paymentMethods}>
-            <View style={styles.paymentMethod}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={C.outline} />
-              <Text style={styles.paymentMethodLabel}>CANCEL ANYTIME</Text>
+          {/* ── CTA ── */}
+          <View style={styles.ctaBlock}>
+            <View style={styles.assuranceRow}>
+              <Ionicons name="shield-checkmark-outline" size={16} color={T.textMuted} />
+              <Text style={styles.assuranceText}>Cancel anytime</Text>
             </View>
-            <View style={styles.paymentDivider} />
+
             <TouchableOpacity
-              style={styles.paymentMethod}
+              style={[styles.ctaButton, busy && styles.ctaButtonDisabled]}
+              onPress={handleSubscribe}
+              disabled={busy}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy, busy: isLoading || loadingOffering }}
+            >
+              {isLoading || loadingOffering
+                ? <ActivityIndicator size="small" color={T.textOnPrimary} />
+                : <Ionicons name="lock-closed" size={20} color={T.textOnPrimary} />}
+              <Text style={styles.ctaText}>
+                {loadingOffering
+                  ? "Loading plans"
+                  : isLoading
+                  ? "Processing"
+                  : selectedPkg
+                  ? `Subscribe · ${selectedPkg.product.priceString}${selectedPlan === "annual" ? "/yr" : "/mo"}`
+                  : "Plans unavailable"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.restoreBtn}
               onPress={handleRestore}
               disabled={isRestoring || isLoading}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Restore purchases"
+              accessibilityState={{ disabled: isRestoring || isLoading, busy: isRestoring }}
             >
               {isRestoring
-                ? <ActivityIndicator size="small" color={C.primary} />
-                : <Ionicons name="refresh-outline" size={18} color={C.primary} />}
-              <Text style={[styles.paymentMethodLabel, { color: C.primary }]}>RESTORE</Text>
+                ? <ActivityIndicator size="small" color={T.textSecondary} />
+                : <Text style={styles.restoreText}>Restore purchases</Text>}
             </TouchableOpacity>
           </View>
-
-          {/* ── CTA Button ── */}
-          <TouchableOpacity
-            style={[styles.ctaButton, (isLoading || loadingOffering || !selectedPkg) && { opacity: 0.7 }]}
-            onPress={handleSubscribe}
-            disabled={isLoading || loadingOffering || !selectedPkg}
-            activeOpacity={0.88}
-          >
-            {isLoading || loadingOffering
-              ? <ActivityIndicator size="small" color={C.onPrimary} />
-              : <Ionicons name="lock-closed" size={20} color={C.onPrimary} />}
-            <Text style={styles.ctaText}>
-              {loadingOffering
-                ? "Loading plans…"
-                : isLoading
-                ? "Processing…"
-                : selectedPkg
-                ? `Subscribe · ${selectedPkg.product.priceString}${selectedPlan === "annual" ? "/yr" : "/mo"}`
-                : "Plans unavailable"}
-            </Text>
-          </TouchableOpacity>
 
           {/* ── Legal ── */}
           <Text style={styles.legalText}>
             By subscribing, you agree to our{" "}
-            <Text style={styles.legalLink} onPress={() => setLegalDoc("terms")}>Terms of Service</Text>
+            <Text style={styles.legalLink} accessibilityRole="link" onPress={() => setLegalDoc("terms")}>Terms of Service</Text>
             {" "}and{" "}
-            <Text style={styles.legalLink} onPress={() => setLegalDoc("privacy")}>Privacy Policy</Text>.
-            {" "}Payment is charged to your App Store / Google Play account and subscriptions auto-renew until cancelled in your store settings.
+            <Text style={styles.legalLink} accessibilityRole="link" onPress={() => setLegalDoc("privacy")}>Privacy Policy</Text>.
+            {" "}Payment is charged to your App Store or Google Play account and subscriptions renew automatically until cancelled in your store settings.
           </Text>
 
-          <View style={{ height: 40 }} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
 
         <LegalModal
@@ -357,7 +356,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: T.bg },
 
   /* Header */
   headerSafe: { zIndex: 10 },
@@ -365,139 +364,125 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: C.header,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: T.bg,
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
-  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  brand: { fontSize: 22, fontWeight: '800', letterSpacing: 0.5, color: C.primary },
-  brandSnap: { color: C.secondary },
+  closeBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  brand: { fontSize: 22, fontWeight: '800', letterSpacing: 0.5, color: T.textPrimary },
+  brandAccent: { color: T.primary },
   headerAvatar: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 32, height: 32, borderRadius: radius.pill,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: C.primary + '33',
+    borderColor: T.primaryBorder,
+    marginHorizontal: (HIT_TARGET - 32) / 2,
   },
-  headerAvatarImg: { width: 32, height: 32, borderRadius: 16 },
+  headerAvatarImg: { width: 32, height: 32, borderRadius: radius.pill },
+  headerAvatarFallback: { backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center' },
+  headerAvatarInitial: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: T.primary },
 
   /* Scroll */
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 32, gap: 28 },
+  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing['3xl'], gap: spacing['2xl'] },
 
   /* Hero */
-  hero: { alignItems: 'center', gap: 10 },
+  hero: { alignItems: 'center', gap: spacing.sm },
   heroIcon: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: C.primary + '1A',
-    borderWidth: 1, borderColor: C.primary + '4D',
+    width: 64, height: 64, borderRadius: radius.pill,
+    backgroundColor: T.primaryTint,
+    borderWidth: 1, borderColor: T.primaryBorder,
     alignItems: 'center', justifyContent: 'center',
   },
-  heroTitle: { fontSize: 24, fontWeight: '700', color: C.onSurface },
-  heroTitlePro: { color: C.primary },
-  heroSubtitle: { fontSize: 15, color: C.onSurfaceVar, textAlign: 'center', lineHeight: 22 },
+  heroTitle: { ...type.headline, color: T.textPrimary },
+  heroTitlePro: { color: T.primary },
+  heroSubtitle: { ...type.body, color: T.textSecondary, textAlign: 'center' },
 
   /* Benefits */
   benefitsCard: {
-    backgroundColor: C.glass,
-    borderRadius: 16,
+    backgroundColor: T.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: C.glassBorder,
-    padding: 20,
+    borderColor: T.border,
+    padding: spacing.xl,
   },
-  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  benefitRowGap: { marginTop: spacing.lg },
   benefitIcon: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.primaryCont,
+    width: 36, height: 36, borderRadius: radius.pill,
+    backgroundColor: T.primaryTint,
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
-  benefitLabel: { fontSize: 16, fontWeight: '600', color: C.onSurface },
+  benefitLabel: { ...type.body, fontSize: 16, fontWeight: '600', color: T.textPrimary, flex: 1 },
 
   /* Plans */
-  plansBlock: { gap: 14 },
+  plansBlock: { gap: spacing.md },
   planCard: {
-    backgroundColor: C.glass,
-    borderRadius: 16,
+    backgroundColor: T.surface,
+    borderRadius: radius.lg,
     borderWidth: 2,
-    borderColor: C.glassBorder,
-    padding: 20,
+    borderColor: T.border,
+    padding: spacing.xl,
     overflow: 'hidden',
   },
-  planCardActive: { borderColor: C.primary },
-  planCardAnnual: { borderColor: C.primary },
-  planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  planPeriodLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  planCardActive: { borderColor: T.primary, backgroundColor: T.primaryTint },
+  planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  planInfo: { flex: 1 },
+  planPeriodLabel: { ...type.bodySm, fontWeight: '700', color: T.textSecondary, marginBottom: spacing.xs },
+  planPeriodLabelActive: { color: T.primary },
   planPriceRow: { flexDirection: 'row', alignItems: 'baseline' },
-  planPrice: { fontSize: 26, fontWeight: '800', color: C.onSurface },
-  planPriceSub: { fontSize: 14, color: C.onSurfaceVar },
-  perMonthLabel: { fontSize: 13, fontWeight: '700', color: C.onSurface, marginTop: 4 },
-  savingsLabel:  { fontSize: 13, fontWeight: '800', color: C.primary, marginTop: 4 },
-  compareLabel:  { fontSize: 12, fontWeight: '500', color: C.outline, marginTop: 2, textDecorationLine: 'line-through' },
+  planPrice: { fontSize: 26, lineHeight: 32, fontWeight: '800', color: T.textPrimary },
+  planPriceSub: { ...type.body, color: T.textSecondary },
+  perMonthLabel: { ...type.bodySm, fontWeight: '700', color: T.textPrimary, marginTop: spacing.xs },
+  savingsLabel:  { ...type.bodySm, fontWeight: '800', color: T.primary, marginTop: spacing.xs },
+  compareLabel:  { ...type.bodySm, color: T.textMuted, marginTop: 2, textDecorationLine: 'line-through' },
   radioOuter: {
-    width: 24, height: 24, borderRadius: 12,
-    borderWidth: 2, borderColor: C.outline,
+    width: 24, height: 24, borderRadius: radius.pill,
+    borderWidth: 2, borderColor: T.textMuted,
     alignItems: 'center', justifyContent: 'center',
   },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.bg },
+  radioOuterActive: { borderColor: T.primary, backgroundColor: T.primary },
+  radioInner: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: T.textOnPrimary },
   bestValueBadge: {
     position: 'absolute', top: 0, right: 0,
-    backgroundColor: C.primary,
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderBottomLeftRadius: 10,
+    backgroundColor: T.primary,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderBottomLeftRadius: radius.sm,
   },
-  bestValueText: { fontSize: 11, fontWeight: '800', color: C.onPrimary, letterSpacing: 0.5 },
-
-  /* Payment */
-  paymentSection: { gap: 10 },
-  paymentLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  paymentLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: C.outline, textTransform: 'uppercase' },
-  paymentBrand: { fontSize: 13, fontWeight: '800', color: C.onSurface + 'CC', letterSpacing: 0.5 },
-  paymentMethods: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: T.divider,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: T.divider,
-    gap: 16,
-  },
-  paymentMethod: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  paymentMethodLabel: { fontSize: 11, fontWeight: '800', color: C.outline, letterSpacing: 0.5 },
-  paymentDivider: { width: 1, height: 16, backgroundColor: T.border },
+  bestValueText: { fontSize: 12, lineHeight: 16, fontWeight: '800', color: T.textOnPrimary },
 
   /* CTA */
+  ctaBlock: { gap: spacing.md },
+  assuranceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  assuranceText: { ...type.bodySm, color: T.textMuted },
   ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    height: 60,
-    backgroundColor: C.primary,
-    borderRadius: 16,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
+    gap: spacing.sm,
+    height: 56,
+    backgroundColor: T.primary,
+    borderRadius: radius.md,
   },
-  ctaText: { fontSize: 18, fontWeight: '700', color: C.onPrimary },
+  ctaButtonDisabled: { opacity: 0.7 },
+  ctaText: { ...type.titleSm, color: T.textOnPrimary },
+  restoreBtn: { minHeight: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  restoreText: { ...type.body, color: T.textSecondary },
 
   /* Legal */
   legalText: {
-    fontSize: 11,
-    color: C.outline,
-    textAlign: 'center',
+    fontSize: 12,
     lineHeight: 18,
+    color: T.textMuted,
+    textAlign: 'center',
   },
   legalLink: {
-    color: C.onSurfaceVar,
+    color: T.textSecondary,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
+  bottomSpacer: { height: spacing['4xl'] },
 });
-
-
