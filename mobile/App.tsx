@@ -11,6 +11,8 @@ import { useNotificationStore } from './src/store/notificationStore';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useTheme } from './src/hooks/useTheme';
 import { configurePurchases, identifyUser } from './src/services/purchases';
+import { ToastHost } from './src/components/ToastHost';
+import { T } from './src/theme';
 import './src/store/themeStore';
 
 function AppContent() {
@@ -31,14 +33,46 @@ function AppContent() {
     },
   };
 
+  // Every MD3 role a Paper control can reach for is mapped, otherwise
+  // SegmentedButtons, TextInput labels and contained-button text fall back to
+  // Material's default purples and greys.
   const paperTheme = {
     ...(isDark ? MD3DarkTheme : MD3LightTheme),
     colors: {
       ...(isDark ? MD3DarkTheme.colors : MD3LightTheme.colors),
-      primary:          theme.primary,
-      primaryContainer: theme.primaryTint,
-      background:       theme.bg,
-      surface:          theme.surface,
+      primary:              theme.primary,
+      onPrimary:            T.textOnPrimary,
+      primaryContainer:     theme.primaryTint,
+      onPrimaryContainer:   T.textPrimary,
+      secondary:            theme.primary,
+      onSecondary:          T.textOnPrimary,
+      secondaryContainer:   T.primaryTint,
+      onSecondaryContainer: T.textPrimary,
+      background:           theme.bg,
+      onBackground:         T.textPrimary,
+      surface:              theme.surface,
+      onSurface:            T.textPrimary,
+      surfaceVariant:       T.surface2,
+      onSurfaceVariant:     T.textSecondary,
+      surfaceDisabled:      T.surface2,
+      onSurfaceDisabled:    T.textMuted,
+      outline:              T.textMuted,
+      outlineVariant:       T.border,
+      error:                T.error,
+      onError:              T.textOnPrimary,
+      errorContainer:       T.errorTint,
+      onErrorContainer:     T.error,
+      inverseSurface:       T.textPrimary,
+      inverseOnSurface:     T.bg,
+      inversePrimary:       T.primaryDeep,
+      elevation: {
+        level0: 'transparent',
+        level1: T.surface,
+        level2: T.surface2,
+        level3: T.surface2,
+        level4: T.surfaceOffset,
+        level5: T.surfaceOffset,
+      },
     },
   };
 
@@ -82,6 +116,7 @@ function AppContent() {
         <RootNavigator />
         <StatusBar style={theme.statusBar} />
       </NavigationContainer>
+      <ToastHost />
     </PaperProvider>
   );
 }

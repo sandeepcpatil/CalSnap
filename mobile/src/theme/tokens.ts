@@ -70,7 +70,42 @@ export const T = {
   /** Translucent glass survives ONLY where there is something behind to blur. */
   glass:      'rgba(12,17,18,0.80)',
   glassBorder:'rgba(255,255,255,0.10)',
+
+  // ── Tints & borders · replace every `hex + '33'` concatenation ────────────
+  /** Selected/primary-tinted borders (chips, plan cards, active rows). */
+  primaryBorder: 'rgba(133,211,218,0.35)',
+  successTint:   'rgba(122,220,166,0.14)',
+  warningTint:   'rgba(242,193,112,0.14)',
+  errorTint:     'rgba(255,158,148,0.14)',
+  /** Text and icons drawn directly on `scrim` (camera controls). */
+  onScrim:       '#FFFFFF',
+  scrimBorder:   'rgba(255,255,255,0.15)',
+  /** Bottom-sheet grab handle. */
+  grabber:       'rgba(255,255,255,0.22)',
 } as const;
+
+/**
+ * Alpha for a token without string concatenation. Accepts `#RRGGBB` or an
+ * `rgba(...)`/`rgb(...)` string, so it is safe on every token above.
+ *
+ *   backgroundColor: withAlpha(T.primary, 0.2)
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const a = Math.min(1, Math.max(0, alpha));
+  if (color.startsWith('#')) {
+    const hex = color.length === 4
+      ? color.slice(1).split('').map((c) => c + c).join('')
+      : color.slice(1, 7);
+    const n = parseInt(hex, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  const m = color.match(/rgba?\(([^)]+)\)/);
+  if (m) {
+    const [r, g, b] = m[1].split(',').map((s) => s.trim());
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  return color;
+}
 
 /** Score/grade → colour. Shared by the label result ring and any score chip. */
 export function scoreColor(score: number): string {

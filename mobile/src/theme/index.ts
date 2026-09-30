@@ -3,7 +3,7 @@
  *
  *   import { T, spacing, radius, type } from '../../theme';
  */
-export { T, scoreColor, type Tokens } from './tokens';
+export { T, scoreColor, withAlpha, type Tokens } from './tokens';
 export { spacing, HIT_TARGET, type Spacing } from './spacing';
 export { radius, type Radius } from './radius';
 export { shadows } from './shadows';
