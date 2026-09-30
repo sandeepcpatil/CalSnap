@@ -4,7 +4,7 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useWater } from '../hooks/useWater';
 import { QUICK_ADD_ML, formatMl } from '../utils/water';
-import { T } from '../theme';
+import { T, withAlpha, type, spacing, radius, HIT_TARGET } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -21,10 +21,11 @@ const CONFIRM_MS = 850;
 /**
  * The four ways to log, in one sheet.
  *
- * They are deliberately not a tidy 2×2 grid — they aren't peers. Photo is the
- * most-used and gets visual primacy so the extra tap costs nothing. Water is
- * the most *frequent* (6–8× a day) and isn't calories at all, so it resolves
- * inside the sheet: two taps, no navigation. Only Photo opens the camera.
+ * They are deliberately not a tidy 2×2 grid, because they aren't peers. Photo
+ * is the most-used and gets visual primacy so the extra tap costs nothing.
+ * Water is the most *frequent* (6–8× a day) and isn't calories at all, so it
+ * resolves inside the sheet: two taps, no navigation. Only Photo opens the
+ * camera.
  */
 export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onWaterMore }: Props) {
   const { consumedMl, goalMl, add } = useWater();
@@ -83,14 +84,15 @@ export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onW
             <TouchableOpacity
               onPress={onClose}
               style={styles.closeBtn}
+              hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <Ionicons name="close" size={20} color={T.textSecondary} />
+              <Ionicons name="close" size={22} color={T.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          {/* Photo — primary. The only tile with a tinted border. */}
+          {/* Photo, primary. The only tile with a tinted border. */}
           <TouchableOpacity
             style={styles.photoTile}
             onPress={() => go(onPhoto)}
@@ -119,7 +121,7 @@ export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onW
             >
               <Ionicons name="bookmark-outline" size={21} color={T.textPrimary} />
               <Text style={styles.smallTitle}>Find a food</Text>
-              <Text style={styles.smallSub}>Recent &amp; my meals</Text>
+              <Text style={styles.smallSub}>Recent and my meals</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -135,7 +137,7 @@ export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onW
             </TouchableOpacity>
           </View>
 
-          {/* Water — resolves in place, no navigation */}
+          {/* Water resolves in place, no navigation */}
           <View style={styles.waterCard}>
             <View style={styles.waterHead}>
               <View style={styles.waterIcon}>
@@ -152,6 +154,7 @@ export function LogHubSheet({ visible, onClose, onPhoto, onHistory, onVoice, onW
               <TouchableOpacity
                 onPress={() => go(onWaterMore)}
                 style={styles.moreBtn}
+                hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="More water options"
               >
@@ -191,41 +194,41 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: T.surface,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     borderWidth: 1,
     borderColor: T.border,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 34,
-    gap: 10,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing['3xl'] + 2,
+    gap: spacing.sm + 2,
   },
   grabber: {
     alignSelf: 'center',
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: T.surfaceOffset,
-    marginBottom: 6,
+    backgroundColor: T.grabber,
+    marginBottom: spacing.xs + 2,
   },
 
-  titleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
-  title: { flex: 1, fontSize: 19, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
-  closeBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xs },
+  title: { flex: 1, ...type.title, color: T.textPrimary },
+  closeBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
 
   tileText: { flex: 1, gap: 2 },
-  tileTitle: { fontSize: 15, fontWeight: '800', color: T.textPrimary },
-  tileSub: { fontSize: 12.5, fontWeight: '600', color: T.textMuted },
+  tileTitle: { ...type.body, fontWeight: '800', color: T.textPrimary },
+  tileSub: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
 
   photoTile: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: 18,
+    gap: spacing.lg - 2,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
     backgroundColor: T.primaryTint,
     borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.38)',
+    borderColor: T.primaryBorder,
   },
   photoIcon: {
     width: 46,
@@ -233,31 +236,31 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(1,105,111,0.35)',
+    backgroundColor: withAlpha(T.primaryDeep, 0.35),
   },
 
-  pairRow: { flexDirection: 'row', gap: 10 },
+  pairRow: { flexDirection: 'row', gap: spacing.sm + 2 },
   smallTile: {
     flex: 1,
     gap: 3,
-    padding: 14,
-    borderRadius: 16,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
-  smallTitle: { fontSize: 14, fontWeight: '800', color: T.textPrimary, marginTop: 4 },
-  smallSub: { fontSize: 11.5, fontWeight: '600', color: T.textMuted },
+  smallTitle: { ...type.body, fontWeight: '800', color: T.textPrimary, marginTop: spacing.xs },
+  smallSub: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
 
   waterCard: {
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
+    gap: spacing.md,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
-  waterHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  waterHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   waterIcon: {
     width: 32,
     height: 32,
@@ -266,14 +269,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: T.primaryTint,
   },
-  moreBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  moreText: { fontSize: 13, fontWeight: '700', color: T.primary },
+  moreBtn: { minHeight: HIT_TARGET, paddingHorizontal: spacing.sm + 2, justifyContent: 'center' },
+  moreText: { ...type.bodySm, fontWeight: '700', color: T.primary },
 
-  quickRow: { flexDirection: 'row', gap: 8 },
+  quickRow: { flexDirection: 'row', gap: spacing.sm },
   quickBtn: {
     flex: 1,
-    height: 42,
-    borderRadius: 12,
+    height: HIT_TARGET,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: T.surfaceOffset,
@@ -281,5 +284,5 @@ const styles = StyleSheet.create({
     borderColor: T.border,
   },
   quickBtnDone: { backgroundColor: T.primary, borderColor: T.primary },
-  quickText: { fontSize: 13.5, fontWeight: '800', color: T.textPrimary },
+  quickText: { ...type.bodySm, fontWeight: '800', color: T.textPrimary },
 });

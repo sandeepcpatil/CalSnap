@@ -8,6 +8,7 @@ import {
   Easing,
   Image,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,116 +27,135 @@ import { analyzeFood, analyzeLabel, analyzeText, analyzeVoice, lookupBarcode } f
 import { useAuthStore } from '../../store/authStore';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
-import { VoiceModePanel } from '../../components/VoiceModePanel';
+import { VoiceModePanel, type VoiceModePanelHandle } from '../../components/VoiceModePanel';
 import { useAndroidBack } from '../../hooks/useAndroidBack';
-import { T } from '../../theme';
+import { T, withAlpha, type, spacing, radius, HIT_TARGET } from '../../theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'>;
   route: { params?: { mode?: ScanMode } };
 };
 
-// ─── Analyzing overlay ───────────────────────────────────────────────────────
-// Shows the user's actual photo with a scanning beam sweeping over it and a
-// step checklist that fills in — feels like the AI is "looking" at the meal.
-
-const STEPS = [
-  { icon: 'cloud-upload-outline', text: 'Uploading photo' },
-  { icon: 'scan-outline', text: 'AI scanning your meal' },
-  { icon: 'nutrition-outline', text: 'Identifying ingredients' },
-  { icon: 'stats-chart-outline', text: 'Calculating nutrition' },
-] as const;
-
 const SCREEN_H = Dimensions.get('window').height;
 const SWEEP_RANGE = SCREEN_H * 0.52;
 
-function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
-  const [stepIndex, setStepIndex] = useState(0);
+// ─── Copy ────────────────────────────────────────────────────────────────────
+
+const ANALYZING_COPY: Record<ScanMode, string> = {
+  meal: 'Analysing your meal. This usually takes 5 to 10 seconds.',
+  label: 'Reading the label. This usually takes 5 to 10 seconds.',
+  barcode: 'Looking up that barcode. This is usually quick.',
+  voice: 'Working out what you had. This usually takes 5 to 10 seconds.',
+};
+
+const ERROR_TITLE: Record<ScanMode, string> = {
+  meal: "Couldn't analyse that",
+  label: "Couldn't read that label",
+  barcode: "Couldn't find that product",
+  voice: "Couldn't work that out",
+};
+
+const RETAKE_LABEL: Record<ScanMode, string> = {
+  meal: 'Retake photo',
+  label: 'Retake photo',
+  barcode: 'Scan again',
+  voice: 'Go back',
+};
+
+/**
+ * Every failure maps to a fixed sentence. Raw error text never reaches the
+ * screen; the detail goes to the console for debugging.
+ */
+function scanErrorCopy(err: any, mode: ScanMode): string {
+  const code = err?.code;
+  const status = err?.statusCode;
+  if (code === 'timeout') return 'That took too long. Check your connection and try again.';
+  if (code === 'network') return "Couldn't reach CalVue. Check your connection.";
+  if (mode === 'barcode' && status === 404) {
+    return "This barcode isn't in the database yet. Try scanning the nutrition label instead.";
+  }
+  if (status === 422) {
+    if (mode === 'label') return "We couldn't read a nutrition label in that photo. Try a clearer shot.";
+    if (mode === 'voice') return "We couldn't make out any food in that. Try describing it again.";
+    return "We couldn't find food in that photo. Try a clearer shot.";
+  }
+  return 'Something went wrong analysing that. Try again.';
+}
+
+// ─── Analyzing overlay ───────────────────────────────────────────────────────
+// The user's photo with a beam sweeping over it, one honest status line and a
+// way out. No fake progress: the line stays the same until the request ends.
+
+function AnalyzingOverlay({
+  imageUri, message, onCancel,
+}: { imageUri: string | null; message: string; onCancel: () => void }) {
   const sweep = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    // Beam sweeps down, then back up, forever.
-    Animated.loop(
+    const loopA = Animated.loop(
       Animated.sequence([
         Animated.timing(sweep, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
         Animated.timing(sweep, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ]),
-    ).start();
-
-    // Soft breathing glow on the frame corners.
-    Animated.loop(
+    );
+    const loopB = Animated.loop(
       Animated.sequence([
         Animated.timing(glow, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(glow, { toValue: 0.6, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ]),
-    ).start();
-
-    // Steps advance and stay done; the last one keeps spinning until the
-    // request actually finishes (the overlay unmounts).
-    const interval = setInterval(() => {
-      setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
-    }, 1800);
-    return () => clearInterval(interval);
-  }, []);
+    );
+    loopA.start();
+    loopB.start();
+    return () => { loopA.stop(); loopB.stop(); };
+  }, [sweep, glow]);
 
   const translateY = sweep.interpolate({ inputRange: [0, 1], outputRange: [0, SWEEP_RANGE] });
 
   return (
-    <View style={analyzeStyles.container}>
-      {/* The photo being analyzed */}
+    <View style={overlayStyles.container}>
       {imageUri ? (
         <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={1} />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
       )}
-      {/* Dim + vignette so the beam and card read clearly */}
       <LinearGradient
-        colors={['rgba(6,10,11,0.72)', 'rgba(6,10,11,0.35)', 'rgba(6,10,11,0.88)']}
+        colors={[withAlpha(T.bg, 0.72), withAlpha(T.bg, 0.35), withAlpha(T.bg, 0.88)]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Scanning beam */}
-      <View style={analyzeStyles.sweepArea} pointerEvents="none">
-        <Animated.View style={[analyzeStyles.beam, { transform: [{ translateY }] }]}>
-          <LinearGradient
-            colors={['rgba(133,211,218,0)', 'rgba(133,211,218,0.30)']}
-            style={analyzeStyles.beamTrail}
-          />
-          <View style={analyzeStyles.beamLine} />
-        </Animated.View>
-        {/* Corner brackets to frame the "scan zone" */}
-        <Animated.View style={[analyzeStyles.frame, { opacity: glow }]} pointerEvents="none">
-          <View style={[analyzeStyles.fCorner, analyzeStyles.fTL]} />
-          <View style={[analyzeStyles.fCorner, analyzeStyles.fTR]} />
-          <View style={[analyzeStyles.fCorner, analyzeStyles.fBL]} />
-          <View style={[analyzeStyles.fCorner, analyzeStyles.fBR]} />
-        </Animated.View>
-      </View>
+      {imageUri && (
+        <View style={overlayStyles.sweepArea} pointerEvents="none">
+          <Animated.View style={[overlayStyles.beam, { transform: [{ translateY }] }]}>
+            <LinearGradient
+              colors={[withAlpha(T.primary, 0), withAlpha(T.primary, 0.3)]}
+              style={overlayStyles.beamTrail}
+            />
+            <View style={overlayStyles.beamLine} />
+          </Animated.View>
+          <Animated.View style={[overlayStyles.frame, { opacity: glow }]} pointerEvents="none">
+            <View style={[overlayStyles.fCorner, overlayStyles.fTL]} />
+            <View style={[overlayStyles.fCorner, overlayStyles.fTR]} />
+            <View style={[overlayStyles.fCorner, overlayStyles.fBL]} />
+            <View style={[overlayStyles.fCorner, overlayStyles.fBR]} />
+          </Animated.View>
+        </View>
+      )}
 
-      {/* Step checklist */}
-      <View style={analyzeStyles.card}>
-        {STEPS.map((step, i) => {
-          const done = i < stepIndex;
-          const active = i === stepIndex;
-          return (
-            <View key={step.text} style={[analyzeStyles.stepRow, !done && !active && { opacity: 0.35 }]}>
-              <View style={[analyzeStyles.stepIcon, done && analyzeStyles.stepIconDone, active && analyzeStyles.stepIconActive]}>
-                {done ? (
-                  <Ionicons name="checkmark" size={15} color={T.textOnPrimary} />
-                ) : active ? (
-                  <ActivityIndicator animating size={13} color={T.primary} />
-                ) : (
-                  <Ionicons name={step.icon} size={14} color="rgba(255,255,255,0.6)" />
-                )}
-              </View>
-              <Text style={[analyzeStyles.stepText, done && { color: 'rgba(255,255,255,0.55)' }, active && { color: '#fff' }]}>
-                {step.text}
-              </Text>
-            </View>
-          );
-        })}
-        <Text style={analyzeStyles.subText}>Hang tight — this takes a few seconds</Text>
+      <View style={overlayStyles.card}>
+        <View style={overlayStyles.statusRow}>
+          <ActivityIndicator animating size={20} color={T.primary} />
+          <Text style={overlayStyles.statusText} accessibilityLiveRegion="polite">{message}</Text>
+        </View>
+        <TouchableOpacity
+          style={overlayStyles.cancelBtn}
+          onPress={onCancel}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel analysis"
+        >
+          <Text style={overlayStyles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -143,36 +163,42 @@ function AnalyzingOverlay({ imageUri }: { imageUri: string | null }) {
 
 /**
  * Shown when a scan fails (slow network / timeout / server error) instead of
- * silently dropping the capture. The photo is kept, so Retry re-runs the
- * analysis — reusing the already-uploaded image where possible — and the user
- * never loses their shot to a bad connection.
+ * silently dropping the capture. The photo or recording is kept, so Retry
+ * re-runs the analysis and nothing is lost to a bad connection.
  */
 function ScanErrorOverlay({
-  imageUri, message, onRetry, onRetake,
-}: { imageUri: string | null; message: string; onRetry: () => void; onRetake: () => void }) {
+  imageUri, title, message, retakeLabel, onRetry, onRetake,
+}: {
+  imageUri: string | null;
+  title: string;
+  message: string;
+  retakeLabel: string;
+  onRetry: () => void;
+  onRetake: () => void;
+}) {
   return (
-    <View style={analyzeStyles.container}>
+    <View style={overlayStyles.container}>
       {imageUri ? (
         <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={3} />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
       )}
       <LinearGradient
-        colors={['rgba(6,10,11,0.85)', 'rgba(6,10,11,0.7)', 'rgba(6,10,11,0.92)']}
+        colors={[withAlpha(T.bg, 0.85), withAlpha(T.bg, 0.7), withAlpha(T.bg, 0.92)]}
         style={StyleSheet.absoluteFill}
       />
       <View style={errorStyles.card}>
         <View style={errorStyles.iconWrap}>
           <Ionicons name="cloud-offline-outline" size={30} color={T.warning} />
         </View>
-        <Text style={errorStyles.title}>Couldn't analyze that</Text>
+        <Text style={errorStyles.title}>{title}</Text>
         <Text style={errorStyles.message}>{message}</Text>
-        <TouchableOpacity style={errorStyles.retryBtn} onPress={onRetry} activeOpacity={0.85}>
+        <TouchableOpacity style={errorStyles.retryBtn} onPress={onRetry} activeOpacity={0.85} accessibilityRole="button">
           <Ionicons name="refresh" size={18} color={T.textOnPrimary} />
           <Text style={errorStyles.retryText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={errorStyles.retakeBtn} onPress={onRetake} activeOpacity={0.8}>
-          <Text style={errorStyles.retakeText}>Retake photo</Text>
+        <TouchableOpacity style={errorStyles.retakeBtn} onPress={onRetake} activeOpacity={0.8} accessibilityRole="button">
+          <Text style={errorStyles.retakeText}>{retakeLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -181,45 +207,54 @@ function ScanErrorOverlay({
 
 const errorStyles = StyleSheet.create({
   card: {
-    position: 'absolute', left: 28, right: 28, top: '50%',
+    position: 'absolute', left: spacing['2xl'] + 4, right: spacing['2xl'] + 4, top: '50%',
     transform: [{ translateY: -160 }],
-    backgroundColor: T.surface, borderRadius: 22, padding: 24,
-    borderWidth: 1, borderColor: T.border, alignItems: 'center', gap: 10,
+    backgroundColor: T.surface, borderRadius: radius.lg, padding: spacing['2xl'],
+    borderWidth: 1, borderColor: T.border, alignItems: 'center', gap: spacing.sm + 2,
   },
   iconWrap: {
-    width: 60, height: 60, borderRadius: 30, marginBottom: 4,
-    backgroundColor: 'rgba(240,180,80,0.14)', alignItems: 'center', justifyContent: 'center',
+    width: 60, height: 60, borderRadius: 30, marginBottom: spacing.xs,
+    backgroundColor: T.warningTint, alignItems: 'center', justifyContent: 'center',
   },
-  title: { fontSize: 18, fontWeight: '800', color: T.textPrimary, textAlign: 'center' },
-  message: { fontSize: 14, lineHeight: 20, color: T.textSecondary, textAlign: 'center', marginBottom: 8 },
+  title: { ...type.titleSm, color: T.textPrimary, textAlign: 'center' },
+  message: { ...type.body, color: T.textSecondary, textAlign: 'center', marginBottom: spacing.sm },
   retryBtn: {
-    alignSelf: 'stretch', height: 52, borderRadius: 14, backgroundColor: T.primary,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    alignSelf: 'stretch', height: 52, borderRadius: radius.md, backgroundColor: T.primary,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
   },
-  retryText: { fontSize: 15.5, fontWeight: '800', color: T.textOnPrimary },
+  retryText: { ...type.body, fontWeight: '800', color: T.textOnPrimary },
   retakeBtn: { alignSelf: 'stretch', height: 48, alignItems: 'center', justifyContent: 'center' },
-  retakeText: { fontSize: 14.5, fontWeight: '700', color: T.textSecondary },
+  retakeText: { ...type.body, fontWeight: '700', color: T.textSecondary },
 });
 
-/** Reject if a promise takes too long — used to bound the image upload, which
- *  has no built-in timeout and otherwise hangs the whole scan on slow networks. */
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+/**
+ * Reject if a promise takes too long, or as soon as `signal` aborts. Bounds
+ * the image upload, which has no built-in timeout or abort of its own.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      const err = new Error(message);
-      (err as any).code = 'timeout';
+    const fail = (code: 'timeout' | 'cancelled') => {
+      const err = new Error(code);
+      (err as any).code = code;
       reject(err);
-    }, ms);
+    };
+    const timer = setTimeout(() => fail('timeout'), ms);
+    const onAbort = () => { clearTimeout(timer); fail('cancelled'); };
+    if (signal?.aborted) { onAbort(); return; }
+    signal?.addEventListener('abort', onAbort);
+    const done = () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); };
     promise.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
+      (v) => { done(); resolve(v); },
+      (e) => { done(); reject(e); },
     );
   });
 }
 
 const UPLOAD_TIMEOUT_MS = 45_000;
+/** After a cancelled barcode lookup, wait before the live scanner may fire again. */
+const BARCODE_REARM_MS = 1_500;
 
-const analyzeStyles = StyleSheet.create({
+const overlayStyles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 999,
@@ -228,8 +263,8 @@ const analyzeStyles = StyleSheet.create({
   sweepArea: {
     position: 'absolute',
     top: SCREEN_H * 0.12,
-    left: 24,
-    right: 24,
+    left: spacing['2xl'],
+    right: spacing['2xl'],
     height: SWEEP_RANGE + 40,
   },
   beam: { position: 'absolute', left: 0, right: 0, top: 0 },
@@ -245,71 +280,79 @@ const analyzeStyles = StyleSheet.create({
     elevation: 8,
   },
   frame: { ...StyleSheet.absoluteFillObject },
-  fCorner: { position: 'absolute', width: 30, height: 30, borderColor: 'rgba(133,211,218,0.9)', borderWidth: 3 },
+  fCorner: { position: 'absolute', width: 30, height: 30, borderColor: withAlpha(T.primary, 0.9), borderWidth: 3 },
   fTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 18 },
   fTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 18 },
   fBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 18 },
   fBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 18 },
 
   card: {
-    marginHorizontal: 20,
-    marginBottom: 48,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing['4xl'],
     backgroundColor: T.surface,
-    borderRadius: 22,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: T.border,
-    paddingVertical: 20,
-    paddingHorizontal: 22,
-    gap: 14,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.md,
   },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: T.divider,
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  statusText: { flex: 1, ...type.body, color: T.textPrimary },
+  cancelBtn: {
+    alignSelf: 'stretch',
+    minHeight: HIT_TARGET,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: T.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepIconDone: { backgroundColor: T.primary, borderColor: T.primary },
-  stepIconActive: { borderColor: T.primary, backgroundColor: T.primaryTint },
-  stepText: { flex: 1, color: T.textSecondary, fontSize: 14.5, fontWeight: '600', letterSpacing: 0.2 },
-  subText: {
-    color: T.textSecondary,
-    fontSize: 11.5,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 2,
-  },
+  cancelText: { ...type.body, fontWeight: '700', color: T.textPrimary },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+interface ScanError {
+  mode: ScanMode;
+  message: string;
+  /** Re-runs the same job with the same input. */
+  retry: () => void;
+}
 
 export function ScanScreen({ navigation, route }: Props) {
   const { session } = useAuthStore();
   const { canScan, scansRemaining, isSubscribed, paywallVisible, showPaywall, dismissPaywall, consumeScan } = useSubscriptionGate();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
+  const [torch, setTorch] = useState(false);
   const requestedMode = route.params?.mode ?? 'meal';
   const [scanMode, setScanMode] = useState<ScanMode>(requestedMode);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingMode, setAnalyzingMode] = useState<ScanMode>('meal');
   const [pendingUri, setPendingUri] = useState<string | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [voiceAnalyzing, setVoiceAnalyzing] = useState(false);
+  const [scanError, setScanError] = useState<ScanError | null>(null);
   const [voiceListening, setVoiceListening] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const voiceRef = useRef<VoiceModePanelHandle>(null);
+  // The in-flight request, so Cancel and hardware back can abort it.
+  const abortRef = useRef<AbortController | null>(null);
   // Caches a successful upload for the current capture so a retry after a failed
   // *analysis* re-sends the URL, not the whole image again.
   const uploadedRef = useRef<{ rawUri: string; compressedUri: string; signedUrl: string } | null>(null);
   // Latch so the live barcode scanner fires the lookup once, not on every frame.
   const barcodeLock = useRef(false);
+  const rearmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    if (rearmTimer.current) clearTimeout(rearmTimer.current);
+  }, []);
 
   // The Scan tab stays mounted, so a previous session's photo / transcript would
   // still be on screen when the user comes back. Reset to a clean state each
-  // time the tab regains focus, in whichever mode the log hub asked for —
-  // re-mounting the voice panel is also what clears its transcript.
+  // time the tab regains focus, in whichever mode the log hub asked for.
+  // Re-mounting the voice panel is also what clears its recording.
   useFocusEffect(
     React.useCallback(() => {
       setPendingUri(null);
@@ -317,47 +360,107 @@ export function ScanScreen({ navigation, route }: Props) {
       uploadedRef.current = null;
       setScanMode(requestedMode);
       setVoiceListening(false);
-      setVoiceAnalyzing(false);
+      setIsAnalyzing(false);
       barcodeLock.current = false;
     }, [requestedMode]),
   );
 
+  /** Abort the in-flight request and return to the camera. The capture is kept. */
+  const cancelAnalysis = React.useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsAnalyzing(false);
+    // Re-arm the live barcode scanner after a pause, so a cancel doesn't
+    // immediately re-fire on the same code still in frame.
+    if (rearmTimer.current) clearTimeout(rearmTimer.current);
+    rearmTimer.current = setTimeout(() => { barcodeLock.current = false; }, BARCODE_REARM_MS);
+  }, []);
+
+  const retakeScan = React.useCallback(() => {
+    setScanError(null);
+    setPendingUri(null);
+    uploadedRef.current = null;
+    barcodeLock.current = false;
+  }, []);
+
   // Same nested-stack situation as Find a food: ScanCamera is the first route
   // of ScanNavigator, so the press has nothing to pop locally and would
-  // otherwise close the app. Don't allow leaving mid-analysis.
+  // otherwise close the app. Back while analysing means Cancel.
   useAndroidBack(
     React.useCallback(() => {
-      if (isAnalyzing) return true;
-      // Back on the error card dismisses it (return to camera), not the app.
+      if (isAnalyzing) { cancelAnalysis(); return true; }
       if (scanError) { retakeScan(); return true; }
+      if (voiceListening) { voiceRef.current?.cancelRecording(); return true; }
       navigation.getParent()?.goBack();
       return true;
-    }, [isAnalyzing, scanError, navigation]),
+    }, [isAnalyzing, scanError, voiceListening, navigation, cancelAnalysis, retakeScan]),
   );
 
-  const handleBarcode = async (code: string) => {
+  /**
+   * Runs one analysis job under a fresh AbortController with shared error
+   * handling. Every mode goes through here, so timeouts, network failures and
+   * cancellation behave identically whether it was a photo, label, barcode or
+   * a recording.
+   */
+  const runAnalysis = async (
+    mode: ScanMode,
+    job: (signal: AbortSignal) => Promise<void>,
+    retry: () => void,
+  ) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setAnalyzingMode(mode);
+    setIsAnalyzing(true);
+    setScanError(null);
+    try {
+      await job(controller.signal);
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.code === 'cancelled') return;
+      if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
+        // Free user out of daily scans: nudge to Pro.
+        showPaywall();
+        return;
+      }
+      if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
+        // Pro/trial hit the fair-use ceiling: no paywall, just let them know.
+        Alert.alert('Daily limit reached', "You've reached today's scan limit. It resets tomorrow.");
+        return;
+      }
+      console.warn(`[scan:${mode}] failed`, err?.code ?? err?.statusCode ?? 'unknown', err?.message);
+      // Recoverable: keep the capture so "Try again" is cheap and nothing is lost.
+      setScanError({ mode, message: scanErrorCopy(err, mode), retry });
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setIsAnalyzing(false);
+      }
+    }
+  };
+
+  /** Throws the shared "cancelled" error if the user backed out mid-job. */
+  const assertActive = (signal: AbortSignal) => {
+    if (signal.aborted) {
+      const err = new Error('cancelled');
+      (err as any).code = 'cancelled';
+      throw err;
+    }
+  };
+
+  const handleBarcode = (code: string) => {
     if (barcodeLock.current) return;
     barcodeLock.current = true;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setIsAnalyzing(true);
-    try {
-      const { result, image_url } = await lookupBarcode(code, session!.access_token);
-      const img = image_url ?? '';
-      // Reuse the label result screen — same shape, same log path (no scan used).
-      navigation.navigate('LabelResult', { imageUri: img, imageStorageUrl: img, result });
-    } catch (err: any) {
-      const notFound = err?.statusCode === 404;
-      Alert.alert(
-        notFound ? 'Product not found' : 'Lookup failed',
-        notFound
-          ? "This barcode isn't in the database yet. Try scanning the nutrition label instead."
-          : err?.message ?? 'Please try again.',
-        [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
-      );
-    } finally {
-      setIsAnalyzing(false);
-    }
+    lookup(code);
   };
+
+  const lookup = (code: string) => runAnalysis('barcode', async (signal) => {
+    const { result, image_url } = await lookupBarcode(code, session!.access_token, signal);
+    assertActive(signal);
+    const img = image_url ?? '';
+    // Reuse the label result screen: same shape, same log path (no scan used).
+    navigation.navigate('LabelResult', { imageUri: img, imageStorageUrl: img, result });
+  }, () => lookup(code));
 
   const handleCapture = async () => {
     if (!canScan) { showPaywall(); return; }
@@ -365,7 +468,7 @@ export function ScanScreen({ navigation, route }: Props) {
     const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
     if (photo?.uri) {
       setPendingUri(photo.uri);
-      // Straight to analysis — items are corrected on the result screen, which
+      // Straight to analysis. Items are corrected on the result screen, which
       // is more direct than guessing what to describe before seeing the result.
       if (scanMode === 'label') processLabelPhoto(photo.uri);
       else processPhoto(photo.uri);
@@ -397,7 +500,7 @@ export function ScanScreen({ navigation, route }: Props) {
 
     const fileName = `${session!.user.id}/${Date.now()}.jpg`;
 
-    // Read as base64 — fetch(file://) fails on Android production builds
+    // Read as base64: fetch(file://) fails on Android production builds
     const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -423,135 +526,97 @@ export function ScanScreen({ navigation, route }: Props) {
     return { compressedUri: compressed.uri, signedUrl: signedData.signedUrl };
   };
 
-  const handleScanError = (err: any) => {
-    if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
-      // Free user out of daily scans — nudge to Pro.
-      showPaywall();
-    } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
-      // Pro/trial hit the fair-use ceiling — no paywall, just let them know.
-      Alert.alert("Daily limit reached", err.message ?? "You've reached today's scan limit. It resets tomorrow.");
-    } else {
-      Alert.alert('Analysis failed', err.message ?? 'Please try again with a clearer photo.');
+  /** Upload once per capture; a retry after a failed analysis reuses the URL. */
+  const ensureUploaded = async (rawUri: string, signal: AbortSignal) => {
+    let up = uploadedRef.current;
+    if (!up || up.rawUri !== rawUri) {
+      const { compressedUri, signedUrl } = await withTimeout(uploadAndSign(rawUri), UPLOAD_TIMEOUT_MS, signal);
+      up = { rawUri, compressedUri, signedUrl };
+      uploadedRef.current = up;
     }
+    assertActive(signal);
+    return up;
   };
 
-  const processPhoto = async (rawUri: string) => {
-    setIsAnalyzing(true);
-    setScanError(null);
-    try {
-      // Reuse a prior successful upload for this same capture — a retry after a
-      // failed *analysis* shouldn't pay the upload cost again.
-      let up = uploadedRef.current;
-      if (!up || up.rawUri !== rawUri) {
-        const { compressedUri, signedUrl } = await withTimeout(
-          uploadAndSign(rawUri), UPLOAD_TIMEOUT_MS,
-          'Upload timed out — your connection looks slow. Try again.',
-        );
-        up = { rawUri, compressedUri, signedUrl };
-        uploadedRef.current = up;
-      }
+  const processPhoto = (rawUri: string) => runAnalysis('meal', async (signal) => {
+    const up = await ensureUploaded(rawUri, signal);
+    // Call backend (server enforces scan count gate)
+    const { result } = await analyzeFood(up.signedUrl, session!.access_token, undefined, signal);
+    assertActive(signal);
+    // Optimistically decrement the local "scans left" badge (server is authoritative).
+    consumeScan();
+    uploadedRef.current = null; // consumed; a fresh capture uploads again
+    navigation.navigate('ScanResult', {
+      imageUri: up.compressedUri,
+      imageStorageUrl: up.signedUrl,
+      result,
+    });
+  }, () => processPhoto(rawUri));
 
-      // Call backend (server enforces scan count gate)
-      const { result } = await analyzeFood(up.signedUrl, session!.access_token);
-
-      // Optimistically decrement the local "scans left" badge (server is authoritative).
-      consumeScan();
-      uploadedRef.current = null; // consumed — a fresh capture uploads again
-
-      navigation.navigate('ScanResult', {
-        imageUri: up.compressedUri,
-        imageStorageUrl: up.signedUrl,
-        result,
-      });
-    } catch (err: any) {
-      if (err?.statusCode === 402 || err?.code === 'scan_limit_reached') {
-        showPaywall();
-      } else if (err?.statusCode === 429 || err?.code === 'daily_limit_reached') {
-        Alert.alert('Daily limit reached', err.message ?? "You've reached today's scan limit. It resets tomorrow.");
-      } else {
-        // Recoverable (slow network / timeout / server) — keep the capture and
-        // the uploaded URL so "Try again" is cheap and nothing is lost.
-        setScanError(err?.message ?? 'Something went wrong. Please try again.');
-      }
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const retakeScan = () => {
-    setScanError(null);
-    setPendingUri(null);
+  const processLabelPhoto = (rawUri: string) => runAnalysis('label', async (signal) => {
+    const up = await ensureUploaded(rawUri, signal);
+    const { result } = await analyzeLabel(up.signedUrl, session!.access_token, signal);
+    assertActive(signal);
+    consumeScan();
     uploadedRef.current = null;
-  };
+    navigation.navigate('LabelResult', {
+      imageUri: up.compressedUri,
+      imageStorageUrl: up.signedUrl,
+      result,
+    });
+  }, () => processLabelPhoto(rawUri));
 
-  /** Log by description — no image, so no upload; straight to the text endpoint. */
-  const processVoiceText = async (text: string) => {
-    setVoiceAnalyzing(true);
-    try {
-      const { result } = await analyzeText(text, session!.access_token);
-      consumeScan();
-      navigation.navigate('ScanResult', {
-        // No photo for a spoken log — the result screen handles a missing image.
-        imageUri: '',
-        imageStorageUrl: '',
-        result,
-      });
-    } catch (err: any) {
-      handleScanError(err);
-    } finally {
-      setVoiceAnalyzing(false);
-    }
-  };
+  /** Log by description: no image, so no upload; straight to the text endpoint. */
+  const processVoiceText = (text: string) => runAnalysis('voice', async (signal) => {
+    const { result } = await analyzeText(text, session!.access_token, signal);
+    assertActive(signal);
+    consumeScan();
+    navigation.navigate('ScanResult', {
+      // No photo for a described log; the result screen shows what was typed.
+      imageUri: '',
+      imageStorageUrl: '',
+      result,
+      voice: { source: 'typed', transcript: text },
+    });
+  }, () => processVoiceText(text));
 
-  /** Log by voice — read the recorded clip and send the bytes to Gemini. */
-  const processVoiceAudio = async (uri: string, mimeType: string) => {
-    setVoiceAnalyzing(true);
-    try {
+  /** Log by voice: read the recorded clip and send the bytes to the backend. */
+  const processVoiceAudio = (uri: string, mimeType: string, durationMs: number) =>
+    runAnalysis('voice', async (signal) => {
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      const { result } = await analyzeVoice(base64, mimeType, session!.access_token);
+      assertActive(signal);
+      const { result } = await analyzeVoice(base64, mimeType, session!.access_token, signal);
+      assertActive(signal);
       consumeScan();
       navigation.navigate('ScanResult', {
         imageUri: '',
         imageStorageUrl: '',
         result,
+        // Only pass a transcript the API actually returned; never invent one.
+        voice: { source: 'spoken', transcript: result.transcript || undefined, durationMs },
       });
-    } catch (err: any) {
-      handleScanError(err);
-    } finally {
-      setVoiceAnalyzing(false);
-    }
-  };
+    }, () => processVoiceAudio(uri, mimeType, durationMs));
 
-  const processLabelPhoto = async (rawUri: string) => {
-    setIsAnalyzing(true);
-    try {
-      const { compressedUri, signedUrl } = await uploadAndSign(rawUri);
-      const { result } = await analyzeLabel(signedUrl, session!.access_token);
-      consumeScan();
+  // ── Permission states ──────────────────────────────────────────────────────
 
-      navigation.navigate('LabelResult', {
-        imageUri: compressedUri,
-        imageStorageUrl: signedUrl,
-        result,
-      });
-    } catch (err: any) {
-      handleScanError(err);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+  // Still resolving: a blank screen, not a flash of the denied state.
+  if (!permission) {
+    return <View style={styles.blank} />;
+  }
 
-  if (!permission?.granted) {
+  if (!permission.granted) {
+    const canAsk = permission.canAskAgain;
     return (
       <View style={styles.permissionRoot}>
         <SafeAreaView style={styles.permissionContainer} edges={['top', 'bottom']}>
-          {/* Close */}
           <TouchableOpacity
             style={styles.permissionClose}
             onPress={() => navigation.getParent()?.goBack()}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
           >
             <Ionicons name="close" size={24} color={T.textSecondary} />
           </TouchableOpacity>
@@ -561,18 +626,43 @@ export function ScanScreen({ navigation, route }: Props) {
               <Ionicons name="camera-outline" size={44} color={T.primary} />
             </View>
 
-            <Text style={styles.permissionTitle}>Camera access needed</Text>
+            <Text style={styles.permissionTitle}>
+              {canAsk ? 'Camera access needed' : 'Camera access is off'}
+            </Text>
             <Text style={styles.permissionText}>
-              CalVue uses your camera to scan meals and packaged-food labels. Photos are only used
-              to analyze nutrition.
+              {canAsk
+                ? 'CalVue uses your camera to scan meals and packaged-food labels. Photos are only used to work out nutrition.'
+                : 'Camera access for CalVue is turned off in your system settings. Turn it on there to scan meals and labels.'}
             </Text>
 
-            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission} activeOpacity={0.88}>
-              <Ionicons name="lock-open-outline" size={18} color={T.textOnPrimary} />
-              <Text style={styles.permissionButtonText}>Grant Camera Access</Text>
-            </TouchableOpacity>
+            {canAsk ? (
+              <TouchableOpacity
+                style={styles.permissionButton}
+                onPress={requestPermission}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+              >
+                <Ionicons name="lock-open-outline" size={18} color={T.textOnPrimary} />
+                <Text style={styles.permissionButtonText}>Allow camera access</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.permissionButton}
+                onPress={() => { Linking.openSettings().catch(() => {}); }}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+              >
+                <Ionicons name="settings-outline" size={18} color={T.textOnPrimary} />
+                <Text style={styles.permissionButtonText}>Open Settings</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity onPress={handlePickFromLibrary} activeOpacity={0.7} style={styles.permissionSecondary}>
+            <TouchableOpacity
+              onPress={handlePickFromLibrary}
+              activeOpacity={0.7}
+              style={styles.permissionSecondary}
+              accessibilityRole="button"
+            >
               <Text style={styles.permissionSecondaryText}>Pick from gallery instead</Text>
             </TouchableOpacity>
           </View>
@@ -581,9 +671,11 @@ export function ScanScreen({ navigation, route }: Props) {
     );
   }
 
+  const controlsDisabled = isAnalyzing;
+
   return (
     <View style={styles.container}>
-      {/* Camera is unmounted in VOICE mode — no torch, no battery drain. */}
+      {/* Camera is unmounted in voice mode: no torch, no battery drain. */}
       {scanMode === 'voice' ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
       ) : (
@@ -591,22 +683,31 @@ export function ScanScreen({ navigation, route }: Props) {
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={cameraType}
+          enableTorch={torch && cameraType === 'back'}
           barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
           // Live scanning only in barcode mode, and only until one is captured.
           onBarcodeScanned={
-            scanMode === 'barcode' && !isAnalyzing ? (r) => handleBarcode(r.data) : undefined
+            scanMode === 'barcode' && !isAnalyzing && !scanError ? (r) => handleBarcode(r.data) : undefined
           }
         />
       )}
 
-      {/* Full-screen analyzing overlay — scans over the photo just taken */}
-      {isAnalyzing && <AnalyzingOverlay imageUri={pendingUri} />}
+      {/* Full-screen analysing overlay over the photo just taken */}
+      {isAnalyzing && (
+        <AnalyzingOverlay
+          imageUri={pendingUri}
+          message={ANALYZING_COPY[analyzingMode]}
+          onCancel={cancelAnalysis}
+        />
+      )}
 
       {!!scanError && !isAnalyzing && (
         <ScanErrorOverlay
           imageUri={pendingUri}
-          message={scanError}
-          onRetry={() => { if (pendingUri) processPhoto(pendingUri); }}
+          title={ERROR_TITLE[scanError.mode]}
+          message={scanError.message}
+          retakeLabel={RETAKE_LABEL[scanError.mode]}
+          onRetry={scanError.retry}
           onRetake={retakeScan}
         />
       )}
@@ -617,14 +718,31 @@ export function ScanScreen({ navigation, route }: Props) {
         <View style={styles.topBar}>
           <TouchableOpacity
             style={styles.glassBtn}
-            disabled={isAnalyzing}
+            disabled={controlsDisabled}
             onPress={() => navigation.getParent()?.goBack()}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Close scanner"
           >
-            <Ionicons name="close" size={22} color="#fff" />
+            <Ionicons name="close" size={22} color={T.onScrim} />
           </TouchableOpacity>
-          <View style={styles.titleBadge}>
-            <Text style={styles.titleBadgeText}>AI Scanner</Text>
-          </View>
+
+          {scanMode !== 'voice' && cameraType === 'back' ? (
+            <TouchableOpacity
+              style={[styles.glassBtn, torch && styles.glassBtnActive]}
+              onPress={() => { Haptics.selectionAsync(); setTorch((t) => !t); }}
+              disabled={controlsDisabled}
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={torch ? 'Turn torch off' : 'Turn torch on'}
+              accessibilityState={{ selected: torch }}
+            >
+              <Ionicons name={torch ? 'flash' : 'flash-off'} size={20} color={torch ? T.textOnPrimary : T.onScrim} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.glassSpacer} />
+          )}
+
           <TouchableOpacity
             style={styles.glassBtn}
             onPress={() =>
@@ -633,193 +751,221 @@ export function ScanScreen({ navigation, route }: Props) {
                 'Point your camera at a plate of food and tap the shutter, or pick a photo from your gallery. After scanning you can edit each item, fix quantities, or add anything we missed.',
               )
             }
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="How to scan"
           >
-            <Ionicons name="help-circle-outline" size={22} color="#fff" />
+            <Ionicons name="help-circle-outline" size={22} color={T.onScrim} />
           </TouchableOpacity>
         </View>
 
         {/* Scan counter badge for free users. Barcode is free, so no counter. */}
-          {!isSubscribed && scanMode !== 'barcode' && (
-            <TouchableOpacity onPress={showPaywall} style={styles.scanCountBadge}>
-              <Text style={styles.scanCountText}>{scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today</Text>
-            </TouchableOpacity>
-          )}
+        {!isSubscribed && scanMode !== 'barcode' && (
+          <TouchableOpacity
+            onPress={showPaywall}
+            style={styles.scanCountBadge}
+            accessibilityRole="button"
+            accessibilityLabel={`${scansRemaining} scan${scansRemaining !== 1 ? 's' : ''} left today. See plans`}
+          >
+            <Text style={styles.scanCountText}>{scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today</Text>
+          </TouchableOpacity>
+        )}
 
-          {/* Viewfinder (camera modes) or the voice panel */}
+        {/* Viewfinder (camera modes) or the voice panel */}
         {scanMode === 'voice' ? (
           <View style={styles.viewfinderWrap}>
             <VoiceModePanel
+              ref={voiceRef}
               onSubmit={processVoiceText}
               onSubmitAudio={processVoiceAudio}
-              analyzing={voiceAnalyzing}
+              analyzing={isAnalyzing}
               onListeningChange={setVoiceListening}
             />
           </View>
         ) : (
-        <View style={styles.viewfinderWrap}>
-          <View style={styles.viewfinder}>
-            <View style={[styles.corner, styles.cornerTL]} />
-            <View style={[styles.corner, styles.cornerTR]} />
-            <View style={[styles.corner, styles.cornerBL]} />
-            <View style={[styles.corner, styles.cornerBR]} />
+          <View style={styles.viewfinderWrap}>
+            <View style={styles.viewfinder}>
+              <View style={[styles.corner, styles.cornerTL]} />
+              <View style={[styles.corner, styles.cornerTR]} />
+              <View style={[styles.corner, styles.cornerBL]} />
+              <View style={[styles.corner, styles.cornerBR]} />
+            </View>
+            <View style={styles.hintWrap}>
+              <Text style={styles.hint}>
+                {scanMode === 'label'
+                  ? 'Point at the nutrition label'
+                  : scanMode === 'barcode'
+                    ? 'Point at the barcode'
+                    : 'Point at your food'}
+              </Text>
+            </View>
+            {scanMode === 'barcode' && (
+              <Text style={styles.barcodeSub}>Hold still, it reads on its own. Barcodes don't use a scan.</Text>
+            )}
           </View>
-          <View style={styles.hintWrap}>
-            <Text style={styles.hint}>
-              {scanMode === 'label'
-                ? 'Point at the nutrition label'
-                : scanMode === 'barcode'
-                  ? 'Point at the barcode'
-                  : 'Point at your food'}
-            </Text>
-          </View>
-          {scanMode === 'barcode' && (
-            <Text style={styles.barcodeSub}>Holds still? It scans automatically — no scan used.</Text>
+        )}
+
+        {/* Mode toggle, outside the viewfinder branch so voice can be exited.
+            While recording it becomes a single Cancel, so there is always a way out. */}
+        <View style={styles.modeToggleWrap}>
+          {voiceListening ? (
+            <TouchableOpacity
+              style={styles.cancelPill}
+              onPress={() => voiceRef.current?.cancelRecording()}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel recording"
+            >
+              <Ionicons name="close" size={16} color={T.onScrim} />
+              <Text style={styles.cancelPillText}>Cancel</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.modeToggle}>
+              {([
+                { mode: 'meal',    icon: 'restaurant-outline',    label: 'Meal' },
+                { mode: 'barcode', icon: 'barcode-outline',       label: 'Barcode' },
+                { mode: 'label',   icon: 'document-text-outline', label: 'Label' },
+                { mode: 'voice',   icon: 'mic-outline',           label: 'Voice' },
+              ] as const).map(({ mode, icon, label }) => {
+                const active = scanMode === mode;
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.modePill, active && styles.modePillActive]}
+                    onPress={() => {
+                      if (!active) Haptics.selectionAsync();
+                      setScanMode(mode);
+                    }}
+                    disabled={controlsDisabled}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${label} mode`}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Ionicons name={icon} size={14} color={active ? T.textOnPrimary : T.textSecondary} />
+                    <Text style={[styles.modePillText, active && styles.modePillTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
         </View>
-        )}
 
-        {/* Mode toggle — outside the viewfinder branch so VOICE can be exited.
-            Hidden while listening to keep focus on the transcript. */}
-        {!voiceListening && (
-          <View style={styles.modeToggleWrap}>
-          <View style={styles.modeToggle}>
-            {([
-              { mode: 'meal',    icon: 'restaurant-outline',    label: 'MEAL' },
-              { mode: 'barcode', icon: 'barcode-outline',       label: 'BARCODE' },
-              { mode: 'label',   icon: 'document-text-outline', label: 'LABEL' },
-              { mode: 'voice',   icon: 'mic-outline',           label: 'VOICE' },
-            ] as const).map(({ mode, icon, label }) => {
-              const active = scanMode === mode;
-              return (
-                <TouchableOpacity
-                  key={mode}
-                  style={[styles.modePill, active && styles.modePillActive]}
-                  onPress={() => {
-                    if (!active) Haptics.selectionAsync();
-                    setScanMode(mode);
-                  }}
-                  disabled={isAnalyzing}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name={icon} size={14} color={active ? T.textOnPrimary : T.textSecondary} />
-                  <Text style={[styles.modePillText, active && styles.modePillTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          </View>
-        )}
-
-        {/* Bottom controls — photo modes only. Barcode auto-detects; voice has
+        {/* Bottom controls, photo modes only. Barcode auto-detects; voice has
             its own panel. */}
         {scanMode !== 'voice' && scanMode !== 'barcode' && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity onPress={handlePickFromLibrary} style={styles.sideButton} disabled={isAnalyzing}>
-            <View style={styles.glassBtn}>
-              <Ionicons name="images-outline" size={26} color="#fff" />
-            </View>
-            <Text style={styles.sideLabel}>Gallery</Text>
-          </TouchableOpacity>
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              onPress={handlePickFromLibrary}
+              style={styles.sideButton}
+              disabled={controlsDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="Pick a photo from your gallery"
+            >
+              <View style={styles.glassBtn}>
+                <Ionicons name="images-outline" size={26} color={T.onScrim} />
+              </View>
+              <Text style={styles.sideLabel}>Gallery</Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              onPress={handleCapture}
+              style={styles.captureButton}
+              disabled={controlsDisabled}
+              accessibilityRole="button"
+              accessibilityLabel={scanMode === 'label' ? 'Take a photo of the label' : 'Take a photo of your meal'}
+            >
+              <View style={[styles.captureInner, controlsDisabled && styles.dimmed]} />
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleCapture} style={styles.captureButton} disabled={isAnalyzing}>
-            <View style={[styles.captureInner, isAnalyzing && { opacity: 0.4 }]} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setCameraType(cameraType === 'back' ? 'front' : 'back')}
-            style={styles.sideButton}
-            disabled={isAnalyzing}
-          >
-            <View style={styles.glassBtn}>
-              <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
-            </View>
-            <Text style={styles.sideLabel}>Flip</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() => setCameraType(cameraType === 'back' ? 'front' : 'back')}
+              style={styles.sideButton}
+              disabled={controlsDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="Flip camera"
+            >
+              <View style={styles.glassBtn}>
+                <Ionicons name="camera-reverse-outline" size={26} color={T.onScrim} />
+              </View>
+              <Text style={styles.sideLabel}>Flip</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </SafeAreaView>
 
-
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: T.bg },
+  blank: { flex: 1, backgroundColor: T.bg },
   permissionRoot: { flex: 1, backgroundColor: T.bg },
-  permissionContainer: { flex: 1, paddingHorizontal: 28 },
+  permissionContainer: { flex: 1, paddingHorizontal: spacing['2xl'] + 4 },
   permissionClose: {
-    width: 40, height: 40, borderRadius: 20,
+    width: HIT_TARGET, height: HIT_TARGET, borderRadius: HIT_TARGET / 2,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: T.divider,
     borderWidth: 1, borderColor: T.border,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  permissionContent: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingBottom: 60 },
+  permissionContent: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.lg, paddingBottom: 60 },
   permissionIconWrap: {
     width: 96, height: 96, borderRadius: 48,
     backgroundColor: T.primaryTint,
-    borderWidth: 1, borderColor: 'rgba(133,211,218,0.35)',
+    borderWidth: 1, borderColor: T.primaryBorder,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  permissionTitle: { color: T.textPrimary, fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
-  permissionText: { color: T.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
+  permissionTitle: { ...type.headline, fontSize: 24, lineHeight: 30, color: T.textPrimary, textAlign: 'center' },
+  permissionText: { ...type.body, color: T.textSecondary, textAlign: 'center', paddingHorizontal: spacing.sm },
   permissionButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    height: 54, borderRadius: 14, backgroundColor: T.primary,
-    alignSelf: 'stretch', marginTop: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm + 2,
+    height: 54, borderRadius: radius.md, backgroundColor: T.primary,
+    alignSelf: 'stretch', marginTop: spacing.md,
   },
-  permissionButtonText: { color: T.textOnPrimary, fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
-  permissionSecondary: { paddingVertical: 8 },
-  permissionSecondaryText: { color: T.primary, fontSize: 14, fontWeight: '600' },
+  permissionButtonText: { ...type.body, fontWeight: '800', color: T.textOnPrimary },
+  permissionSecondary: { minHeight: HIT_TARGET, justifyContent: 'center', paddingVertical: spacing.sm },
+  permissionSecondaryText: { ...type.body, fontWeight: '600', color: T.primary },
   overlay: { flex: 1, justifyContent: 'space-between' },
   scanCountBadge: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginTop: 8,
+    backgroundColor: T.scrim,
+    paddingHorizontal: spacing.lg - 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
+    marginTop: spacing.sm,
   },
-  scanCountText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  scanCountText: { ...type.bodySm, fontWeight: '600', color: T.onScrim },
 
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
   glassBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
     backgroundColor: T.scrim,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: T.scrimBorder,
   },
-  titleBadge: {
-    backgroundColor: T.scrim,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  titleBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  glassBtnActive: { backgroundColor: T.primary, borderColor: T.primary },
+  glassSpacer: { width: HIT_TARGET, height: HIT_TARGET },
 
-  viewfinderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  viewfinderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing['2xl'] },
   viewfinder: {
     width: 280,
     height: 280,
     borderRadius: 40,
-    // No border here on purpose — the four corner brackets ARE the frame. A
+    // No border here on purpose: the four corner brackets ARE the frame. A
     // full outline boxed in the whole camera view and fought with the subject.
     position: 'relative',
   },
@@ -835,66 +981,76 @@ const styles = StyleSheet.create({
   cornerBL: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 40 },
   cornerBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 40 },
   hintWrap: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 50,
+    backgroundColor: T.scrim,
+    paddingHorizontal: spacing['2xl'],
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.pill,
   },
-  hint: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  hint: { fontSize: 16, fontWeight: '700', color: T.onScrim },
+  barcodeSub: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: T.onScrim,
+    textAlign: 'center',
+    paddingHorizontal: spacing['2xl'],
+    marginTop: -spacing.sm,
+  },
 
-  modeToggleWrap: { alignItems: 'center', paddingBottom: 12, paddingHorizontal: 12 },
+  modeToggleWrap: { alignItems: 'center', paddingBottom: spacing.md, paddingHorizontal: spacing.md },
   modeToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 50,
-    padding: 4,
+    backgroundColor: T.scrim,
+    borderRadius: radius.pill,
+    padding: spacing.xs,
     gap: 2,
     borderWidth: 1,
-    borderColor: T.border,
+    borderColor: T.scrimBorder,
   },
   modePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 50,
+    justifyContent: 'center',
+    gap: spacing.xs + 1,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
   },
   modePillActive: { backgroundColor: T.primary },
-  modePillText: { color: T.textSecondary, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6 },
+  modePillText: { ...type.bodySm, fontWeight: '700', color: T.textSecondary },
   modePillTextActive: { color: T.textOnPrimary },
-  barcodeSub: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12.5,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 4,
+  cancelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.pill,
+    backgroundColor: T.scrim,
+    borderWidth: 1,
+    borderColor: T.scrimBorder,
   },
+  cancelPillText: { ...type.body, fontWeight: '700', color: T.onScrim },
 
   bottomBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 32,
-    paddingHorizontal: 24,
+    paddingBottom: spacing['3xl'],
+    paddingHorizontal: spacing['2xl'],
   },
-  sideButton: { alignItems: 'center', gap: 6 },
-  proDot: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: T.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sideLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' },
+  sideButton: { alignItems: 'center', gap: spacing.xs + 2, minWidth: HIT_TARGET },
+  sideLabel: { ...type.label, letterSpacing: 0.4, textTransform: 'none', color: T.onScrim },
   captureButton: {
     width: 84,
     height: 84,
     borderRadius: 42,
     borderWidth: 4,
-    borderColor: '#fff',
+    borderColor: T.onScrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff' },
+  captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: T.onScrim },
+  dimmed: { opacity: 0.4 },
 });
-

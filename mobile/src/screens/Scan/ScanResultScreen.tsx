@@ -19,38 +19,40 @@ import type { FoodItem } from '../../services/api';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
+import { toast } from '../../store/toastStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
-import { useTheme } from '../../hooks/useTheme';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { ScanItemsEditor } from '../../components/ScanItemsEditor';
+import { MealTypePicker } from '../../components/MealTypePicker';
+import { formatDuration } from '../../components/VoiceModePanel';
 import { sumItems } from '../../utils/foodItems';
-import { logFoodItems } from '../../services/foodLogs';
+import { logFoodItems, type MealType } from '../../services/foodLogs';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useAndroidBack } from '../../hooks/useAndroidBack';
+import { T, withAlpha, type, spacing, radius, HIT_TARGET, tabularNums } from '../../theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanResult'>;
   route: RouteProp<ScanStackParamList, 'ScanResult'>;
 };
 
-const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
-const MEAL_LABELS: Record<string, string> = {
+const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
   dinner: 'Dinner',
   snack: 'Snack',
 };
 
-// Standard GDA (Guide Daily Amounts) for a 2 000 kcal diet
+// Reference daily amounts for a 2,000 kcal day.
 const MACRO_GDA: Record<string, number> = {
   Protein: 50,
   Carbs:   260,
   Fat:     78,
   Fiber:   25,
   Sugar:   50,
-  'Sat Fat': 20,
+  'Saturated fat': 20,
   Sodium:  2300, // mg
 };
 
@@ -60,24 +62,24 @@ const MACRO_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Fat:     'water-outline',
   Fiber:   'leaf-outline',
   Sugar:   'cube-outline',
-  'Sat Fat': 'flame-outline',
+  'Saturated fat': 'flame-outline',
   Sodium:  'egg-outline',
 };
 
 function NutrientRow({ label, value, color, unit = 'g' }: { label: string; value: number; color: string; unit?: string }) {
-  const { theme } = useTheme();
   const gdaPct = Math.round((value / (MACRO_GDA[label] ?? 100)) * 100);
-  // Natural reading order: icon → name → amount → share of daily intake.
   return (
-    <View style={[rowStyles.row, { borderBottomColor: theme.dividerColor }]}>
-      <View style={[rowStyles.iconWrap, { backgroundColor: color + '22' }]}>
+    <View style={rowStyles.row}>
+      <View style={[rowStyles.iconWrap, { backgroundColor: withAlpha(color, 0.14) }]}>
         <Ionicons name={MACRO_ICONS[label] ?? 'nutrition-outline'} size={18} color={color} />
       </View>
-      <Text style={[rowStyles.macroLabel, { color: theme.textPrimary }]}>{label}</Text>
-      <Text style={[rowStyles.amount, { color: theme.textPrimary }]}>
-        {Math.round(value)}<Text style={[rowStyles.unit, { color: theme.textSecondary }]}>{unit}</Text>
+      <View style={rowStyles.text}>
+        <Text style={rowStyles.macroLabel}>{label}</Text>
+        <Text style={rowStyles.gdaLabel}>{gdaPct}% of a 2,000 kcal day</Text>
+      </View>
+      <Text style={rowStyles.amount}>
+        {Math.round(value)}<Text style={rowStyles.unit}> {unit}</Text>
       </Text>
-      <Text style={[rowStyles.gdaLabel, { color: theme.textMuted }]}>{gdaPct}% GDA</Text>
     </View>
   );
 }
@@ -86,38 +88,45 @@ const rowStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
+    borderBottomColor: T.divider,
+    gap: spacing.md,
   },
   iconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  macroLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
-  amount:   { fontSize: 20, fontWeight: '800', lineHeight: 24 },
-  unit:     { fontSize: 12, fontWeight: '500' },
-  gdaLabel: { fontSize: 12, fontWeight: '600', minWidth: 64, textAlign: 'right' },
+  text: { flex: 1, gap: 1 },
+  macroLabel: { ...type.body, fontWeight: '600', color: T.textPrimary },
+  gdaLabel: { ...type.bodySm, color: T.textMuted },
+  amount:   { fontSize: 20, fontWeight: '800', lineHeight: 24, color: T.textPrimary, ...tabularNums },
+  unit:     { ...type.bodySm, color: T.textSecondary },
 });
 
-// Honest confidence labels — no fabricated percentages.
-const CONFIDENCE_LABEL: Record<string, string> = {
-  very_high: 'Very high match',
-  high:      'High match',
-  medium:    'Likely match',
-  low:       'Low confidence',
+// Honest confidence: a label and a colour, no fabricated percentages.
+type ConfidenceStyle = {
+  label: string;
+  bg: string;
+  fg: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+const CONFIDENCE: Record<string, ConfidenceStyle> = {
+  high:      { label: 'High confidence', bg: T.successTint, fg: T.success, icon: 'checkmark-circle' },
+  very_high: { label: 'High confidence', bg: T.successTint, fg: T.success, icon: 'checkmark-circle' },
+  medium:    { label: 'Likely match', bg: T.surface2, fg: T.textSecondary, icon: 'information-circle' },
+  low:       { label: 'Low confidence', bg: T.warningTint, fg: T.warning, icon: 'alert-circle' },
 };
 
 export function ScanResultScreen({ navigation, route }: Props) {
-  const { imageUri, imageStorageUrl, result } = route.params;
+  const { imageUri, imageStorageUrl, result, voice } = route.params;
   const { session, fetchProfile } = useAuthStore();
-  const { addLog } = useFoodLogStore();
-  const { theme } = useTheme();
+  const { addLog, removeLog } = useFoodLogStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
-  const [selectedMeal, setSelectedMeal] = useState<typeof MEAL_TYPES[number]>(getMealTypeFromTime());
+  const [selectedMeal, setSelectedMeal] = useState<MealType>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
 
   // The AI proposes items; the user confirms them. Legacy cached scans have no
@@ -152,15 +161,36 @@ export function ScanResultScreen({ navigation, route }: Props) {
     }, [isSaving, navigation]),
   );
 
-  /** Abandon the scan entirely and return to Home. */
-  const discard = React.useCallback(() => {
+  const goHome = React.useCallback(() => {
+    // Pop the whole Scan stack off the root navigator and land on Home, so
+    // the day's updated ring is the first thing seen. Popping the parent
+    // unmounts this screen too; otherwise re-opening the camera would show
+    // the meal that was just logged.
     navigation
       .getParent<NativeStackNavigationProp<RootStackParamList>>()
       ?.navigate('Main', { screen: 'Home' });
   }, [navigation]);
 
-  // Totals are always derived from the edited items — never the original scan.
+  // Totals are always derived from the edited items, never the original scan.
   const totals = sumItems(items);
+  const confidence = CONFIDENCE[String(result.confidence).toLowerCase()] ?? CONFIDENCE.medium;
+
+  /** Undo a just-saved meal: drop the rows locally and on the server. */
+  const undoLog = async (ids: string[]) => {
+    if (!session?.user.id) return;
+    ids.forEach(removeLog);
+    const { error } = await supabase
+      .from('food_logs')
+      .delete()
+      .in('id', ids)
+      .eq('user_id', session.user.id);
+    if (error) {
+      console.warn('[scan-result] undo delete failed', error.message);
+      Alert.alert("Couldn't undo", 'That meal is still logged. You can delete it from your history.');
+      return;
+    }
+    void fetchProfile();
+  };
 
   const handleSave = async () => {
     if (!session?.user.id) return;
@@ -171,7 +201,7 @@ export function ScanResultScreen({ navigation, route }: Props) {
     setIsSaving(true);
 
     try {
-      // One row per item — History, macro charts and export gain per-food
+      // One row per item: History, macro charts and export gain per-food
       // granularity. See `logFoodItems`, which every logging path shares.
       const data = await logFoodItems({
         userId: session.user.id,
@@ -194,142 +224,125 @@ export function ScanResultScreen({ navigation, route }: Props) {
       data.forEach(addLog);
       await fetchProfile();
 
-      // Logged today — push tonight's streak nudge to tomorrow so it only ever
+      // Logged today: push tonight's streak nudge to tomorrow so it only ever
       // fires on days the user actually hasn't logged.
       const notif = useNotificationStore.getState();
       void notif.refreshStreakReminder(true);
-      // First log ever → offer to turn on reminders (self-gates to once).
+      // First log ever: offer to turn on reminders (self-gates to once).
       void notif.promptForRemindersOnce();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Pop the whole Scan stack off the root navigator and land on Home, so
-      // the day's updated ring is the first thing seen. Popping the parent
-      // unmounts this screen too — otherwise re-opening the camera would show
-      // the meal that was just logged.
-      navigation
-        .getParent<NativeStackNavigationProp<RootStackParamList>>()
-        ?.navigate('Main', { screen: 'Home' });
-    } catch (err: any) {
-      Alert.alert('Save failed', err.message ?? 'Please try again.');
+      const ids = data.map((row) => row.id);
+      toast(`Logged to ${MEAL_LABELS[selectedMeal]} · ${totals.calories} kcal`, {
+        action: { label: 'Undo', onPress: () => undoLog(ids) },
+      });
+      goHome();
+    } catch (err) {
+      console.warn('[scan-result] save failed', err instanceof Error ? err.message : err);
+      Alert.alert("Couldn't save that", 'Check your connection and try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
+  const ctaLabel = `Log meal · ${totals.calories} kcal`;
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero — a spoken log has no photo, so show a compact banner instead
-            of a blank 1:1 image block. */}
-        <View style={styles.heroWrap}>
-          {/* No header on this screen, so "I don't want to log this" needs its
-              own affordance — Retake implies another photo, not leaving. */}
+        {/* No navigator header on this screen, so "I don't want to log this"
+            needs its own affordance. Retake implies another photo, not leaving. */}
+        <View style={styles.topBar}>
           <TouchableOpacity
-            style={styles.discardBtn}
-            onPress={discard}
+            style={styles.iconBtn}
+            onPress={goHome}
             activeOpacity={0.8}
+            hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel="Discard this scan and go home"
           >
-            <Ionicons name="close" size={22} color="#fff" />
+            <Ionicons name="close" size={24} color={T.textPrimary} />
           </TouchableOpacity>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.foodImage} />
-          ) : (
-            <View style={[styles.voiceHero, { backgroundColor: theme.surface, borderColor: theme.borderColor }]}>
-              <Ionicons name="mic" size={26} color={theme.primary} />
-              <Text style={[styles.voiceHeroText, { color: theme.textSecondary }]}>
-                Logged by voice
-              </Text>
-            </View>
-          )}
-          <View style={[styles.aiBadge, { backgroundColor: theme.primary + 'EE' }]}>
-            <Ionicons name="checkmark-circle" size={14} color="#fff" />
-            <Text style={styles.aiBadgeText}>
-              {CONFIDENCE_LABEL[result.confidence.toLowerCase()] ?? 'AI estimate'}
-            </Text>
+          <Text style={styles.topTitle}>Check your meal</Text>
+          <View style={styles.iconBtn} />
+        </View>
+
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={styles.foodImage} accessibilityIgnoresInvertColors />
+        ) : (
+          <VoiceHero
+            transcript={voice?.transcript}
+            source={voice?.source}
+            durationMs={voice?.durationMs}
+            onEdit={() => navigation.goBack()}
+          />
+        )}
+
+        {/* Hero: the number that matters, with how sure we are right beside it. */}
+        <View style={styles.hero}>
+          <View style={styles.kcalRow}>
+            <Text style={styles.kcal}>{totals.calories}</Text>
+            <Text style={styles.kcalUnit}>kcal</Text>
+          </View>
+          <View
+            style={[styles.confChip, { backgroundColor: confidence.bg }]}
+            accessibilityRole="text"
+            accessibilityLabel={`Confidence: ${confidence.label}`}
+          >
+            <Ionicons name={confidence.icon} size={14} color={confidence.fg} />
+            <Text style={[styles.confText, { color: confidence.fg }]}>{confidence.label}</Text>
           </View>
         </View>
 
-        {/* Result card */}
-        <View style={[styles.card, { backgroundColor: theme.surface, shadowColor: theme.primary }]}>
+        <View style={styles.card}>
+          <Text style={styles.foodName}>{result.food_name}</Text>
 
-          {/* Name + calories row */}
-          <View style={styles.nameRow}>
-            <Text style={[styles.foodName, { color: theme.textPrimary }]}>{result.food_name}</Text>
-            <View style={styles.calBlock}>
-              <Text style={[styles.calories, { color: theme.primary }]}>{totals.calories}</Text>
-              <Text style={[styles.kcalUnit, { color: theme.textSecondary }]}>KCAL</Text>
-            </View>
-          </View>
-
-          {/* Portion the estimate is based on — the biggest source of error, so
-              show it plainly rather than hiding the assumption. */}
+          {/* The portion the estimate rests on is the biggest source of error,
+              so say it plainly rather than hiding the assumption. */}
           {(result.portion_g > 0 || !!result.portion_desc) && (
             <View style={styles.portionRow}>
-              <Ionicons name="scale-outline" size={14} color={theme.textMuted} />
-              <Text style={[styles.portionText, { color: theme.textSecondary }]}>
+              <Ionicons name="scale-outline" size={14} color={T.textMuted} />
+              <Text style={styles.portionText}>
                 Based on {result.portion_desc || 'the visible portion'}
-                {totals.grams > 0 ? ` · ~${totals.grams}g` : ''}
+                {totals.grams > 0 ? ` · about ${totals.grams} g` : ''}
               </Text>
             </View>
           )}
 
-          {!!result.notes && (
-            <Text style={[styles.notesText, { color: theme.textMuted }]}>{result.notes}</Text>
-          )}
+          {!!result.notes && <Text style={styles.notesText}>{result.notes}</Text>}
 
-          {/* Editable item list — AI proposes, user confirms */}
+          {/* Editable item list: AI proposes, user confirms */}
           <ScanItemsEditor items={items} onChange={setItems} />
+          <Text style={styles.hint}>Tap any item to adjust the portion.</Text>
 
-          {/* Meal type chips */}
-          <View style={styles.mealChips}>
-            {MEAL_TYPES.map((meal) => (
-              <TouchableOpacity
-                key={meal}
-                onPress={() => setSelectedMeal(meal)}
-                style={[
-                  styles.mealChip,
-                  { borderColor: theme.borderColor },
-                  selectedMeal === meal && { backgroundColor: theme.primary, borderColor: theme.primary },
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.mealChipLabel,
-                  { color: theme.textSecondary },
-                  selectedMeal === meal && { color: '#fff' },
-                ]}>
-                  {MEAL_LABELS[meal]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={styles.sectionLabel}>Log to</Text>
+          <MealTypePicker value={selectedMeal} onChange={setSelectedMeal} />
 
-          {/* Macro rows — Pro Feature */}
-          <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full Nutrition Analysis" borderRadius={12}>
-            <View style={styles.macroList}>
-              <NutrientRow label="Protein" value={totals.protein_g} color={theme.protein} />
-              <NutrientRow label="Carbs"   value={totals.carbs_g}   color={theme.carbs} />
-              <NutrientRow label="Fat"     value={totals.fat_g}     color={theme.fat} />
-              <NutrientRow label="Fiber"   value={totals.fiber_g}   color={theme.fiber} />
-              <NutrientRow label="Sugar"   value={totals.sugar_g}   color={theme.carbs} />
-              <NutrientRow label="Sat Fat" value={totals.sat_fat_g} color={theme.fat} />
-              <NutrientRow label="Sodium"  value={totals.sodium_mg} color={theme.warning} unit="mg" />
+          {/* Macro rows: Pro feature */}
+          <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full nutrition breakdown" borderRadius={radius.md}>
+            <View>
+              <NutrientRow label="Protein" value={totals.protein_g} color={T.protein} />
+              <NutrientRow label="Carbs"   value={totals.carbs_g}   color={T.carbs} />
+              <NutrientRow label="Fat"     value={totals.fat_g}     color={T.fat} />
+              <NutrientRow label="Fiber"   value={totals.fiber_g}   color={T.fiber} />
+              <NutrientRow label="Sugar"   value={totals.sugar_g}   color={T.carbs} />
+              <NutrientRow label="Saturated fat" value={totals.sat_fat_g} color={T.fat} />
+              <NutrientRow label="Sodium"  value={totals.sodium_mg} color={T.warning} unit="mg" />
             </View>
           </ProGate>
         </View>
       </ScrollView>
 
-      {/* Action buttons */}
-      <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.borderColor }]}>
+      {/* Actions: one primary, one quiet way back to the camera */}
+      <View style={styles.footer}>
         <Button
-          mode="outlined"
+          mode="text"
           onPress={() => navigation.goBack()}
-          style={[styles.retakeButton, { borderColor: theme.borderColor }]}
+          style={styles.retakeButton}
           contentStyle={styles.buttonContent}
-          textColor={theme.textSecondary}
-          icon="camera-retake-outline"
+          labelStyle={styles.retakeLabel}
+          textColor={T.textSecondary}
+          disabled={isSaving}
         >
           Retake
         </Button>
@@ -340,10 +353,12 @@ export function ScanResultScreen({ navigation, route }: Props) {
           disabled={isSaving}
           style={styles.saveButton}
           contentStyle={styles.buttonContent}
-          buttonColor={theme.primary}
+          labelStyle={styles.saveLabel}
+          buttonColor={T.primary}
+          textColor={T.textOnPrimary}
           icon="check"
         >
-          {items.length > 1 ? `Log ${items.length} items` : 'Log This Meal'}
+          {ctaLabel}
         </Button>
       </View>
 
@@ -352,75 +367,143 @@ export function ScanResultScreen({ navigation, route }: Props) {
   );
 }
 
+/**
+ * Stand-in for the photo on a described log. Shows what we were given: the
+ * typed text, the transcript when the API returns one, or else how long the
+ * recording was. It never invents words.
+ */
+function VoiceHero({
+  transcript, source, durationMs, onEdit,
+}: { transcript?: string; source?: 'spoken' | 'typed'; durationMs?: number; onEdit: () => void }) {
+  const hasText = !!transcript?.trim();
+  return (
+    <View style={styles.voiceHero}>
+      <View style={styles.voiceIcon}>
+        <Ionicons name={source === 'typed' ? 'create-outline' : 'mic'} size={20} color={T.primary} />
+      </View>
+      <View style={styles.voiceText}>
+        {hasText ? (
+          <>
+            <Text style={styles.voiceLabel}>{source === 'typed' ? 'You typed' : 'We heard'}</Text>
+            <Text style={styles.voiceQuote}>“{transcript!.trim()}”</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.voiceLabel}>Logged by voice</Text>
+            <Text style={styles.voiceQuote}>
+              {durationMs ? `From a ${formatDuration(durationMs)} recording` : 'From a recording'}
+            </Text>
+          </>
+        )}
+      </View>
+      {hasText && (
+        <TouchableOpacity
+          onPress={onEdit}
+          style={styles.voiceEdit}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Edit what you said"
+        >
+          <Text style={styles.voiceEditText}>Edit</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: T.bg },
   scroll: { paddingBottom: 120 },
-  heroWrap: { position: 'relative' },
-  discardBtn: {
-    position: 'absolute', top: 12, left: 12, zIndex: 10,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-  },
-  foodImage: { width: '100%', aspectRatio: 1, resizeMode: 'cover' },
-  voiceHero: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    marginHorizontal: 16, marginTop: 12,
-    paddingVertical: 22, borderRadius: 20, borderWidth: 1,
-  },
-  voiceHeroText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
-  aiBadge: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 50,
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    paddingHorizontal: spacing.md,
+    minHeight: HIT_TARGET + spacing.sm,
   },
-  aiBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  iconBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  topTitle: { flex: 1, ...type.titleSm, textAlign: 'center', color: T.textPrimary },
+  foodImage: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 267,
+    aspectRatio: 4 / 3,
+    maxHeight: 200,
+    borderRadius: radius.lg,
+    resizeMode: 'cover',
+    backgroundColor: T.surface2,
+  },
+  voiceHero: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginHorizontal: spacing.xl,
+    padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1,
+    backgroundColor: T.surface, borderColor: T.border,
+  },
+  voiceIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: T.primaryTint,
+  },
+  voiceText: { flex: 1, gap: 2 },
+  voiceLabel: { ...type.bodySm, color: T.textMuted },
+  voiceQuote: { ...type.body, color: T.textPrimary },
+  voiceEdit: { minHeight: HIT_TARGET, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  voiceEditText: { ...type.body, fontWeight: '700', color: T.primary },
+
+  hero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  kcalRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs + 2 },
+  kcal: { ...type.display, color: T.textPrimary },
+  kcalUnit: { ...type.titleSm, color: T.textSecondary },
+  confChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+  },
+  confText: { ...type.bodySm, fontWeight: '700' },
+
   card: {
-    margin: 16,
-    borderRadius: 20,
-    padding: 20,
-    gap: 14,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
-  foodName: { flex: 1, fontSize: 22, fontWeight: '800', lineHeight: 28 },
-  calBlock: { alignItems: 'flex-end' },
-  calories: { fontSize: 40, fontWeight: '800', lineHeight: 44, letterSpacing: -1 },
-  kcalUnit: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  portionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  portionText: { fontSize: 13, fontWeight: '600', flex: 1 },
-  notesText: { fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
-  mealChips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  mealChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 50,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.lg - 2,
+    backgroundColor: T.surface,
     borderWidth: 1,
+    borderColor: T.border,
   },
-  mealChipLabel: { fontSize: 13, fontWeight: '700' },
-  macroList: { gap: 0 },
+  foodName: { ...type.title, color: T.textPrimary },
+  portionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2, marginTop: -spacing.sm },
+  portionText: { ...type.bodySm, fontWeight: '600', color: T.textSecondary, flex: 1 },
+  notesText: { ...type.bodySm, color: T.textMuted, fontStyle: 'italic', marginTop: -spacing.sm },
+  hint: { ...type.bodySm, color: T.textMuted, textAlign: 'center', marginTop: -spacing.xs },
+  sectionLabel: { ...type.label, color: T.textMuted, marginBottom: -spacing.sm },
+
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    paddingBottom: 32,
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    paddingBottom: spacing['3xl'],
+    backgroundColor: T.surface,
     borderTopWidth: 1,
+    borderTopColor: T.border,
   },
   retakeButton: { flex: 1 },
-  saveButton: { flex: 2, borderRadius: 12 },
+  retakeLabel: { ...type.body, fontWeight: '700' },
+  saveButton: { flex: 2, borderRadius: radius.md },
+  saveLabel: { ...type.body, fontWeight: '800' },
   buttonContent: { height: 52 },
 });

@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import type { MealType } from '../services/foodLogs';
-import { T } from '../theme';
+import { T, type, spacing, radius, HIT_TARGET } from '../theme';
 
 const MEALS: readonly { key: MealType; label: string }[] = [
   { key: 'breakfast', label: 'Breakfast' },
@@ -17,7 +17,7 @@ interface Props {
   onChange: (meal: MealType) => void;
 }
 
-/** Breakfast / Lunch / Dinner / Snack selector — one row of chips. */
+/** Breakfast / Lunch / Dinner / Snack selector, one row of chips. */
 export function MealTypePicker({ value, onChange }: Props) {
   return (
     <View style={styles.row}>
@@ -29,6 +29,7 @@ export function MealTypePicker({ value, onChange }: Props) {
             style={[styles.chip, active && styles.chipActive]}
             onPress={() => { Haptics.selectionAsync(); onChange(m.key); }}
             accessibilityRole="button"
+            accessibilityLabel={m.label}
             accessibilityState={{ selected: active }}
           >
             <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
@@ -40,17 +41,20 @@ export function MealTypePicker({ value, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 6 },
+  row: { flexDirection: 'row', gap: spacing.xs + 2 },
   chip: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 11,
+    minHeight: HIT_TARGET,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
-  chipActive: { backgroundColor: T.primaryTint, borderColor: 'rgba(133,211,218,0.45)' },
-  chipText: { fontSize: 12.5, fontWeight: '700', color: T.textSecondary },
+  chipActive: { backgroundColor: T.primaryTint, borderColor: T.primaryBorder },
+  chipText: { ...type.bodySm, fontWeight: '700', color: T.textSecondary },
   chipTextActive: { color: T.primary },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,42 +16,40 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
+import type { FoodItem } from '../../services/api';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
+import { toast } from '../../store/toastStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
+import { rescaleItem } from '../../utils/foodItems';
+import { logFoodItems, type MealType } from '../../services/foodLogs';
 import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
+import { MealTypePicker } from '../../components/MealTypePicker';
+import { PortionSheet } from '../../components/PortionSheet';
 import { useAndroidBack } from '../../hooks/useAndroidBack';
-import { T } from '../../theme';
+import { T, scoreColor, type, spacing, radius, HIT_TARGET, tabularNums } from '../../theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'LabelResult'>;
   route: RouteProp<ScanStackParamList, 'LabelResult'>;
 };
 
-// Screen palette — derived from the shared design tokens so colours stay in
-// sync app-wide (see theme/tokens.ts).
-const C = {
-  bg: T.bg,
-  glass: T.surface,
-  glassBorder: T.border,
-  primary: T.primary,
-  secondary: T.primary,
-  onSurface: T.textPrimary,
-  onSurfaceVar: T.textSecondary,
-  outline: T.textMuted,
-  good: T.success,
-  medium: T.warning,
-  bad: T.error,
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
 };
 
-function scoreColor(score: number): string {
-  if (score >= 76) return C.good;
-  if (score >= 56) return C.medium;
-  return C.bad;
-}
+/** The three bands the ring uses, named the way the caption names them. */
+const SCORE_BANDS = [
+  { min: 76, range: '76 and above', label: 'A healthy choice' },
+  { min: 56, range: '56 to 75', label: 'Okay in moderation' },
+  { min: 0, range: 'Below 56', label: 'Consider an alternative' },
+] as const;
 
 // ── Score ring ───────────────────────────────────────────────────────────────
 const RING_SIZE = 148;
@@ -63,11 +61,11 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
   const color = scoreColor(score);
   const offset = RING_CIRC * (1 - score / 100);
   return (
-    <View style={styles.ringWrap}>
+    <View style={styles.ringWrap} accessibilityRole="image" accessibilityLabel={`Health score ${score} out of 100, grade ${grade}`}>
       <Svg width={RING_SIZE} height={RING_SIZE}>
         <Circle
           cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-          stroke="rgba(255,255,255,0.08)" strokeWidth={RING_STROKE} fill="none"
+          stroke={T.border} strokeWidth={RING_STROKE} fill="none"
         />
         <Circle
           cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
@@ -80,7 +78,7 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
       </Svg>
       <View style={styles.ringCenter} pointerEvents="none">
         <Text style={[styles.ringScore, { color }]}>{score}</Text>
-        <Text style={styles.ringOutOf}>/ 100</Text>
+        <Text style={styles.ringOutOf}>out of 100</Text>
       </View>
       <View style={[styles.gradeChip, { backgroundColor: color }]}>
         <Text style={styles.gradeChipText}>{grade}</Text>
@@ -93,77 +91,111 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 export function LabelResultScreen({ navigation, route }: Props) {
   const { imageUri, imageStorageUrl, result } = route.params;
   const { session, fetchProfile } = useAuthStore();
-  const { addLog } = useFoodLogStore();
+  const { addLog, removeLog } = useFoodLogStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [isSaving, setIsSaving] = useState(false);
+  const [mealType, setMealType] = useState<MealType>(getMealTypeFromTime());
+  const [portionOpen, setPortionOpen] = useState(false);
 
   // Same nested-stack reason as ScanResult: handle back explicitly rather than
   // relying on it bubbling out of the inner navigator.
   useAndroidBack(
     React.useCallback(() => {
       if (isSaving) return true;
+      if (portionOpen) { setPortionOpen(false); return true; }
       navigation.goBack();
       return true;
-    }, [isSaving, navigation]),
+    }, [isSaving, portionOpen, navigation]),
   );
 
   const { health, per_100g } = result;
-  // Log one serving when the pack states one; otherwise fall back to 100 g.
-  const factor = result.serving_g > 0 ? result.serving_g / 100 : 1;
-  const servingLabel = result.serving_g > 0 ? `${result.serving_g}g serving` : '100g';
+  const productName = result.brand ? `${result.brand} ${result.product_name}` : result.product_name;
+  // Start from one serving when the pack states one; otherwise 100 g. The user
+  // adjusts from there in the portion sheet before anything is logged.
+  const startGrams = result.serving_g > 0 ? Math.round(result.serving_g) : 100;
+  const servingLabel = result.serving_g > 0 ? `${startGrams} g serving` : '100 g';
 
-  const handleLog = async () => {
+  const startItem = useMemo<FoodItem>(() => {
+    const per100: FoodItem = {
+      name: productName,
+      quantity: 100,
+      unit: 'g',
+      grams: 100,
+      calories: Math.round(per_100g.energy_kcal),
+      protein_g: per_100g.protein_g,
+      carbs_g: per_100g.carbs_g,
+      fat_g: per_100g.total_fat_g,
+      fiber_g: per_100g.fiber_g,
+      // Real values off the label / barcode, no estimation needed here.
+      sodium_mg: per_100g.sodium_mg,
+      sugar_g: per_100g.sugar_g,
+      sat_fat_g: per_100g.sat_fat_g,
+      source: 'database',
+    };
+    return rescaleItem(per100, startGrams, 'g');
+  }, [productName, per_100g, startGrams]);
+
+  const goHome = () => {
+    // Pop the whole Scan stack off the root navigator and land on Home, so
+    // the day's updated ring is the first thing seen. Popping the parent
+    // unmounts this screen too; otherwise re-opening the camera would show
+    // the product that was just logged.
+    navigation
+      .getParent<NativeStackNavigationProp<RootStackParamList>>()
+      ?.navigate('Main', { screen: 'Home' });
+  };
+
+  const undoLog = async (ids: string[]) => {
+    if (!session?.user.id) return;
+    ids.forEach(removeLog);
+    const { error } = await supabase
+      .from('food_logs')
+      .delete()
+      .in('id', ids)
+      .eq('user_id', session.user.id);
+    if (error) {
+      console.warn('[label-result] undo delete failed', error.message);
+      Alert.alert("Couldn't undo", 'That item is still logged. You can delete it from your history.');
+      return;
+    }
+    void fetchProfile();
+  };
+
+  const handleLog = async (item: FoodItem) => {
     if (!session?.user.id) return;
     setIsSaving(true);
     try {
-      const { data, error } = await supabase
-        .from('food_logs')
-        .insert({
-          user_id: session.user.id,
-          image_url: imageStorageUrl,
-          food_name: result.brand ? `${result.brand} ${result.product_name}` : result.product_name,
-          calories: Math.round(per_100g.energy_kcal * factor),
-          protein_g: Math.round(per_100g.protein_g * factor * 10) / 10,
-          carbs_g: Math.round(per_100g.carbs_g * factor * 10) / 10,
-          fat_g: Math.round(per_100g.total_fat_g * factor * 10) / 10,
-          fiber_g: Math.round(per_100g.fiber_g * factor * 10) / 10,
-          // Real values off the label / barcode — no estimation needed here.
-          sugar_g: Math.round(per_100g.sugar_g * factor * 10) / 10,
-          sat_fat_g: Math.round(per_100g.sat_fat_g * factor * 10) / 10,
-          sodium_mg: Math.round(per_100g.sodium_mg * factor),
-          meal_type: getMealTypeFromTime(),
-          raw_ai_response: result,
-          logged_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      addLog(data);
+      const rows = await logFoodItems({
+        userId: session.user.id,
+        items: [item],
+        mealType,
+        imageUrl: imageStorageUrl,
+        source: { ...result },
+      });
+      rows.forEach(addLog);
       await fetchProfile();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Pop the whole Scan stack off the root navigator and land on Home, so
-      // the day's updated ring is the first thing seen. Popping the parent
-      // unmounts this screen too — otherwise re-opening the camera would show
-      // the meal that was just logged.
-      navigation
-        .getParent<NativeStackNavigationProp<RootStackParamList>>()
-        ?.navigate('Main', { screen: 'Home' });
-    } catch (err: unknown) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
+      setPortionOpen(false);
+      const ids = rows.map((r) => r.id);
+      toast(`Logged to ${MEAL_LABELS[mealType]} · ${item.calories} kcal`, {
+        action: { label: 'Undo', onPress: () => undoLog(ids) },
+      });
+      goHome();
+    } catch (err) {
+      console.warn('[label-result] save failed', err instanceof Error ? err.message : err);
+      Alert.alert("Couldn't save that", 'Check your connection and try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const NUTRITION_ROWS: { label: string; value: string }[] = [
+  const NUTRITION_ROWS: { label: string; value: string; sub?: boolean }[] = [
     { label: 'Energy',        value: `${Math.round(per_100g.energy_kcal)} kcal` },
     { label: 'Protein',       value: `${per_100g.protein_g} g` },
     { label: 'Carbohydrates', value: `${per_100g.carbs_g} g` },
-    { label: '  of which sugars', value: `${per_100g.sugar_g} g` },
+    { label: 'of which sugars', value: `${per_100g.sugar_g} g`, sub: true },
     { label: 'Fat',           value: `${per_100g.total_fat_g} g` },
-    { label: '  of which saturates', value: `${per_100g.sat_fat_g} g` },
+    { label: 'of which saturates', value: `${per_100g.sat_fat_g} g`, sub: true },
     { label: 'Fibre',         value: `${per_100g.fiber_g} g` },
     { label: 'Sodium',        value: `${Math.round(per_100g.sodium_mg)} mg` },
   ];
@@ -172,18 +204,25 @@ export function LabelResultScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.root} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={C.primary} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Back to the scanner"
+        >
+          <Ionicons name="arrow-back" size={22} color={T.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Health Score</Text>
-        <View style={{ width: 36 }} />
+        <Text style={styles.headerTitle}>Health score</Text>
+        <View style={styles.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Product row */}
         <View style={styles.productRow}>
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.productImg} />
+            <Image source={{ uri: imageUri }} style={styles.productImg} accessibilityIgnoresInvertColors />
           ) : (
             <View style={[styles.productImg, styles.productImgFallback]}>
               <Ionicons name="fast-food-outline" size={26} color={T.textMuted} />
@@ -194,9 +233,9 @@ export function LabelResultScreen({ navigation, route }: Props) {
             {!!result.brand && <Text style={styles.productBrand}>{result.brand}</Text>}
             <View style={styles.tagRow}>
               {result.is_beverage && (
-                <View style={styles.tag}><Text style={styles.tagText}>BEVERAGE</Text></View>
+                <View style={styles.tag}><Text style={styles.tagText}>Beverage</Text></View>
               )}
-              <View style={styles.tag}><Text style={styles.tagText}>PER {servingLabel.toUpperCase()}</Text></View>
+              <View style={styles.tag}><Text style={styles.tagText}>Per {servingLabel}</Text></View>
             </View>
           </View>
         </View>
@@ -213,20 +252,35 @@ export function LabelResultScreen({ navigation, route }: Props) {
             <Text style={styles.scoreSummary}>{health.summary}</Text>
           )}
           {result.confidence !== 'high' && (
-            <Text style={styles.confidenceNote}>
-              ⚠ Label was partially readable — double-check values against the pack.
-            </Text>
+            <View style={styles.confidenceRow}>
+              <Ionicons name="alert-circle" size={16} color={T.warning} />
+              <Text style={styles.confidenceNote}>
+                The label was only partly readable. Double-check the values against the pack.
+              </Text>
+            </View>
           )}
+
+          {/* How the bands work, in the ring's own colours. */}
+          <View style={styles.bands}>
+            <Text style={styles.bandsTitle}>How this is scored</Text>
+            {SCORE_BANDS.map((band) => (
+              <View key={band.range} style={styles.bandRow}>
+                <View style={[styles.bandDot, { backgroundColor: scoreColor(band.min) }]} />
+                <Text style={[styles.bandRange, { color: scoreColor(band.min) }]}>{band.range}</Text>
+                <Text style={styles.bandLabel}>{band.label}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
-        {/* Breakdown — Pro feature */}
-        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full Health Breakdown" borderRadius={16}>
+        {/* Breakdown: Pro feature */}
+        <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full health breakdown" borderRadius={radius.lg}>
           <View style={styles.breakdownCard}>
             {health.positives.length > 0 && (
               <View style={styles.factList}>
                 {health.positives.map((p) => (
                   <View key={p} style={styles.factRow}>
-                    <Ionicons name="checkmark-circle" size={18} color={C.good} />
+                    <Ionicons name="checkmark-circle" size={18} color={T.success} />
                     <Text style={styles.factText}>{p}</Text>
                   </View>
                 ))}
@@ -236,7 +290,7 @@ export function LabelResultScreen({ navigation, route }: Props) {
               <View style={styles.factList}>
                 {health.negatives.map((n) => (
                   <View key={n} style={styles.factRow}>
-                    <Ionicons name="alert-circle" size={18} color={C.bad} />
+                    <Ionicons name="alert-circle" size={18} color={T.error} />
                     <Text style={styles.factText}>{n}</Text>
                   </View>
                 ))}
@@ -244,12 +298,10 @@ export function LabelResultScreen({ navigation, route }: Props) {
             )}
 
             <View style={styles.divider} />
-            <Text style={styles.tableTitle}>NUTRITION PER 100{result.is_beverage ? 'ML' : 'G'}</Text>
+            <Text style={styles.tableTitle}>Nutrition per 100 {result.is_beverage ? 'ml' : 'g'}</Text>
             {NUTRITION_ROWS.map((row) => (
               <View key={row.label} style={styles.nutRow}>
-                <Text style={[styles.nutLabel, row.label.startsWith(' ') && styles.nutSubLabel]}>
-                  {row.label.trim()}
-                </Text>
+                <Text style={[styles.nutLabel, row.sub && styles.nutSubLabel]}>{row.label}</Text>
                 <Text style={styles.nutValue}>{row.value}</Text>
               </View>
             ))}
@@ -257,7 +309,7 @@ export function LabelResultScreen({ navigation, route }: Props) {
             {result.ingredients.length > 0 && (
               <>
                 <View style={styles.divider} />
-                <Text style={styles.tableTitle}>INGREDIENTS</Text>
+                <Text style={styles.tableTitle}>Ingredients</Text>
                 <Text style={styles.ingredientsText}>{result.ingredients.join(', ')}</Text>
               </>
             )}
@@ -265,37 +317,54 @@ export function LabelResultScreen({ navigation, route }: Props) {
         </ProGate>
 
         <Text style={styles.disclaimer}>
-          CalVue Score is computed from the label using Nutri-Score-based rules. It is general guidance, not medical advice.
+          The CalVue score is computed from the label using Nutri-Score-based rules. It is general guidance, not medical advice.
         </Text>
 
-        <View style={{ height: 120 }} />
+        <View style={styles.footerSpacer} />
       </ScrollView>
 
       {/* Footer actions */}
       <View style={styles.footer}>
-        <Button
-          mode="outlined"
-          onPress={() => navigation.goBack()}
-          style={styles.doneBtn}
-          contentStyle={styles.btnContent}
-          textColor={C.onSurfaceVar}
-        >
-          Scan Another
-        </Button>
-        <Button
-          mode="contained"
-          onPress={handleLog}
-          loading={isSaving}
-          disabled={isSaving}
-          style={styles.logBtn}
-          contentStyle={styles.btnContent}
-          buttonColor={C.primary}
-          textColor={T.textOnPrimary}
-          icon="plus"
-        >
-          Log {servingLabel}
-        </Button>
+        <Text style={styles.footerLabel}>Log to</Text>
+        <MealTypePicker value={mealType} onChange={setMealType} />
+        <View style={styles.footerRow}>
+          <Button
+            mode="text"
+            onPress={() => navigation.goBack()}
+            style={styles.doneBtn}
+            contentStyle={styles.btnContent}
+            labelStyle={styles.btnLabel}
+            textColor={T.textSecondary}
+            disabled={isSaving}
+          >
+            Scan another
+          </Button>
+          <Button
+            mode="contained"
+            onPress={() => setPortionOpen(true)}
+            loading={isSaving}
+            disabled={isSaving}
+            style={styles.logBtn}
+            contentStyle={styles.btnContent}
+            labelStyle={styles.btnLabel}
+            buttonColor={T.primary}
+            textColor={T.textOnPrimary}
+            icon="plus"
+          >
+            Log {servingLabel}
+          </Button>
+        </View>
       </View>
+
+      {/* Amount is confirmed here, pre-filled with the serving size or 100 g. */}
+      <PortionSheet
+        visible={portionOpen}
+        item={portionOpen ? startItem : null}
+        confirmLabel="Log"
+        busy={isSaving}
+        onCancel={() => setPortionOpen(false)}
+        onConfirm={handleLog}
+      />
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
     </SafeAreaView>
@@ -303,85 +372,95 @@ export function LabelResultScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: T.bg },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: C.onSurface, letterSpacing: 0.3 },
+  backBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...type.titleSm, color: T.textPrimary },
 
-  scroll: { paddingHorizontal: 16, gap: 16 },
+  scroll: { paddingHorizontal: spacing.xl, gap: spacing.lg },
 
-  productRow: { flexDirection: 'row', gap: 14, alignItems: 'center' },
-  productImg: { width: 72, height: 72, borderRadius: 14, backgroundColor: C.glass },
+  productRow: { flexDirection: 'row', gap: spacing.lg - 2, alignItems: 'center' },
+  productImg: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: T.surface },
   productImgFallback: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },
   productInfo: { flex: 1, gap: 3 },
-  productName: { fontSize: 18, fontWeight: '800', color: C.onSurface, lineHeight: 23 },
-  productBrand: { fontSize: 13, color: C.onSurfaceVar, fontWeight: '600' },
-  tagRow: { flexDirection: 'row', gap: 6, marginTop: 3 },
+  productName: { ...type.titleSm, color: T.textPrimary },
+  productBrand: { ...type.bodySm, color: T.textSecondary, fontWeight: '600' },
+  tagRow: { flexDirection: 'row', gap: spacing.xs + 2, marginTop: 3, flexWrap: 'wrap' },
   tag: {
-    backgroundColor: T.divider, borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: C.glassBorder,
+    backgroundColor: T.divider, borderRadius: radius.sm - 4,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+    borderWidth: 1, borderColor: T.border,
   },
-  tagText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: C.outline },
+  tagText: { ...type.label, letterSpacing: 0.4, textTransform: 'none', color: T.textMuted },
 
   scoreCard: {
-    backgroundColor: C.glass, borderRadius: 20, borderWidth: 1, borderColor: C.glassBorder,
-    alignItems: 'center', paddingVertical: 24, gap: 12,
+    backgroundColor: T.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: T.border,
+    alignItems: 'center', paddingVertical: spacing['2xl'], paddingHorizontal: spacing.xl, gap: spacing.md,
   },
   ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
   ringCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  ringScore: { fontSize: 44, fontWeight: '800', letterSpacing: -1, lineHeight: 48 },
-  ringOutOf: { fontSize: 12, fontWeight: '600', color: C.outline },
+  ringScore: { ...type.display },
+  ringOutOf: { ...type.bodySm, color: T.textMuted },
   gradeChip: {
     position: 'absolute', bottom: 2, alignSelf: 'center',
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 3, borderColor: C.bg,
+    borderWidth: 3, borderColor: T.bg,
   },
   gradeChipText: { fontSize: 16, fontWeight: '800', color: T.textOnPrimary },
-  scoreCaption: { fontSize: 15, fontWeight: '700', color: C.onSurface },
-  scoreSummary: {
-    fontSize: 13,
-    color: C.onSurfaceVar,
-    textAlign: 'center',
-    lineHeight: 19,
-    paddingHorizontal: 24,
+  scoreCaption: { ...type.body, fontWeight: '700', color: T.textPrimary },
+  scoreSummary: { ...type.bodySm, color: T.textSecondary, textAlign: 'center' },
+  confidenceRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+    padding: spacing.md, borderRadius: radius.sm, backgroundColor: T.warningTint,
+    alignSelf: 'stretch',
   },
-  confidenceNote: {
-    fontSize: 12, color: C.medium, textAlign: 'center',
-    paddingHorizontal: 24, lineHeight: 17,
+  confidenceNote: { flex: 1, ...type.bodySm, color: T.warning },
+
+  bands: {
+    alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.xs,
+    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: T.divider,
   },
+  bandsTitle: { ...type.bodySm, fontWeight: '700', color: T.textSecondary, marginBottom: 2 },
+  bandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bandDot: { width: 10, height: 10, borderRadius: 5 },
+  bandRange: { ...type.bodySm, fontWeight: '700', minWidth: 96, ...tabularNums },
+  bandLabel: { flex: 1, ...type.bodySm, color: T.textSecondary },
 
   breakdownCard: {
-    backgroundColor: C.glass, borderRadius: 16, borderWidth: 1, borderColor: C.glassBorder,
-    padding: 18, gap: 8,
+    backgroundColor: T.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: T.border,
+    padding: spacing.lg + 2, gap: spacing.sm,
   },
-  factList: { gap: 8, marginBottom: 4 },
-  factRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  factText: { flex: 1, fontSize: 14, color: C.onSurface, lineHeight: 19 },
+  factList: { gap: spacing.sm, marginBottom: spacing.xs },
+  factRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
+  factText: { flex: 1, ...type.body, color: T.textPrimary },
 
-  divider: { height: 1, backgroundColor: T.divider, marginVertical: 8 },
-  tableTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, color: C.outline, marginBottom: 6 },
+  divider: { height: 1, backgroundColor: T.divider, marginVertical: spacing.sm },
+  tableTitle: { ...type.label, color: T.textMuted, marginBottom: spacing.xs + 2 },
   nutRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
-  nutLabel: { fontSize: 14, color: C.onSurfaceVar, fontWeight: '600' },
-  nutSubLabel: { paddingLeft: 14, fontWeight: '400', color: C.outline },
-  nutValue: { fontSize: 14, color: C.onSurface, fontWeight: '700' },
-  ingredientsText: { fontSize: 12.5, color: C.onSurfaceVar, lineHeight: 19 },
+  nutLabel: { ...type.body, color: T.textSecondary, fontWeight: '600' },
+  nutSubLabel: { paddingLeft: spacing.lg - 2, fontWeight: '500', color: T.textMuted },
+  nutValue: { ...type.body, color: T.textPrimary, fontWeight: '700', ...tabularNums },
+  ingredientsText: { ...type.bodySm, color: T.textSecondary },
 
-  disclaimer: { fontSize: 11, color: C.outline, textAlign: 'center', lineHeight: 15, paddingHorizontal: 12 },
+  disclaimer: { ...type.bodySm, color: T.textSecondary, textAlign: 'center', paddingHorizontal: spacing.md },
+  footerSpacer: { height: 180 },
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', gap: 12,
-    padding: 16, paddingBottom: 32,
-    backgroundColor: C.bg,
-    borderTopWidth: 1, borderTopColor: C.glassBorder,
+    gap: spacing.sm + 2,
+    padding: spacing.lg, paddingBottom: spacing['3xl'],
+    backgroundColor: T.bg,
+    borderTopWidth: 1, borderTopColor: T.border,
   },
-  doneBtn: { flex: 1, borderColor: C.glassBorder },
-  logBtn: { flex: 2, borderRadius: 12 },
+  footerLabel: { ...type.label, color: T.textMuted },
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  doneBtn: { flex: 1 },
+  logBtn: { flex: 2, borderRadius: radius.md },
   btnContent: { height: 52 },
+  btnLabel: { ...type.body, fontWeight: '800' },
 });

@@ -16,6 +16,8 @@ async function apiFetch<T>(
   options: RequestInit = {},
   token?: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  /** Optional caller-owned abort (a Cancel button). Distinct from the timeout. */
+  signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -30,6 +32,12 @@ async function apiFetch<T>(
   // the "it never finishes analyzing" bug. The timer guarantees it resolves.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Forward a caller's cancel into the same controller so one signal reaches fetch.
+  const onExternalAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onExternalAbort);
+  }
 
   let response: Response;
   try {
@@ -39,15 +47,20 @@ async function apiFetch<T>(
       signal: controller.signal,
     });
   } catch (err) {
+    const aborted = (err as Error)?.name === 'AbortError';
+    const cancelled = aborted && !!signal?.aborted;
     const e = new Error(
-      (err as Error)?.name === 'AbortError'
-        ? "This is taking longer than usual — check your connection and try again."
-        : 'Network error. Please check your connection and try again.',
+      cancelled
+        ? 'Request cancelled.'
+        : aborted
+          ? "This is taking longer than usual — check your connection and try again."
+          : 'Network error. Please check your connection and try again.',
     );
-    (e as any).code = (err as Error)?.name === 'AbortError' ? 'timeout' : 'network';
+    (e as any).code = cancelled ? 'cancelled' : aborted ? 'timeout' : 'network';
     throw e;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', onExternalAbort);
   }
 
   // Parse defensively — a proxy/gateway can return non-JSON (e.g. an HTML 502).
@@ -109,13 +122,20 @@ export interface FoodAnalysisResult {
   portion_desc: string;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
+  /** What the model heard, for spoken logs. Optional: not every backend build returns it. */
+  transcript?: string;
 }
 
-export async function analyzeFood(imageUrl: string, token: string, description?: string): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
+export async function analyzeFood(
+  imageUrl: string,
+  token: string,
+  description?: string,
+  signal?: AbortSignal,
+): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
   return apiFetch('/api/analyze-food', {
     method: 'POST',
     body: JSON.stringify({ imageUrl, description }),
-  }, token, ANALYZE_TIMEOUT_MS);
+  }, token, ANALYZE_TIMEOUT_MS, signal);
 }
 
 /**
@@ -123,11 +143,15 @@ export async function analyzeFood(imageUrl: string, token: string, description?:
  * Returns the same shape as `analyzeFood`, so the result renders on the normal
  * editable-items screen with no special casing.
  */
-export async function analyzeText(description: string, token: string): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
+export async function analyzeText(
+  description: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
   return apiFetch('/api/analyze-text', {
     method: 'POST',
     body: JSON.stringify({ description }),
-  }, token, ANALYZE_TIMEOUT_MS);
+  }, token, ANALYZE_TIMEOUT_MS, signal);
 }
 
 /**
@@ -139,11 +163,12 @@ export async function analyzeVoice(
   audioBase64: string,
   mimeType: string,
   token: string,
+  signal?: AbortSignal,
 ): Promise<{ result: FoodAnalysisResult; cached: boolean }> {
   return apiFetch('/api/analyze-voice', {
     method: 'POST',
     body: JSON.stringify({ audio: audioBase64, mimeType }),
-  }, token, ANALYZE_TIMEOUT_MS);
+  }, token, ANALYZE_TIMEOUT_MS, signal);
 }
 
 // ─── Label scan (packaged food) ──────────────────────────────────────────────
@@ -185,11 +210,15 @@ export interface LabelScanData {
   health: HealthScoreDetail;
 }
 
-export async function analyzeLabel(imageUrl: string, token: string): Promise<{ result: LabelScanData; cached: boolean }> {
+export async function analyzeLabel(
+  imageUrl: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ result: LabelScanData; cached: boolean }> {
   return apiFetch('/api/analyze-label', {
     method: 'POST',
     body: JSON.stringify({ imageUrl }),
-  }, token, ANALYZE_TIMEOUT_MS);
+  }, token, ANALYZE_TIMEOUT_MS, signal);
 }
 
 /**
@@ -200,8 +229,9 @@ export async function analyzeLabel(imageUrl: string, token: string): Promise<{ r
 export async function lookupBarcode(
   code: string,
   token: string,
+  signal?: AbortSignal,
 ): Promise<{ result: LabelScanData; image_url: string | null; cached: boolean }> {
-  return apiFetch(`/api/barcode/${encodeURIComponent(code)}`, { method: 'GET' }, token);
+  return apiFetch(`/api/barcode/${encodeURIComponent(code)}`, { method: 'GET' }, token, DEFAULT_TIMEOUT_MS, signal);
 }
 
 /**

@@ -17,7 +17,7 @@ import { fetchSavedMeals, touchSavedMeal, type SavedMeal } from '../../services/
 import { searchFoods, itemFromDbFood, sourceLabel, MIN_FOOD_QUERY, type FoodDbRow } from '../../services/foodSearch';
 import { sumItems } from '../../utils/foodItems';
 import type { FoodItem } from '../../services/api';
-import { T } from '../../theme';
+import { T, withAlpha, type, spacing, radius, HIT_TARGET } from '../../theme';
 
 interface Props {
   navigation: {
@@ -151,7 +151,8 @@ export function FromHistoryScreen({ navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not log that. Please try again.');
+      console.warn('[from-history] log failed', err instanceof Error ? err.message : err);
+      setError("Couldn't log that. Check your connection and try again.");
       setLogging(false);
     }
   }, [userId, cart, cartMeal, pendingMealIds, addLog, navigation]);
@@ -189,6 +190,12 @@ export function FromHistoryScreen({ navigation }: Props) {
     [q, meals],
   );
   const cartTotals = useMemo(() => sumItems(cart), [cart]);
+  // Names that genuinely came from the user's own logs. Database search
+  // results also land in the cart, and those were never "logged before".
+  const historyNames = useMemo(
+    () => new Set([...recent, ...frequent].map((f) => f.item.name)),
+    [recent, frequent],
+  );
 
   const renderRow = (food: LoggableFood, subtitle: string) => (
     <TouchableOpacity
@@ -286,7 +293,12 @@ export function FromHistoryScreen({ navigation }: Props) {
           returnKeyType="search"
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            onPress={() => setQuery('')}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
             <Ionicons name="close-circle" size={17} color={T.textMuted} />
           </TouchableOpacity>
         )}
@@ -296,7 +308,7 @@ export function FromHistoryScreen({ navigation }: Props) {
           ate, don't make me photograph it" — so they share one entry point
           rather than competing for a tile in the hub. */}
       <View style={styles.segmented}>
-        {([['foods', 'Recent'], ['meals', 'My Meals']] as const).map(([key, label]) => {
+        {([['foods', 'Recent'], ['meals', 'My meals']] as const).map(([key, label]) => {
           const active = tab === key;
           return (
             <TouchableOpacity
@@ -456,7 +468,13 @@ export function FromHistoryScreen({ navigation }: Props) {
             <View style={styles.cartGrab} />
             <View style={styles.cartHead}>
               <Text style={styles.cartTitle}>Your meal</Text>
-              <TouchableOpacity onPress={() => setCartOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity
+                onPress={() => setCartOpen(false)}
+                style={styles.cartCollapse}
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel="Collapse your meal"
+              >
                 <Ionicons name="chevron-down" size={22} color={T.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -482,7 +500,7 @@ export function FromHistoryScreen({ navigation }: Props) {
                   <TouchableOpacity
                     onPress={() => removeFromCart(i)}
                     style={styles.cartRemove}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    hitSlop={4}
                     accessibilityRole="button"
                     accessibilityLabel={`Remove ${it.name}`}
                   >
@@ -497,6 +515,7 @@ export function FromHistoryScreen({ navigation }: Props) {
               onPress={logCart}
               disabled={logging}
               activeOpacity={0.88}
+              accessibilityRole="button"
             >
               {logging ? (
                 <ActivityIndicator size={16} color={T.textOnPrimary} />
@@ -518,6 +537,7 @@ export function FromHistoryScreen({ navigation }: Props) {
         visible={editIndex !== null}
         item={editIndex !== null ? cart[editIndex] : null}
         confirmLabel="Update"
+        loggedBefore={editIndex !== null && !!cart[editIndex] && historyNames.has(cart[editIndex].name)}
         onCancel={() => setEditIndex(null)}
         onConfirm={(item) => {
           setCart((prev) => prev.map((it, i) => (i === editIndex ? item : it)));
@@ -538,8 +558,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.2 },
+  backBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...type.titleSm, color: T.textPrimary },
 
   searchWrap: {
     flexDirection: 'row',
@@ -563,12 +583,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,158,148,0.10)',
+    borderRadius: radius.md,
+    backgroundColor: T.errorTint,
     borderWidth: 1,
-    borderColor: 'rgba(255,158,148,0.30)',
+    borderColor: withAlpha(T.error, 0.3),
   },
-  errorText: { flex: 1, fontSize: 12.5, fontWeight: '600', color: T.error },
+  errorText: { flex: 1, ...type.bodySm, fontWeight: '600', color: T.error },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 32 },
   emptyBlock: { alignItems: 'center', gap: 8, paddingVertical: 40, paddingHorizontal: 24 },
@@ -584,7 +604,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: T.border,
   },
-  segment: { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
+  segment: { flex: 1, minHeight: HIT_TARGET - 8, paddingVertical: spacing.sm, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   segmentActive: { backgroundColor: T.primary },
   segmentText: { fontSize: 13, fontWeight: '700', color: T.textSecondary },
   segmentTextActive: { color: T.textOnPrimary },
@@ -597,24 +617,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: T.primaryTint,
     borderWidth: 1,
-    borderColor: 'rgba(133,211,218,0.35)',
+    borderColor: T.primaryBorder,
     marginTop: 4,
   },
   createText: { flex: 1, gap: 2 },
-  createTitle: { fontSize: 14.5, fontWeight: '800', color: T.textPrimary },
-  createSub: { fontSize: 12, fontWeight: '600', color: T.textMuted },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: T.textPrimary },
-  emptyText: { fontSize: 13.5, color: T.textMuted, textAlign: 'center', lineHeight: 20 },
+  createTitle: { ...type.body, fontWeight: '800', color: T.textPrimary },
+  createSub: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
+  emptyTitle: { ...type.titleSm, color: T.textPrimary },
+  emptyText: { ...type.body, color: T.textMuted, textAlign: 'center' },
 
   scroll: { padding: 16, gap: 10, paddingBottom: 32 },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-    marginTop: 6,
-  },
+  sectionLabel: { ...type.label, color: T.textMuted, marginTop: 6 },
 
   dbLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 4 },
   dbLoadingText: { fontSize: 13, color: T.textMuted, fontWeight: '600' },
@@ -637,12 +650,12 @@ const styles = StyleSheet.create({
     borderBottomColor: T.divider,
   },
   rowText: { flex: 1, gap: 2 },
-  rowName: { fontSize: 14.5, fontWeight: '700', color: T.textPrimary },
-  rowSub: { fontSize: 12, fontWeight: '600', color: T.textMuted },
+  rowName: { ...type.body, fontWeight: '700', color: T.textPrimary },
+  rowSub: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
   addBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: T.primary,
@@ -664,7 +677,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: T.primary,
-    shadowColor: '#000',
+    shadowColor: T.bg,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -675,13 +688,13 @@ const styles = StyleSheet.create({
     height: 24,
     paddingHorizontal: 6,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,54,58,0.28)',
+    backgroundColor: withAlpha(T.textOnPrimary, 0.28),
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartBarBadgeText: { fontSize: 13, fontWeight: '800', color: T.textOnPrimary },
-  cartBarText: { flex: 1, fontSize: 14.5, fontWeight: '800', color: T.textOnPrimary },
-  cartBarCta: { fontSize: 14, fontWeight: '800', color: T.textOnPrimary, opacity: 0.9 },
+  cartBarText: { flex: 1, ...type.body, fontWeight: '800', color: T.textOnPrimary },
+  cartBarCta: { ...type.body, fontWeight: '800', color: T.textOnPrimary, opacity: 0.9 },
 
   /* Cart panel */
   cartScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: T.overlay, justifyContent: 'flex-end', zIndex: 20 },
@@ -697,17 +710,11 @@ const styles = StyleSheet.create({
     gap: 10,
     maxHeight: '80%',
   },
-  cartGrab: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.surfaceOffset, marginBottom: 4 },
+  cartGrab: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.grabber, marginBottom: 4 },
   cartHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cartTitle: { fontSize: 18, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
-  cartLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-    marginTop: 2,
-  },
+  cartTitle: { ...type.titleSm, color: T.textPrimary },
+  cartCollapse: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
+  cartLabel: { ...type.label, color: T.textMuted, marginTop: 2 },
   cartList: { marginTop: 4 },
   cartItem: {
     flexDirection: 'row',
@@ -718,9 +725,9 @@ const styles = StyleSheet.create({
     borderBottomColor: T.divider,
   },
   cartItemMain: { flex: 1, gap: 2 },
-  cartItemName: { fontSize: 14.5, fontWeight: '700', color: T.textPrimary },
-  cartItemMeta: { fontSize: 12, fontWeight: '600', color: T.textMuted },
-  cartRemove: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  cartItemName: { ...type.body, fontWeight: '700', color: T.textPrimary },
+  cartItemMeta: { ...type.bodySm, fontWeight: '600', color: T.textMuted },
+  cartRemove: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
 
   logBtn: {
     flexDirection: 'row',
@@ -733,5 +740,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   logBtnDisabled: { opacity: 0.6 },
-  logBtnText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.2 },
+  logBtnText: { ...type.body, fontWeight: '800', color: T.textOnPrimary },
 });

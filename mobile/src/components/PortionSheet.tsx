@@ -14,15 +14,21 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { FoodItem } from '../services/api';
 import { UNITS, rescaleItem, stepFor } from '../utils/foodItems';
-import { T } from '../theme';
+import { T, type, spacing, radius, HIT_TARGET, tabularNums } from '../theme';
 
 interface Props {
   visible: boolean;
   /** The food to adjust, at its current portion. Null closes the sheet. */
   item: FoodItem | null;
-  /** Label for the confirm button — "Add to meal", "Update", etc. */
+  /** Label for the confirm button: "Add to meal", "Update", etc. */
   confirmLabel?: string;
   busy?: boolean;
+  /** Show "logged before" under the name. Only for foods that came from history. */
+  loggedBefore?: boolean;
+  /** Let the name be corrected in place (the AI does misidentify foods). */
+  editableName?: boolean;
+  /** When set, a Remove action is shown. */
+  onRemove?: () => void;
   onCancel: () => void;
   onConfirm: (item: FoodItem) => void;
 }
@@ -30,15 +36,26 @@ interface Props {
 /**
  * Adjust a portion.
  *
- * Deliberately does *not* decide the meal type or trigger the log — that lives
+ * Deliberately does *not* decide the meal type or trigger the log; that lives
  * in the cart, so it's chosen once for the whole meal rather than per item.
  * This sheet only re-scales, via `rescaleItem`, which holds the food's density
- * constant so "1 katori" → "2 katori" doubles the calories rather than
+ * constant so "1 katori" to "2 katori" doubles the calories rather than
  * re-guessing them.
  */
-export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy, onCancel, onConfirm }: Props) {
+export function PortionSheet({
+  visible,
+  item,
+  confirmLabel = 'Add to meal',
+  busy,
+  loggedBefore = false,
+  editableName = false,
+  onRemove,
+  onCancel,
+  onConfirm,
+}: Props) {
   const [draft, setDraft] = useState<FoodItem | null>(item);
   const [gramsText, setGramsText] = useState('');
+  const [qtyText, setQtyText] = useState('');
   // Re-seed whenever a different food is opened; `item` is the identity here.
   const [seed, setSeed] = useState<FoodItem | null>(item);
 
@@ -46,6 +63,7 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
     setSeed(item);
     setDraft(item);
     setGramsText(item ? String(item.grams) : '');
+    setQtyText(item ? String(item.quantity) : '');
   }
 
   if (!draft) return null;
@@ -53,12 +71,16 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
   const isGrams = draft.unit === 'g';
   const step = stepFor(draft.unit);
 
+  const apply = (updated: FoodItem) => {
+    setDraft(updated);
+    setGramsText(String(updated.grams));
+    setQtyText(String(updated.quantity));
+  };
+
   const bump = (delta: number) => {
     const next = Math.max(step, Math.round((draft.quantity + delta) * 100) / 100);
     Haptics.selectionAsync();
-    const updated = rescaleItem(draft, next, draft.unit);
-    setDraft(updated);
-    setGramsText(String(updated.grams));
+    apply(rescaleItem(draft, next, draft.unit));
   };
 
   const changeUnit = (unit: string) => {
@@ -67,9 +89,7 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
     // Switching *to* grams carries the current weight over, so "1 katori"
     // becomes "180 g" rather than a nonsensical "1 g".
     const quantity = unit === 'g' ? Math.max(1, draft.grams) : 1;
-    const updated = rescaleItem(draft, quantity, unit);
-    setDraft(updated);
-    setGramsText(String(updated.grams));
+    apply(rescaleItem(draft, quantity, unit));
   };
 
   const commitGrams = () => {
@@ -78,20 +98,49 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
       setGramsText(String(draft.grams));
       return;
     }
-    setDraft(rescaleItem(draft, Math.round(parsed), 'g'));
+    apply(rescaleItem(draft, Math.round(parsed), 'g'));
   };
+
+  const commitQty = () => {
+    const parsed = parseFloat(qtyText);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setQtyText(String(draft.quantity));
+      return;
+    }
+    apply(rescaleItem(draft, Math.round(parsed * 100) / 100, draft.unit));
+  };
+
+  const subtitle = loggedBefore ? `${draft.grams} g · logged before` : `${draft.grams} g`;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onCancel} />
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
         <View style={styles.sheet}>
           <View style={styles.grabber} />
 
-          <Text style={styles.name} numberOfLines={2}>{draft.name}</Text>
-          <Text style={styles.sub}>{draft.grams} g · logged before</Text>
+          {editableName ? (
+            <TextInput
+              style={styles.nameInput}
+              value={draft.name}
+              onChangeText={(name) => setDraft({ ...draft, name })}
+              placeholder="Food name"
+              placeholderTextColor={T.textMuted}
+              selectTextOnFocus
+              accessibilityLabel="Food name"
+            />
+          ) : (
+            <Text style={styles.name} numberOfLines={2}>{draft.name}</Text>
+          )}
+          <Text style={styles.sub}>{subtitle}</Text>
 
-          <Text style={styles.label}>How much?</Text>
+          <Text style={styles.label}>How much</Text>
 
           {isGrams ? (
             <View style={styles.gramsRow}>
@@ -104,6 +153,7 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
                 returnKeyType="done"
                 maxLength={4}
                 style={styles.gramsInput}
+                accessibilityLabel="Weight in grams"
               />
               <Text style={styles.gramsUnit}>grams</Text>
             </View>
@@ -117,7 +167,19 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
               >
                 <Ionicons name="remove" size={20} color={T.textPrimary} />
               </TouchableOpacity>
-              <Text style={styles.stepValue}>{draft.quantity}</Text>
+              {/* Editable so large counts don't need many taps. */}
+              <TextInput
+                value={qtyText}
+                onChangeText={(t) => setQtyText(t.replace(/[^0-9.]/g, ''))}
+                onBlur={commitQty}
+                onSubmitEditing={commitQty}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                maxLength={5}
+                style={styles.stepValue}
+                textAlign="center"
+                accessibilityLabel="Quantity"
+              />
               <TouchableOpacity
                 onPress={() => bump(step)}
                 style={styles.stepBtn}
@@ -137,6 +199,10 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
                   key={u}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => changeUnit(u)}
+                  hitSlop={{ top: 6, bottom: 6 }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={u === 'g' ? 'grams' : u}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {u === 'g' ? 'grams' : u}
@@ -147,21 +213,37 @@ export function PortionSheet({ visible, item, confirmLabel = 'Add to meal', busy
           </ScrollView>
 
           <View style={styles.macros}>
-            <Macro value={`${draft.calories}`} label="KCAL" color={T.primary} big />
-            <Macro value={`${draft.protein_g}g`} label="PRO" color={T.protein} />
-            <Macro value={`${draft.carbs_g}g`} label="CARB" color={T.carbs} />
-            <Macro value={`${draft.fat_g}g`} label="FAT" color={T.fat} />
+            <Macro value={`${draft.calories}`} label="kcal" color={T.primary} big />
+            <Macro value={`${draft.protein_g} g`} label="Protein" color={T.protein} />
+            <Macro value={`${draft.carbs_g} g`} label="Carbs" color={T.carbs} />
+            <Macro value={`${draft.fat_g} g`} label="Fat" color={T.fat} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.cta, busy && styles.ctaDisabled]}
-            onPress={() => onConfirm(draft)}
-            disabled={busy}
-            activeOpacity={0.88}
-          >
-            <Ionicons name="checkmark" size={18} color={T.textOnPrimary} />
-            <Text style={styles.ctaText}>{confirmLabel} · {draft.calories} kcal</Text>
-          </TouchableOpacity>
+          <View style={styles.actions}>
+            {onRemove && (
+              <TouchableOpacity
+                style={styles.removeBtn}
+                onPress={onRemove}
+                disabled={busy}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Remove this item"
+              >
+                <Ionicons name="trash-outline" size={18} color={T.error} />
+                <Text style={styles.removeText}>Remove</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.cta, busy && styles.ctaDisabled]}
+              onPress={() => onConfirm(draft)}
+              disabled={busy}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+            >
+              <Ionicons name="checkmark" size={18} color={T.textOnPrimary} />
+              <Text style={styles.ctaText}>{confirmLabel} · {draft.calories} kcal</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -181,98 +263,123 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: T.surface,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     borderWidth: 1,
     borderColor: T.border,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 28,
-    gap: 10,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing['2xl'] + 4,
+    gap: spacing.sm + 2,
   },
   grabber: {
     alignSelf: 'center',
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: T.surfaceOffset,
-    marginBottom: 8,
+    backgroundColor: T.grabber,
+    marginBottom: spacing.sm,
   },
-  name: { fontSize: 19, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
-  sub: { fontSize: 12.5, fontWeight: '600', color: T.textMuted, marginTop: -4 },
-
-  label: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-    marginTop: 8,
+  name: { ...type.title, color: T.textPrimary },
+  nameInput: {
+    ...type.titleSm,
+    color: T.textPrimary,
+    backgroundColor: T.surface2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingHorizontal: spacing.lg - 2,
+    paddingVertical: spacing.md,
   },
+  sub: { ...type.bodySm, color: T.textMuted, marginTop: -4 },
 
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 18, alignSelf: 'flex-start' },
+  label: { ...type.label, color: T.textMuted, marginTop: spacing.sm },
+
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'flex-start' },
   stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
-  stepValue: { fontSize: 24, fontWeight: '800', color: T.textPrimary, minWidth: 48, textAlign: 'center' },
+  stepValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: T.textPrimary,
+    minWidth: 72,
+    height: HIT_TARGET,
+    paddingVertical: 0,
+    ...tabularNums,
+  },
 
-  gramsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  gramsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   gramsInput: {
     fontSize: 26,
     fontWeight: '800',
     color: T.textPrimary,
     minWidth: 90,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
     borderBottomWidth: 2,
     borderBottomColor: T.primary,
+    ...tabularNums,
   },
-  gramsUnit: { fontSize: 14, fontWeight: '700', color: T.textSecondary, paddingBottom: 8 },
+  gramsUnit: { ...type.body, fontWeight: '700', color: T.textSecondary, paddingBottom: spacing.sm },
 
-  chipRow: { gap: 8, paddingVertical: 4, paddingRight: 8 },
+  chipRow: { gap: spacing.sm, paddingVertical: spacing.xs, paddingRight: spacing.sm },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 50,
+    paddingHorizontal: spacing.lg - 2,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
   },
   chipActive: { backgroundColor: T.primary, borderColor: T.primary },
-  chipText: { fontSize: 12.5, fontWeight: '700', color: T.textSecondary },
+  chipText: { ...type.bodySm, fontWeight: '700', color: T.textSecondary },
   chipTextActive: { color: T.textOnPrimary },
 
   macros: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 20,
-    paddingVertical: 12,
-    marginTop: 4,
+    gap: spacing.xl,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: T.divider,
   },
   macro: { gap: 2 },
-  macroValue: { fontSize: 16, fontWeight: '800' },
+  macroValue: { fontSize: 16, fontWeight: '800', ...tabularNums },
   macroValueBig: { fontSize: 26, letterSpacing: -0.8 },
-  macroLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: T.textMuted },
+  macroLabel: { ...type.label, color: T.textMuted },
 
-  cta: {
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm + 2 },
+  removeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.xs + 2,
+    flex: 1,
     height: 52,
-    borderRadius: 15,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  removeText: { ...type.body, fontWeight: '700', color: T.error },
+  cta: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: 52,
+    borderRadius: radius.md,
     backgroundColor: T.primary,
-    marginTop: 10,
   },
   ctaDisabled: { opacity: 0.55 },
-  ctaText: { fontSize: 15, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 0.2 },
+  ctaText: { ...type.body, fontWeight: '800', color: T.textOnPrimary },
 });

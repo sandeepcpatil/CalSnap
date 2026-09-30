@@ -8,6 +8,17 @@ import { FoodAnalysisResult, LabelScanData } from '../services/api';
 /** Which capture mode the scan screen opens in. */
 export type ScanMode = 'meal' | 'label' | 'voice' | 'barcode';
 
+/**
+ * Context for a result that came from the describe path. `transcript` is the
+ * user's own typed text, or what the API reports it heard; it is never made up.
+ * When there is no transcript the result screen shows the recorded length.
+ */
+export interface VoiceContext {
+  source: 'spoken' | 'typed';
+  transcript?: string;
+  durationMs?: number;
+}
+
 export type ScanStackParamList = {
   /**
    * `mode` is always passed by the log hub, so the screen never has to guess
@@ -18,6 +29,7 @@ export type ScanStackParamList = {
     imageUri: string;
     imageStorageUrl: string;
     result: FoodAnalysisResult;
+    voice?: VoiceContext;
   };
   LabelResult: {
     imageUri: string;

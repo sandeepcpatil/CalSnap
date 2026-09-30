@@ -31,7 +31,7 @@ import {
   type SavedMeal,
 } from '../../services/savedMeals';
 import type { FoodItem } from '../../services/api';
-import { T } from '../../theme';
+import { T, type, spacing, radius, HIT_TARGET, tabularNums } from '../../theme';
 
 interface Props {
   navigation: { goBack: () => void };
@@ -86,7 +86,8 @@ export function CreateMealScreen({ navigation, route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+      console.warn('[create-meal] save failed', err instanceof Error ? err.message : err);
+      Alert.alert("Couldn't save that meal", 'Check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -117,7 +118,8 @@ export function CreateMealScreen({ navigation, route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Could not log', err instanceof Error ? err.message : 'Please try again.');
+      console.warn('[create-meal] log failed', err instanceof Error ? err.message : err);
+      Alert.alert("Couldn't log that meal", 'Check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -135,7 +137,8 @@ export function CreateMealScreen({ navigation, route }: Props) {
             await deleteSavedMeal(existing.id);
             navigation.goBack();
           } catch (err) {
-            Alert.alert('Could not delete', err instanceof Error ? err.message : 'Please try again.');
+            console.warn('[create-meal] delete failed', err instanceof Error ? err.message : err);
+            Alert.alert("Couldn't delete that meal", 'Check your connection and try again.');
           }
         },
       },
@@ -189,7 +192,7 @@ export function CreateMealScreen({ navigation, route }: Props) {
           <ScanItemsEditor
             items={items}
             onChange={setItems}
-            heading="ITEMS IN THIS MEAL"
+            heading="Items in this meal"
             addLabel="Add a food"
           />
         </ScrollView>
@@ -197,15 +200,15 @@ export function CreateMealScreen({ navigation, route }: Props) {
         <View style={styles.footer}>
           <View style={styles.totalsRow}>
             <View>
-              <Text style={styles.totalsLabel}>Per serving</Text>
+              <Text style={styles.totalsLabel}>This meal</Text>
               <Text style={styles.totalsKcal}>
                 {totals.calories}<Text style={styles.totalsKcalUnit}> kcal</Text>
               </Text>
             </View>
             <View style={styles.macroRow}>
-              <Macro value={`${totals.protein_g}g`} label="PROTEIN" color={T.protein} />
-              <Macro value={`${totals.carbs_g}g`} label="CARBS" color={T.carbs} />
-              <Macro value={`${totals.fat_g}g`} label="FAT" color={T.fat} />
+              <Macro value={`${totals.protein_g} g`} label="Protein" color={T.protein} />
+              <Macro value={`${totals.carbs_g} g`} label="Carbs" color={T.carbs} />
+              <Macro value={`${totals.fat_g} g`} label="Fat" color={T.fat} />
             </View>
           </View>
 
@@ -270,17 +273,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.2 },
+  iconBtn: { width: HIT_TARGET, height: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...type.titleSm, color: T.textPrimary },
 
-  scroll: { padding: 16, paddingBottom: 24, gap: 10 },
-  label: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-  },
+  scroll: { padding: spacing.lg, paddingBottom: spacing['2xl'], gap: spacing.sm + 2 },
+  label: { ...type.label, color: T.textMuted },
   nameInput: {
     fontSize: 18,
     fontWeight: '700',
@@ -288,10 +285,10 @@ const styles = StyleSheet.create({
     backgroundColor: T.surface2,
     borderWidth: 1,
     borderColor: T.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 6,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg - 2,
+    paddingVertical: spacing.md + 1,
+    marginBottom: spacing.xs + 2,
   },
 
   footer: {
@@ -304,19 +301,13 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   totalsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  totalsLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: T.textMuted,
-  },
-  totalsKcal: { fontSize: 30, fontWeight: '800', color: T.textPrimary, letterSpacing: -1 },
-  totalsKcalUnit: { fontSize: 14, fontWeight: '600', color: T.textSecondary, letterSpacing: 0 },
-  macroRow: { flexDirection: 'row', gap: 16 },
+  totalsLabel: { ...type.label, color: T.textMuted },
+  totalsKcal: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: T.textPrimary, letterSpacing: -1, ...tabularNums },
+  totalsKcalUnit: { ...type.body, fontWeight: '600', color: T.textSecondary, letterSpacing: 0 },
+  macroRow: { flexDirection: 'row', gap: spacing.lg },
   macro: { alignItems: 'flex-end', gap: 1 },
-  macroValue: { fontSize: 15, fontWeight: '800' },
-  macroLabel: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8, color: T.textMuted },
+  macroValue: { ...type.body, fontWeight: '800', ...tabularNums },
+  macroLabel: { ...type.label, color: T.textMuted },
 
   actions: { flexDirection: 'row', gap: 10 },
   secondaryBtn: {
@@ -329,7 +320,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: T.border,
   },
-  secondaryText: { fontSize: 14.5, fontWeight: '700', color: T.textPrimary },
+  secondaryText: { ...type.body, fontWeight: '700', color: T.textPrimary },
   primaryBtn: {
     flex: 1.4,
     flexDirection: 'row',
@@ -340,6 +331,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: T.primary,
   },
-  primaryText: { fontSize: 14.5, fontWeight: '800', color: T.textOnPrimary },
+  primaryText: { ...type.body, fontWeight: '800', color: T.textOnPrimary },
   btnDisabled: { opacity: 0.45 },
 });
