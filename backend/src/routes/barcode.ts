@@ -17,7 +17,39 @@ interface BarcodeResponse {
 
 // Open Food Facts asks every caller to send an identifying User-Agent.
 const OFF_UA = 'CalVue/1.0 (nutrition app; contact: calsnap.support@gmail.com)';
-const OFF_TIMEOUT_MS = 6000;
+// Open Food Facts is often slow from outside Europe; one retry after a timeout
+// or a 5xx turns most "sometimes it fails" lookups into a hit.
+const OFF_TIMEOUT_MS = 10_000;
+const OFF_ATTEMPTS = 2;
+
+type OffLookup = { status: number; product: Record<string, unknown> | null };
+
+/** Fetch a product from Open Food Facts with a timeout and one retry. */
+async function fetchOffProduct(code: string): Promise<OffLookup> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= OFF_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`, {
+        headers: { 'User-Agent': OFF_UA, Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      // OFF answers 404 for an unknown code; that is a definitive "not found",
+      // not a reason to retry.
+      if (r.status === 404) return { status: 0, product: null };
+      if (r.status >= 500) throw new Error(`OFF ${r.status}`);
+      const json = (await r.json()) as { status?: number; product?: Record<string, unknown> };
+      return { status: json.status ?? 0, product: json.product ?? null };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < OFF_ATTEMPTS) await new Promise((res) => setTimeout(res, 400));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
 
 /** EAN-8/13, UPC-A/E — 8 to 14 digits. */
 function isValidBarcode(code: string): boolean {
@@ -129,23 +161,14 @@ router.get(
       }
 
       // 2. Miss — ask Open Food Facts.
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
       let off: Record<string, unknown> | null = null;
       let status = 0;
       try {
-        const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`, {
-          headers: { 'User-Agent': OFF_UA },
-          signal: controller.signal,
-        });
-        const json = (await r.json()) as { status?: number; product?: Record<string, unknown> };
-        status = json.status ?? 0;
-        off = json.product ?? null;
-      } catch {
+        ({ status, product: off } = await fetchOffProduct(code));
+      } catch (err) {
+        console.warn('[barcode] OFF lookup failed', { code }, err instanceof Error ? err.message : err);
         res.status(504).json({ error: 'lookup_failed', message: 'Couldn’t reach the product database. Try again.' });
         return;
-      } finally {
-        clearTimeout(timer);
       }
 
       if (status !== 1 || !off) {

@@ -356,9 +356,11 @@ export function ScanResultScreen({ navigation, route }: Props) {
           labelStyle={styles.saveLabel}
           buttonColor={T.primary}
           textColor={T.textOnPrimary}
-          icon="check"
+          // While saving, the spinner takes the icon slot and the label shrinks
+          // to a single word so the two never overlap in the narrow footer.
+          icon={isSaving ? undefined : 'check'}
         >
-          {ctaLabel}
+          {isSaving ? 'Saving…' : ctaLabel}
         </Button>
       </View>
 

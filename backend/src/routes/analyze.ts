@@ -248,10 +248,10 @@ RULES
 
 /** Analyse a free-text meal description. Cheaper than the photo path — no image tokens. */
 export async function analyzeFoodText(description: string): Promise<CalorieBreakdown> {
-  const geminiResult = await model.generateContent([
+  const geminiResult = await withGeminiRetry(() => model.generateContent([
     TEXT_SYSTEM_PROMPT,
     `The user said: "${description}"`,
-  ]);
+  ]));
 
   let parsed: unknown;
   try {
@@ -271,11 +271,11 @@ export async function analyzeFoodText(description: string): Promise<CalorieBreak
  * dal" resolve to the same result.
  */
 export async function analyzeFoodAudio(audioBase64: string, mimeType: string): Promise<CalorieBreakdown> {
-  const geminiResult = await model.generateContent([
+  const geminiResult = await withGeminiRetry(() => model.generateContent([
     TEXT_SYSTEM_PROMPT,
     'The meal description is spoken in the following audio. Transcribe what was said, then apply the METHOD above. Ignore background noise and anything unrelated to food.',
     { inlineData: { data: audioBase64, mimeType } },
-  ]);
+  ]));
 
   let parsed: unknown;
   try {
@@ -298,16 +298,64 @@ interface ImageData {
  * Fetch image bytes from Supabase storage and return as base64.
  * Avoids sending a raw signed URL to Gemini (SSRF prevention).
  */
+const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
 async function fetchImageAsBase64(imageUrl: string): Promise<ImageData> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+  // A hung storage read used to hold the request open until the client's own
+  // 60 s limit tripped; now it fails fast and the app offers Retry.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(imageUrl, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const buffer = await response.arrayBuffer();
+    return {
+      base64: Buffer.from(buffer).toString('base64'),
+      mimeType: response.headers.get('content-type') ?? 'image/jpeg',
+    };
+  } finally {
+    clearTimeout(timer);
   }
-  const buffer = await response.arrayBuffer();
-  return {
-    base64: Buffer.from(buffer).toString('base64'),
-    mimeType: response.headers.get('content-type') ?? 'image/jpeg',
-  };
+}
+
+// ─── Gemini retry ────────────────────────────────────────────────────────────
+// The model API returns 429 / 503 ("overloaded") in bursts and the fetch itself
+// occasionally resets. One short retry absorbs almost all of it; anything else
+// is a real failure and surfaces as before.
+
+const GEMINI_ATTEMPTS = 2;
+const GEMINI_RETRY_DELAY_MS = 800;
+
+function isTransientGeminiError(err: unknown): boolean {
+  const e = err as { status?: number; message?: string } | undefined;
+  const status = e?.status;
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  const msg = (e?.message ?? '').toLowerCase();
+  return (
+    msg.includes('overloaded') ||
+    msg.includes('resource has been exhausted') ||
+    msg.includes('fetch failed') ||
+    msg.includes('econnreset') ||
+    msg.includes('socket hang up')
+  );
+}
+
+async function withGeminiRetry<T>(call: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= GEMINI_ATTEMPTS; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === GEMINI_ATTEMPTS || !isTransientGeminiError(err)) throw err;
+      console.warn(`[Gemini] transient failure, retrying (${attempt}/${GEMINI_ATTEMPTS})`,
+        err instanceof Error ? err.message : err);
+      await new Promise((res) => setTimeout(res, GEMINI_RETRY_DELAY_MS * attempt));
+    }
+  }
+  throw lastErr;
 }
 
 function hashImageUrl(url: string): string {
@@ -381,10 +429,10 @@ export async function analyzeFoodPhoto(imageBase64: string, mimeType: string, de
     ? `\n\nUser-provided description (treat as ground truth for hidden/stacked ingredients): "${description.trim()}"`
     : '';
 
-  const geminiResult = await model.generateContent([
+  const geminiResult = await withGeminiRetry(() => model.generateContent([
     SYSTEM_PROMPT + userHint,
     { inlineData: { data: imageBase64, mimeType } },
-  ]);
+  ]));
 
   // responseSchema guarantees valid JSON — no markdown stripping or error-field
   // handling needed. If parsing still fails, fall back gracefully.
@@ -875,10 +923,10 @@ router.post(
       if (!(await enforceScanGate(req, res))) return;
 
       const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
-      const geminiResult = await labelModel.generateContent([
+      const geminiResult = await withGeminiRetry(() => labelModel.generateContent([
         LABEL_SYSTEM_PROMPT,
         { inlineData: { data: base64, mimeType } },
-      ]);
+      ]));
 
       let parsed: unknown;
       try {

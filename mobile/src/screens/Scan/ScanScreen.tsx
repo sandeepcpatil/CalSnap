@@ -74,6 +74,12 @@ function scanErrorCopy(err: any, mode: ScanMode): string {
   if (mode === 'barcode' && status === 404) {
     return "This barcode isn't in the database yet. Try scanning the nutrition label instead.";
   }
+  if (mode === 'barcode' && status === 400) {
+    return "That barcode didn't read cleanly. Hold the camera steady and try again.";
+  }
+  if (mode === 'barcode' && (status === 502 || status === 503 || status === 504)) {
+    return "The product database isn't responding right now. Try again in a moment, or scan the label instead.";
+  }
   if (status === 422) {
     if (mode === 'label') return "We couldn't read a nutrition label in that photo. Try a clearer shot.";
     if (mode === 'voice') return "We couldn't make out any food in that. Try describing it again.";
@@ -253,6 +259,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, signal?: AbortSignal): 
 const UPLOAD_TIMEOUT_MS = 45_000;
 /** After a cancelled barcode lookup, wait before the live scanner may fire again. */
 const BARCODE_REARM_MS = 1_500;
+
+/** Retail codes only. Defined once so the native prop is referentially stable. */
+const BARCODE_SETTINGS: React.ComponentProps<typeof CameraView>['barcodeScannerSettings'] = {
+  barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'itf14'],
+};
+
+/** Label text is small; 1024px loses the fine print that the meal path never needs. */
+const MEAL_UPLOAD_WIDTH = 1024;
+const LABEL_UPLOAD_WIDTH = 1600;
 
 const overlayStyles = StyleSheet.create({
   container: {
@@ -454,6 +469,19 @@ export function ScanScreen({ navigation, route }: Props) {
     lookup(code);
   };
 
+  // Stable scanner callback. Its identity never changes, so the native prop is
+  // set once per camera mount. Everything that used to gate the prop
+  // (analysing, error overlay, mode) is checked here through refs instead.
+  const barcodeActiveRef = useRef(false);
+  barcodeActiveRef.current = scanMode === 'barcode' && !isAnalyzing && !scanError;
+  const handleBarcodeRef = useRef(handleBarcode);
+  handleBarcodeRef.current = handleBarcode;
+  const onBarcode = React.useCallback((r: { data: string }) => {
+    if (!barcodeActiveRef.current) return;
+    if (!r?.data) return;
+    handleBarcodeRef.current(r.data);
+  }, []);
+
   const lookup = (code: string) => runAnalysis('barcode', async (signal) => {
     const { result, image_url } = await lookupBarcode(code, session!.access_token, signal);
     assertActive(signal);
@@ -490,11 +518,14 @@ export function ScanScreen({ navigation, route }: Props) {
   };
 
   /** Compress, upload to Supabase Storage, and return local + signed URLs. */
-  const uploadAndSign = async (rawUri: string): Promise<{ compressedUri: string; signedUrl: string }> => {
-    // Compress to max 1024px before uploading
+  const uploadAndSign = async (
+    rawUri: string,
+    maxWidth: number,
+  ): Promise<{ compressedUri: string; signedUrl: string }> => {
+    // Downscale before uploading; the width depends on what has to stay legible.
     const compressed = await ImageManipulator.manipulateAsync(
       rawUri,
-      [{ resize: { width: 1024 } }],
+      [{ resize: { width: maxWidth } }],
       { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
     );
 
@@ -527,10 +558,10 @@ export function ScanScreen({ navigation, route }: Props) {
   };
 
   /** Upload once per capture; a retry after a failed analysis reuses the URL. */
-  const ensureUploaded = async (rawUri: string, signal: AbortSignal) => {
+  const ensureUploaded = async (rawUri: string, signal: AbortSignal, maxWidth = MEAL_UPLOAD_WIDTH) => {
     let up = uploadedRef.current;
     if (!up || up.rawUri !== rawUri) {
-      const { compressedUri, signedUrl } = await withTimeout(uploadAndSign(rawUri), UPLOAD_TIMEOUT_MS, signal);
+      const { compressedUri, signedUrl } = await withTimeout(uploadAndSign(rawUri, maxWidth), UPLOAD_TIMEOUT_MS, signal);
       up = { rawUri, compressedUri, signedUrl };
       uploadedRef.current = up;
     }
@@ -554,7 +585,7 @@ export function ScanScreen({ navigation, route }: Props) {
   }, () => processPhoto(rawUri));
 
   const processLabelPhoto = (rawUri: string) => runAnalysis('label', async (signal) => {
-    const up = await ensureUploaded(rawUri, signal);
+    const up = await ensureUploaded(rawUri, signal, LABEL_UPLOAD_WIDTH);
     const { result } = await analyzeLabel(up.signedUrl, session!.access_token, signal);
     assertActive(signal);
     consumeScan();
@@ -678,17 +709,28 @@ export function ScanScreen({ navigation, route }: Props) {
       {/* Camera is unmounted in voice mode: no torch, no battery drain. */}
       {scanMode === 'voice' ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: T.bg }]} />
+      ) : scanMode === 'barcode' ? (
+        // Barcode mode gets its own camera instance (see the `key`). The native
+        // scanner is configured once at mount and never toggled while the
+        // session is live: flipping `onBarcodeScanned` between a function and
+        // undefined re-binds the camera use cases on Android, which hard-crashes
+        // some devices. Gating happens inside the stable handler instead.
+        <CameraView
+          key="camera-barcode"
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          enableTorch={torch}
+          barcodeScannerSettings={BARCODE_SETTINGS}
+          onBarcodeScanned={onBarcode}
+        />
       ) : (
         <CameraView
+          key="camera-photo"
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={cameraType}
           enableTorch={torch && cameraType === 'back'}
-          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
-          // Live scanning only in barcode mode, and only until one is captured.
-          onBarcodeScanned={
-            scanMode === 'barcode' && !isAnalyzing && !scanError ? (r) => handleBarcode(r.data) : undefined
-          }
         />
       )}
 

@@ -349,9 +349,9 @@ export function LabelResultScreen({ navigation, route }: Props) {
             labelStyle={styles.btnLabel}
             buttonColor={T.primary}
             textColor={T.textOnPrimary}
-            icon="plus"
+            icon={isSaving ? undefined : 'plus'}
           >
-            Log {servingLabel}
+            {isSaving ? 'Saving…' : `Log ${servingLabel}`}
           </Button>
         </View>
       </View>
