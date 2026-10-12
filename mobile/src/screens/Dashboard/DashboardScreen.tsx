@@ -355,7 +355,18 @@ export function DashboardScreen() {
       <CoachFab hidden={fabHidden} />
 
       <PaywallModal visible={paywallVisible} onDismiss={dismissPaywall} />
-      <AlertsModal visible={alertsOpen} onClose={() => setAlertsOpen(false)} alerts={alerts} onUpgrade={showPaywall} />
+      <AlertsModal
+        visible={alertsOpen}
+        onClose={() => setAlertsOpen(false)}
+        alerts={alerts}
+        onUpgrade={showPaywall}
+        onOpenWeek={() => {
+          // The sheet is a native Modal above the navigator, so it must close
+          // before the pushed screen can be seen.
+          setAlertsOpen(false);
+          rootNavigation?.navigate('WeeklyReview');
+        }}
+      />
     </View>
   );
 }

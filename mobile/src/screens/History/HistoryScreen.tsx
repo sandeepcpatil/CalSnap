@@ -12,6 +12,9 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { normalizeLog, type FoodLog } from '../../store/foodLogStore';
@@ -219,6 +222,8 @@ export function HistoryScreen() {
 
   // Slides the floating Coach pill away while scrolling through history.
   const { hidden: fabHidden, onScroll } = useHideOnScroll();
+  // "Your week" is a root-stack screen; the navigate bubbles up from the tab.
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const today = new Date().toISOString().slice(0, 10);
   const calorieGoal = profile?.daily_calorie_goal ?? null;
@@ -478,6 +483,17 @@ export function HistoryScreen() {
                   Dashed line: your {calorieGoal.toLocaleString()} kcal goal. Amber bars are above it.
                 </Text>
               )}
+
+              <TouchableOpacity
+                style={styles.shareWeekBtn}
+                onPress={() => rootNavigation.navigate('WeeklyReview')}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Share your week"
+              >
+                <Ionicons name="share-outline" size={16} color={T.primary} />
+                <Text style={styles.shareWeekText}>Share your week</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -727,6 +743,8 @@ const styles = StyleSheet.create({
   },
   chartBarNote: { fontSize: 12, fontWeight: '500', color: T.textSecondary, marginTop: -6 },
   chartLegend: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: T.textMuted },
+  shareWeekBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, minHeight: HIT_TARGET, marginTop: -4, marginBottom: -8 },
+  shareWeekText: { fontSize: 14, fontWeight: '700', color: T.primary },
 
   retryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14 },
   retryText: { flex: 1, fontSize: 14, color: T.textSecondary },

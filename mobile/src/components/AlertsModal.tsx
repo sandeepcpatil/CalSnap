@@ -16,6 +16,8 @@ interface Props {
   alerts: SmartAlert[];
   /** Opens the paywall from the locked recap teaser. */
   onUpgrade?: () => void;
+  /** Opens the shareable "Your week" card. The caller closes this sheet first. */
+  onOpenWeek?: () => void;
 }
 
 const TONE: Record<AlertTone, { bg: string; icon: string }> = {
@@ -26,7 +28,7 @@ const TONE: Record<AlertTone, { bg: string; icon: string }> = {
 
 type Tab = 'alerts' | 'review';
 
-export function AlertsModal({ visible, onClose, alerts, onUpgrade }: Props) {
+export function AlertsModal({ visible, onClose, alerts, onUpgrade, onOpenWeek }: Props) {
   const token = useAuthStore((s) => s.session?.access_token);
   const { recap, locked, loading, error, fetch, markSeen, hasUnread } = useRecapStore();
   const [tab, setTab] = useState<Tab>('alerts');
@@ -61,6 +63,22 @@ export function AlertsModal({ visible, onClose, alerts, onUpgrade }: Props) {
 
         {tab === 'review' ? (
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            {onOpenWeek && (
+              <TouchableOpacity
+                style={styles.weekRow}
+                onPress={onOpenWeek}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Your week. Open the shareable card"
+              >
+                <Ionicons name="share-outline" size={18} color={T.primary} />
+                <View style={styles.weekRowText}>
+                  <Text style={styles.weekRowTitle}>Your week</Text>
+                  <Text style={styles.weekRowBody}>A card with your numbers, ready to share.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
+              </TouchableOpacity>
+            )}
             {loading && !recap ? (
               <View style={styles.center}>
                 <ActivityIndicator color={T.primary} />
@@ -249,6 +267,23 @@ const styles = StyleSheet.create({
   cardTitle: { ...type.body, fontWeight: '700', color: T.textPrimary },
   cardBody: { ...type.bodySm, lineHeight: 19, color: T.textSecondary },
   footnote: { ...type.bodySm, fontSize: 12, color: T.textMuted, textAlign: 'center', marginTop: spacing.sm },
+
+  /* "Your week" entry row */
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: HIT_TARGET + spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  weekRowText: { flex: 1, gap: 2 },
+  weekRowTitle: { ...type.body, fontWeight: '700', color: T.textPrimary },
+  weekRowBody: { ...type.bodySm, color: T.textSecondary },
 
   /* Locked teaser */
   teaser: { alignItems: 'center', gap: spacing.md, padding: spacing['2xl'], borderRadius: radius.lg, backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, marginTop: spacing.sm },

@@ -9,6 +9,7 @@ import { AppLoading } from '../components/AppLoading';
 import { WaterScreen } from '../screens/Water/WaterScreen';
 import { WeightScreen } from '../screens/Weight/WeightScreen';
 import { CoachScreen } from '../screens/Coach/CoachScreen';
+import { WeeklyReviewScreen } from '../screens/Review/WeeklyReviewScreen';
 import { LogNavigator } from './LogNavigator';
 import { ScanNavigator, type ScanMode } from './ScanNavigator';
 
@@ -30,6 +31,8 @@ export type RootStackParamList = {
   Coach: undefined;
   /** Re-log a past food, or build and log a saved meal. */
   LogFromHistory: undefined;
+  /** The shareable weekly review card — pushed from Alerts or History. */
+  WeeklyReview: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -106,6 +109,7 @@ export function RootNavigator() {
           <Stack.Screen name="Water" component={WaterScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Weight" component={WeightScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Coach" component={CoachScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="WeeklyReview" component={WeeklyReviewScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen
             name="LogFromHistory"
             component={LogNavigator}
