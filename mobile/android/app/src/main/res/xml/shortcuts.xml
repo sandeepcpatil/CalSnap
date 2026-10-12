@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static launcher shortcuts (long-press the app icon). Each one opens
+  MainActivity with a calvue:// link that the app routes once the user is
+  signed in and onboarded; otherwise the link is ignored and the app opens
+  normally. Icons reuse the launcher mipmap so no binary assets are added.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <shortcut
+    android:shortcutId="scan_meal"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/shortcut_scan_short"
+    android:shortcutLongLabel="@string/shortcut_scan_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:data="calvue://scan?mode=meal"
+      android:targetPackage="com.sanverse.calsnapapp"
+      android:targetClass="com.sanverse.calsnapapp.MainActivity" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="log_water"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/shortcut_water_short"
+    android:shortcutLongLabel="@string/shortcut_water_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:data="calvue://water"
+      android:targetPackage="com.sanverse.calsnapapp"
+      android:targetClass="com.sanverse.calsnapapp.MainActivity" />
+  </shortcut>
+</shortcuts>

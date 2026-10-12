@@ -1,6 +1,12 @@
 import React, { useEffect } from 'react';
-import { AppState } from 'react-native';
-import { NavigationContainer, DarkTheme, DefaultTheme, type Theme as NavTheme } from '@react-navigation/native';
+import { AppState, Linking } from 'react-native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+  type LinkingOptions,
+  type Theme as NavTheme,
+} from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
@@ -8,12 +14,35 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/services/supabase';
 import { useAuthStore } from './src/store/authStore';
 import { useNotificationStore } from './src/store/notificationStore';
-import { RootNavigator } from './src/navigation/RootNavigator';
+import { RootNavigator, type RootStackParamList } from './src/navigation/RootNavigator';
+import { receiveDeepLink } from './src/store/deepLinkStore';
 import { useTheme } from './src/hooks/useTheme';
 import { configurePurchases, identifyUser } from './src/services/purchases';
 import { ToastHost } from './src/components/ToastHost';
 import { T } from './src/theme';
 import './src/store/themeStore';
+
+/**
+ * Launcher shortcuts and external links (`calvue://scan?mode=…`, `calvue://water`).
+ *
+ * Both handlers funnel the URL into `deepLinkStore` and hand React Navigation
+ * nothing. Letting the container build state from the URL itself would race
+ * the session restore on a cold start — the Scan/Water screens do not exist in
+ * the stack until the user is signed in and onboarded — so the parked link is
+ * consumed by `MainTabNavigator` once that gate is open, whether the app was
+ * launched by the link or was already in the foreground.
+ */
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ['calvue://'],
+  getInitialURL: async () => {
+    receiveDeepLink(await Linking.getInitialURL());
+    return null;
+  },
+  subscribe: () => {
+    const sub = Linking.addEventListener('url', ({ url }) => receiveDeepLink(url));
+    return () => sub.remove();
+  },
+};
 
 function AppContent() {
   const { setSession, fetchProfile } = useAuthStore();
@@ -112,7 +141,7 @@ function AppContent() {
 
   return (
     <PaperProvider theme={paperTheme}>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer theme={navTheme} linking={linking}>
         <RootNavigator />
         <StatusBar style={theme.statusBar} />
       </NavigationContainer>

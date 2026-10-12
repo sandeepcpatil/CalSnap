@@ -1,5 +1,9 @@
 <resources>
   <string name="app_name">CalVue</string>
+  <string name="shortcut_scan_short">Scan a meal</string>
+  <string name="shortcut_scan_long">Scan a meal with CalVue</string>
+  <string name="shortcut_water_short">Log water</string>
+  <string name="shortcut_water_long">Log water in CalVue</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
   <string name="expo_system_ui_user_interface_style" translatable="false">automatic</string>

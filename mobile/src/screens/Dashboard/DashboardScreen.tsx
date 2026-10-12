@@ -15,6 +15,9 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore, FoodLog } from '../../store/foodLogStore';
+import { getLogsForDay, repeatLogs, type FoodLogRow, type MealType } from '../../services/foodLogs';
+import { toast } from '../../store/toastStore';
+import type { RepeatOffer } from '../../components/MealSection';
 import { useWaterStore } from '../../store/waterStore';
 import { CalorieRing } from '../../components/CalorieRing';
 import { WaterCard } from '../../components/WaterCard';
@@ -38,6 +41,15 @@ import { PaywallModal } from '../Paywall/PaywallModal';
 import { ProGate } from '../../components/ProGate';
 import { T, spacing, radius, type, HIT_TARGET, withAlpha, tabularNums } from '../../theme';
 
+const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+
+/** The YYYY-MM-DD key one day before `dayKey` (keys are UTC dates, as in the store). */
+function previousDayKey(dayKey: string): string {
+  const ms = Date.parse(`${dayKey}T00:00:00.000Z`);
+  if (!Number.isFinite(ms)) return dayKey;
+  return new Date(ms - 86_400_000).toISOString().slice(0, 10);
+}
+
 export function DashboardScreen() {
   const { profile, session } = useAuthStore();
   const { todayLogs, selectedDate, isLoading, hasLoaded, error, fetchLogsForDate } = useFoodLogStore();
@@ -48,6 +60,11 @@ export function DashboardScreen() {
   const [alertsOpen, setAlertsOpen] = useState(false);
   // Only a pull-to-refresh spins the control; background fetches stay silent.
   const [refreshing, setRefreshing] = useState(false);
+  // Yesterday's diary, fetched once per load so each empty meal can offer a
+  // one-tap repeat. Keyed by the day it belongs to, so a stale answer from an
+  // earlier date can never be offered against a different "today".
+  const [yesterday, setYesterday] = useState<{ dayKey: string; logs: FoodLogRow[] } | null>(null);
+  const [repeating, setRepeating] = useState<MealType | null>(null);
 
   // Home is the root of the back stack, so a single stray press would otherwise
   // close the app outright.
@@ -68,9 +85,14 @@ export function DashboardScreen() {
     if (session?.user.id) {
       // Water lives in its own table but shares this screen's refresh control —
       // pulling down must not leave the hydration card stale.
+      const yesterdayKey = previousDayKey(selectedDate);
       await Promise.all([
         fetchLogsForDate(session.user.id, selectedDate),
         useWaterStore.getState().fetchForDate(session.user.id, selectedDate),
+        // One query for the whole of yesterday; the sections split it by meal.
+        getLogsForDay(session.user.id, yesterdayKey).then((logs) =>
+          setYesterday({ dayKey: yesterdayKey, logs }),
+        ),
       ]);
     }
   }, [session?.user.id, selectedDate]);
@@ -113,6 +135,50 @@ export function DashboardScreen() {
 
   const byMealType = (mealType: FoodLog['meal_type']) =>
     todayLogs.filter((l) => l.meal_type === mealType);
+
+  const yesterdayLogs =
+    yesterday && yesterday.dayKey === previousDayKey(selectedDate) ? yesterday.logs : [];
+  const yesterdayByMeal = (mealType: MealType) =>
+    yesterdayLogs.filter((l) => l.meal_type === mealType);
+
+  const repeatYesterday = useCallback(
+    async (mealType: MealType, rows: FoodLogRow[]) => {
+      const userId = session?.user.id;
+      if (!userId || rows.length === 0 || repeating) return;
+      setRepeating(mealType);
+      try {
+        const copied = await repeatLogs(userId, rows, mealType);
+        const { addLog, deleteLogWithUndo } = useFoodLogStore.getState();
+        copied.forEach(addLog);
+        const kcal = Math.round(copied.reduce((sum, l) => sum + (l.calories || 0), 0));
+        toast(`Logged ${mealType} · ${kcal} kcal`, {
+          action: {
+            label: 'Undo',
+            // Same optimistic remove + deferred server delete as a long-press
+            // delete, so undoing a repeat is one code path with the rest.
+            onPress: () => copied.forEach((l) => deleteLogWithUndo(l.id)),
+          },
+        });
+      } catch {
+        toast(`Couldn't log ${mealType}. Try again.`);
+      } finally {
+        setRepeating(null);
+      }
+    },
+    [session?.user.id, repeating],
+  );
+
+  /** The repeat affordance for an empty meal, or null when yesterday had none. */
+  const repeatOfferFor = (mealType: MealType, todayRows: FoodLog[]): RepeatOffer | null => {
+    if (!hasLoaded || todayRows.length > 0) return null;
+    const rows = yesterdayByMeal(mealType);
+    if (rows.length === 0) return null;
+    return {
+      calories: Math.round(rows.reduce((sum, l) => sum + (l.calories || 0), 0)),
+      busy: repeating === mealType,
+      onPress: () => { void repeatYesterday(mealType, rows); },
+    };
+  };
 
   const insightMsg = buildNutriInsight(totals, { calorieGoal, proteinGoal });
   const macroSplit = macroCalorieSplit(totals.protein, totals.carbs, totals.fat);
@@ -248,9 +314,12 @@ export function DashboardScreen() {
           <Text style={styles.sectionSub}>{itemCount}</Text>
         </View>
 
-        {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
-          <MealSection key={meal} mealType={meal} logs={byMealType(meal)} />
-        ))}
+        {MEAL_TYPES.map((meal) => {
+          const rows = byMealType(meal);
+          return (
+            <MealSection key={meal} mealType={meal} logs={rows} repeat={repeatOfferFor(meal, rows)} />
+          );
+        })}
 
         {/* ── Pro: one gate over both analysis cards, not a badge on each ── */}
         <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Macros and insight" borderRadius={radius.lg}>

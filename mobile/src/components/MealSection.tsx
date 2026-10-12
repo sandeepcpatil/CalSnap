@@ -4,13 +4,23 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { FoodLog, useFoodLogStore } from '../store/foodLogStore';
 import { toast } from '../store/toastStore';
-import { T, spacing, radius, type, withAlpha, tabularNums } from '../theme';
+import { T, spacing, radius, type, withAlpha, tabularNums, HIT_TARGET } from '../theme';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+/** Yesterday's rows for this meal, offered as a one-tap repeat when today is empty. */
+export interface RepeatOffer {
+  calories: number;
+  /** True while the copy is in flight, so a double tap cannot log it twice. */
+  busy: boolean;
+  onPress: () => void;
+}
 
 interface Props {
   mealType: MealType;
   logs: FoodLog[];
+  /** Only rendered when `logs` is empty. */
+  repeat?: RepeatOffer | null;
 }
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -83,21 +93,43 @@ function confirmDelete(logs: FoodLog[]) {
   );
 }
 
-export function MealSection({ mealType, logs }: Props) {
+export function MealSection({ mealType, logs, repeat }: Props) {
   const [expanded, setExpanded] = useState(true);
   const totalCals = logs.reduce((s, l) => s + (l.calories || 0), 0);
   const accentColor = MEAL_ACCENTS[mealType];
   const isEmpty = logs.length === 0;
 
   // An empty meal is one quiet line: no chevron, no fabricated time, no body.
+  // When yesterday had this meal, one slim row beneath offers to log it again.
   if (isEmpty) {
+    const mealName = MEAL_LABELS[mealType].toLowerCase();
     return (
-      <View style={[styles.container, styles.emptyRow]}>
-        <View style={[styles.iconBox, styles.iconBoxSm, { backgroundColor: withAlpha(accentColor, 0.13) }]}>
-          <Ionicons name={MEAL_ICONS[mealType]} size={18} color={accentColor} />
+      <View style={styles.container}>
+        <View style={styles.emptyRow}>
+          <View style={[styles.iconBox, styles.iconBoxSm, { backgroundColor: withAlpha(accentColor, 0.13) }]}>
+            <Ionicons name={MEAL_ICONS[mealType]} size={18} color={accentColor} />
+          </View>
+          <Text style={styles.emptyTitle}>{MEAL_LABELS[mealType]}</Text>
+          <Text style={styles.emptyHint}>Nothing yet</Text>
         </View>
-        <Text style={styles.emptyTitle}>{MEAL_LABELS[mealType]}</Text>
-        <Text style={styles.emptyHint}>Nothing yet</Text>
+        {repeat && (
+          <TouchableOpacity
+            style={styles.repeatRow}
+            onPress={repeat.onPress}
+            disabled={repeat.busy}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Repeat yesterday's ${mealName}, ${repeat.calories} kilocalories`}
+            accessibilityState={{ disabled: repeat.busy, busy: repeat.busy }}
+          >
+            <Ionicons name="repeat-outline" size={18} color={repeat.busy ? T.textMuted : accentColor} />
+            <Text style={[styles.repeatText, repeat.busy && styles.repeatTextBusy]} numberOfLines={1}>
+              {repeat.busy ? `Logging ${mealName}…` : `Repeat yesterday's ${mealName}`}
+              <Text style={styles.repeatKcal}>{`  ·  ${repeat.calories} kcal`}</Text>
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -285,6 +317,21 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { ...type.body, flex: 1, fontWeight: '600', color: T.textSecondary },
   emptyHint: { ...type.bodySm, color: T.textMuted },
+
+  /* One-tap "repeat yesterday" under an empty meal */
+  repeatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: T.divider,
+  },
+  repeatText: { ...type.bodySm, flex: 1, fontWeight: '600', color: T.textPrimary },
+  repeatTextBusy: { color: T.textMuted },
+  repeatKcal: { ...type.bodySm, fontWeight: '600', color: T.textMuted, ...tabularNums },
 
   entries: {
     paddingHorizontal: spacing.lg,

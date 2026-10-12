@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useLogHubStore, openLogHub } from '../store/logHubStore';
+import { useDeepLinkStore } from '../store/deepLinkStore';
 import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { HistoryScreen } from '../screens/History/HistoryScreen';
 import { ProfileScreen } from '../screens/Profile/ProfileScreen';
@@ -62,6 +63,20 @@ export function MainTabNavigator() {
   const setHubOpen = useLogHubStore((s) => s.setOpen);
 
   const openScan = (mode: ScanMode) => rootNav.navigate('Scan', { mode });
+
+  // Launcher shortcuts land here. This navigator only mounts for a signed-in,
+  // onboarded user, so a link parked during the splash or a sign-out is applied
+  // the moment the gate opens — and one arriving while the app is already up
+  // navigates straight away.
+  const pendingLink = useDeepLinkStore((s) => s.pending);
+  useEffect(() => {
+    if (!pendingLink) return;
+    const link = useDeepLinkStore.getState().consume();
+    if (!link) return;
+    setHubOpen(false);
+    if (link.name === 'Scan') rootNav.navigate('Scan', link.params);
+    else rootNav.navigate('Water');
+  }, [pendingLink]);
 
   return (
     <>
