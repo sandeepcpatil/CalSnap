@@ -30,6 +30,10 @@ export const UNIT_GRAMS: Record<string, number> = {
   glass: 250,
   plate: 300,
   slice: 25,
+  pita: 60,    // one Levantine flatbread
+  wrap: 300,   // one wrap of eba / fufu / pounded yam (a shawarma wrap is ~250 g)
+  ladle: 120,  // one ladle of soup or stew
+  scoop: 100,  // one rice scoop (Filipino carinderia / restaurant)
   g: 1,
 };
 
@@ -41,7 +45,7 @@ export function gramsFor(quantity: number, unit: string): number {
 }
 
 /** Units you count whole — half a boiled egg isn't a normal way to log. */
-const COUNTABLE = new Set(['piece', 'roti', 'slice']);
+const COUNTABLE = new Set(['piece', 'roti', 'slice', 'pita']);
 
 /**
  * Step size for the quantity stepper. Countable things move in whole units;
@@ -126,9 +130,11 @@ interface FoodDef {
 }
 
 /**
- * Common Indian foods for the "add anything we missed" flow — the AI reliably
- * misses drinks, ghee, pickles and side items at the edge of frame. Values are
- * per 100 g so any quantity/unit can be derived.
+ * Common foods for the "add anything we missed" flow — the AI reliably misses
+ * drinks, ghee, pickles and side items at the edge of frame. Indian first, then
+ * Levantine, Filipino and West African staples, mirroring the calibration in
+ * the backend scan prompt. Values are per 100 g so any quantity/unit can be
+ * derived (sources: USDA FDC, Philippine FCT, Nigerian FCT; rounded).
  */
 export const COMMON_FOODS: readonly FoodDef[] = [
   { name: 'Roti / Chapati',      unit: 'roti',   kcal: 300, p: 8,   c: 62, f: 1.5, fib: 8 },
@@ -161,6 +167,33 @@ export const COMMON_FOODS: readonly FoodDef[] = [
   { name: 'Bread (white)',       unit: 'slice',  kcal: 265, p: 9,   c: 49, f: 3.2, fib: 2.7, na: 490, sug: 5 },
   { name: 'Sugar',               unit: 'tsp',    kcal: 387, p: 0,   c: 100, f: 0, fib: 0, sug: 100 },
   { name: 'Sweet / Mithai',      unit: 'piece',  kcal: 350, p: 5,   c: 50, f: 14, fib: 1, sug: 40, sat: 7 },
+  // ── Levantine / Middle Eastern ──
+  { name: 'Pita bread',          unit: 'pita',   kcal: 275, p: 9,   c: 55, f: 1.2, fib: 2.2, na: 540 },
+  { name: 'Hummus',              unit: 'tbsp',   kcal: 166, p: 8,   c: 14, f: 10, fib: 6, na: 380 },
+  { name: 'Falafel',             unit: 'piece',  kcal: 333, p: 13,  c: 32, f: 18, fib: 5, na: 300, sat: 2 },
+  { name: 'Tabbouleh',           unit: 'cup',    kcal: 95,  p: 2,   c: 10, f: 6,  fib: 2.5, na: 250 },
+  { name: 'Chicken shawarma wrap', unit: 'wrap', kcal: 185, p: 11,  c: 17, f: 8,  fib: 1, na: 500, sat: 2 },
+  { name: 'Lentil soup (shorba)', unit: 'cup',   kcal: 80,  p: 4.5, c: 12, f: 1.5, fib: 3, na: 350 },
+  { name: 'Labneh',              unit: 'tbsp',   kcal: 160, p: 8,   c: 5,  f: 12, fib: 0, na: 300, sat: 8 },
+  { name: 'Feta cheese',         unit: 'tbsp',   kcal: 264, p: 14,  c: 4,  f: 21, fib: 0, na: 1100, sat: 15 },
+  // ── Filipino ──
+  { name: 'Garlic rice (sinangag)', unit: 'cup', kcal: 165, p: 2.7, c: 29, f: 4,  fib: 0.6, na: 250 },
+  { name: 'Chicken adobo',       unit: 'cup',    kcal: 160, p: 14,  c: 3,  f: 10, fib: 0.2, na: 450, sat: 3 },
+  { name: 'Sinigang (pork)',     unit: 'cup',    kcal: 85,  p: 6,   c: 4,  f: 5,  fib: 1, na: 300, sat: 2 },
+  { name: 'Pancit bihon',        unit: 'cup',    kcal: 145, p: 5.5, c: 23, f: 4,  fib: 1.3, na: 400 },
+  { name: 'Lumpia shanghai',     unit: 'piece',  kcal: 300, p: 13,  c: 20, f: 19, fib: 1, na: 400, sat: 6 },
+  { name: 'Lechon kawali',       unit: 'piece',  kcal: 430, p: 20,  c: 0,  f: 38, fib: 0, na: 400, sat: 14 },
+  { name: 'Pandesal',            unit: 'piece',  kcal: 310, p: 9,   c: 57, f: 5,  fib: 2, sug: 8, na: 400 },
+  // ── Nigerian / West African ──
+  { name: 'Jollof rice',         unit: 'cup',    kcal: 165, p: 3.5, c: 25, f: 5.5, fib: 1, na: 350 },
+  { name: 'Egusi soup',          unit: 'ladle',  kcal: 210, p: 8,   c: 5,  f: 18, fib: 2.5, na: 400, sat: 7 },
+  { name: 'Eba / Garri',         unit: 'wrap',   kcal: 110, p: 0.6, c: 26, f: 0.3, fib: 1 },
+  { name: 'Fufu / Pounded yam',  unit: 'wrap',   kcal: 118, p: 1.5, c: 28, f: 0.2, fib: 1.5 },
+  { name: 'Moi moi',             unit: 'piece',  kcal: 155, p: 8,   c: 13, f: 8,  fib: 3.5, na: 300 },
+  { name: 'Suya (beef)',         unit: 'piece',  kcal: 235, p: 25,  c: 3.5, f: 13, fib: 0.5, na: 500, sat: 4 },
+  { name: 'Fried plantain (dodo)', unit: 'piece', kcal: 220, p: 1.3, c: 33, f: 9.5, fib: 2, sug: 15 },
+  { name: 'Puff-puff',           unit: 'piece',  kcal: 330, p: 5.5, c: 47, f: 13, fib: 1, sug: 10, na: 200 },
+  { name: 'Pepper soup',         unit: 'cup',    kcal: 60,  p: 7,   c: 1.5, f: 3,  fib: 0.3, na: 350 },
 ];
 
 /** Build a FoodItem from a catalogue entry at the given quantity. */

@@ -29,7 +29,7 @@ const ITEM_SCHEMA: Schema = {
   properties: {
     name:      { type: SchemaType.STRING },
     quantity:  { type: SchemaType.NUMBER },
-    unit:      { type: SchemaType.STRING, format: 'enum', enum: ['katori', 'roti', 'cup', 'piece', 'tbsp', 'tsp', 'glass', 'plate', 'slice', 'g'] },
+    unit:      { type: SchemaType.STRING, format: 'enum', enum: ['katori', 'roti', 'cup', 'piece', 'tbsp', 'tsp', 'glass', 'plate', 'slice', 'pita', 'wrap', 'ladle', 'scoop', 'g'] },
     grams:     { type: SchemaType.NUMBER },
     calories:  { type: SchemaType.NUMBER },
     protein_g: { type: SchemaType.NUMBER },
@@ -132,7 +132,8 @@ const PRO_DAILY_SCAN_LIMIT = 20;
 // NOTE: `responseSchema` constrains the JSON *shape and types* only — it cannot
 // constrain *values*. The calibration anchors below are what keep estimates in
 // a realistic range; removing them to save tokens is what caused portion drift.
-// They cost ~350 input tokens and are the cheapest accuracy we can buy.
+// They cost ~1,500 input tokens (South Asian + Levantine + Filipino + West
+// African blocks) and are the cheapest accuracy we can buy.
 
 // Shared prompt blocks — photo and text analysis MUST use the same anchors.
 // Keeping two copies is how they drift apart, which is exactly the failure that
@@ -145,6 +146,10 @@ const WEIGHT_ANCHORS = `Anchors:
    • 1 tbsp oil or ghee ≈ 14 g · 1 boiled egg ≈ 50 g · 1 glass ≈ 250 ml
    • 1 slice pizza ≈ 100 g · 1 tortilla ≈ 45 g · 1 cup cooked pasta ≈ 140 g
    • 1 medium banana ≈ 120 g · 1 medium apple ≈ 180 g · 1 cup cooked oats ≈ 240 g
+   • Levantine: 1 pita ≈ 60 g · 1 falafel ≈ 25 g · 3 tbsp hummus ≈ 45 g · 1 shawarma wrap ≈ 250 g · 1 kebab skewer ≈ 100 g
+   • Filipino: "1 cup rice" ≈ 160 g · 1 scoop rice ≈ 100 g · 1 pandesal ≈ 35 g · 1 lumpia shanghai ≈ 25 g
+   • West African: 1 wrap of eba / fufu / pounded yam ≈ 300 g · 1 ladle of soup or stew ≈ 120 g
+     · 1 piece suya ≈ 40 g · 1 medium plantain ≈ 180 g · 1 wrap moi moi ≈ 150 g · 1 puff-puff ≈ 30 g
    • A standard dinner plate is 26–28 cm across — use it to judge scale.`;
 
 const CALIBRATION = `CALIBRATION — typical values for one standard serving:
@@ -165,17 +170,45 @@ const CALIBRATION = `CALIBRATION — typical values for one standard serving:
 • Pizza, cheese (1 slice, 100 g): 270 kcal · P 11 · C 33 · F 10 · Fib 2
 • Green salad with dressing (1 bowl, 150 g): 120 kcal · P 2 · C 8 · F 9 · Fib 3
 • Oatmeal, cooked (1 cup, 240 g): 160 kcal · P 6 · C 27 · F 3 · Fib 4
+Levantine / Middle Eastern:
+• Hummus (3 tbsp, 45 g): 75 kcal · P 4 · C 6 · F 5 · Fib 3
+• Pita, white (1, 60 g): 165 kcal · P 5 · C 33 · F 1 · Fib 1.5
+• Chicken shawarma wrap (1, 250 g) [oil/garlic-sauce heavy]: 550 kcal · P 32 · C 50 · F 24 · Fib 3
+• Tabbouleh (1 cup, 160 g): 150 kcal · P 3 · C 15 · F 9 · Fib 4
+• Falafel (4, 100 g) [fried]: 330 kcal · P 13 · C 32 · F 18 · Fib 5
+• Lentil soup / shorbat adas (1 bowl, 250 g): 200 kcal · P 11 · C 30 · F 4 · Fib 8
+Filipino:
+• Chicken adobo (1 cup with sauce, 200 g) [oil + skin]: 320 kcal · P 28 · C 6 · F 20 · Fib 0.5
+• Sinigang, pork (1 bowl, 300 g): 250 kcal · P 18 · C 12 · F 14 · Fib 3
+• Pancit bihon (1 cup, 150 g): 220 kcal · P 8 · C 35 · F 6 · Fib 2
+• Lumpia shanghai (3, 75 g) [fried]: 225 kcal · P 10 · C 15 · F 14 · Fib 1
+• Lechon kawali (100 g) [deep-fried pork belly]: 430 kcal · P 20 · C 0 · F 38 · Fib 0
+• Garlic rice / sinangag (1 cup, 160 g) [oil]: 260 kcal · P 4 · C 46 · F 6 · Fib 1
+• Pandesal (1, 35 g): 110 kcal · P 3 · C 20 · F 2 · Fib 1
+Nigerian / West African:
+• Jollof rice (1 cup, 180 g) [oil]: 300 kcal · P 6 · C 45 · F 10 · Fib 2
+• Egusi soup (1 ladle, 120 g) [palm-oil heavy]: 250 kcal · P 10 · C 6 · F 21 · Fib 3
+• Eba / garri (1 wrap, 300 g): 330 kcal · P 2 · C 78 · F 1 · Fib 3  (fufu / pounded yam ≈ 350 kcal)
+• Moi moi (1 wrap, 150 g) [oil]: 230 kcal · P 12 · C 20 · F 12 · Fib 5
+• Suya, beef (3 pieces, 120 g) [peanut spice + oil]: 280 kcal · P 30 · C 4 · F 16 · Fib 1
+• Fried plantain / dodo (1 medium, 180 g raw) [fried]: 330 kcal · P 2 · C 50 · F 14 · Fib 3
+• Puff-puff (3, 90 g) [fried]: 300 kcal · P 5 · C 42 · F 12 · Fib 1
+• Pepper soup, goat or fish (1 bowl, 300 g): 180 kcal · P 22 · C 4 · F 8 · Fib 1
+Dishes tagged [oil], [fried] or "heavy" above carry cooking fat that is not visible — never trim their fat down.
 
 Also estimate, per item:
 • sodium_mg — home-cooked savoury dishes are salted: assume ≈ 350–500 mg per
   serving. Pickles, cured meats, cheese, chutney, sauces, instant noodles and
-  restaurant/packaged food are far higher (800–1500+ mg). Sweets, fruit and
-  plain rice are low. When unsure, assume a normally-salted home portion.
+  restaurant/packaged food are far higher (800–1500+ mg). Treat fish sauce
+  (patis), soy sauce (toyo), Maggi / stock cubes, brined cheeses (feta,
+  halloumi) and olives as high-sodium markers for the dish they are in. Sweets,
+  fruit and plain rice are low. When unsure, assume a normally-salted home portion.
 • sat_fat_g — high in ghee, butter, coconut, paneer, cheese, cream, and fried food.
 • sugar_g — from added sugar and naturally sweet items (fruit, desserts, sweetened drinks).`;
 
 const SYSTEM_PROMPT = `You are a professional nutritionist AI. You know home cooking from every
-cuisine and are especially well calibrated on South Asian dishes.
+cuisine and are especially well calibrated on South Asian, Levantine, Filipino
+and West African dishes.
 
 TASK
 Break the meal in the photo into its distinct food items (like a nutritionist
@@ -186,7 +219,7 @@ METHOD — follow in order:
    type, sabzi, curd, salad, sweets, drinks all separate. Never merge a plate
    into one item unless it truly is a single dish.
 2. For each item pick the most natural household unit
-   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g)
+   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | pita | wrap | ladle | scoop | g)
    and the quantity visible (use 0.5 steps: 0.5, 1, 1.5, 2 …).
 3. Estimate each item's weight in grams. ${WEIGHT_ANCHORS}
 4. Compute nutrition PER ITEM (for its quantity), then:
@@ -198,6 +231,9 @@ ${CALIBRATION}
 
 RULES
 - Gravies, curries and sauces usually carry more oil than they look — do not under-estimate fat.
+- Filipino plates: rice is often 1.5–2 cups — count the actual mound; adobo, sinigang and dipping sauces carry soy / fish-sauce sodium.
+- West African soups and stews are palm-oil based: a ladle carries 10–15 g fat; a swallow (eba, fufu, pounded yam) is a large carb portion, "one wrap" ≈ 300 g.
+- Levantine mezze plates are many small items (hummus, tabbouleh, labneh, pickles, olives, pita) — list each one separately.
 - Do not assume a large portion by default; most home servings are one small bowl or cup.
 - confidence: "high" only when both the dish AND the portion are clear;
   "medium" when the dish is clear but the portion is ambiguous;
@@ -212,7 +248,8 @@ RULES
 // this MORE reliable than a photo for portions: nobody has to guess bowl depth.
 
 const TEXT_SYSTEM_PROMPT = `You are a professional nutritionist AI. You know home cooking from every
-cuisine and are especially well calibrated on South Asian dishes.
+cuisine and are especially well calibrated on South Asian, Levantine, Filipino
+and West African dishes.
 
 TASK
 The user described a meal in their own words (often dictated by voice, so expect
@@ -226,7 +263,7 @@ METHOD — follow in order:
 3. For vague amounts ("some dal", "a bowl of rice", "dal chawal") assume ONE
    standard serving — never a large one.
 4. Pick the natural household unit
-   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | g).
+   (katori | roti | cup | piece | tbsp | tsp | glass | plate | slice | pita | wrap | ladle | scoop | g).
    If they gave grams ("200g curd"), use unit "g" with quantity = the grams.
 5. Estimate each item's weight in grams. ${WEIGHT_ANCHORS}
 6. Compute nutrition PER ITEM, then:
@@ -238,6 +275,9 @@ ${CALIBRATION}
 
 RULES
 - Gravies, curries and sauces usually carry more oil than they sound — do not under-estimate fat.
+- Filipino plates: "rice" with a meal is often 1.5–2 cups; adobo, sinigang and dipping sauces carry soy / fish-sauce sodium.
+- West African soups and stews are palm-oil based: a ladle carries 10–15 g fat; "one wrap" of eba / fufu / pounded yam ≈ 300 g.
+- Levantine mezze is many small items (hummus, tabbouleh, labneh, pickles, olives, pita) — list each one separately.
 - Ignore filler words and any text unrelated to food.
 - confidence: "high" when foods AND quantities were stated clearly;
   "medium" when foods are clear but amounts were vague;

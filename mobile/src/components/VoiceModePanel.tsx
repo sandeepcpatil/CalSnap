@@ -39,10 +39,10 @@ export interface VoiceModePanelHandle {
   cancelRecording: () => void;
 }
 
-// Localised examples. A generic "a sandwich" teaches the wrong mental model.
+// Localised examples spanning cuisines. A generic "a sandwich" teaches the wrong mental model.
 const EXAMPLES = [
   'Two rotis, a bowl of dal and some curd',
-  'Masala dosa with sambar, medium size',
+  'Chicken adobo with a cup of rice',
 ];
 
 const MAX_RECORD_MS = 30_000; // hard cap: a spoken log is a sentence, not a monologue
