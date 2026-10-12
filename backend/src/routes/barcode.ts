@@ -15,12 +15,32 @@ interface BarcodeResponse {
   cached: boolean;
 }
 
+interface BarcodeAlternative {
+  barcode: string;
+  result: LabelScanData;
+  image_url: string | null;
+}
+
+interface AlternativesResponse {
+  alternatives: BarcodeAlternative[];
+}
+
 // Open Food Facts asks every caller to send an identifying User-Agent.
 const OFF_UA = 'CalVue/1.0 (nutrition app; contact: calsnap.support@gmail.com)';
 // Open Food Facts is often slow from outside Europe; one retry after a timeout
 // or a 5xx turns most "sometimes it fails" lookups into a hit.
 const OFF_TIMEOUT_MS = 10_000;
 const OFF_ATTEMPTS = 2;
+
+/** How many of the most specific OFF category tags to keep on a cached product. */
+const MAX_CATEGORIES = 6;
+/** A swap has to be clearly better, not a rounding error. */
+const MIN_SWAP_GAIN = 8;
+const MAX_ALTERNATIVES = 3;
+/** Widen from the most specific tag to broader ones, but never past this many. */
+const MAX_CATEGORY_TRIES = 3;
+/** Candidate rows fetched per category before scoring. */
+const CANDIDATE_LIMIT = 60;
 
 type OffLookup = { status: number; product: Record<string, unknown> | null };
 
@@ -111,6 +131,10 @@ export function mapOffProduct(off: Record<string, unknown>): { product: CachedPr
 
   const ingredientsText = (off.ingredients_text as string) || '';
 
+  // OFF lists categories broadest first, so the tail is the most specific.
+  // Keep the last few: that is what "same aisle" means for a better swap.
+  const categories = tags.filter((t): t is string => typeof t === 'string' && t.length > 0).slice(-MAX_CATEGORIES);
+
   return {
     product: {
       product_name: name.trim(),
@@ -121,6 +145,7 @@ export function mapOffProduct(off: Record<string, unknown>): { product: CachedPr
       ingredients: ingredientsText ? [ingredientsText] : [],
       confidence: 'high',
       notes: '',
+      categories,
     },
     imageUrl: (off.image_front_url as string) || (off.image_url as string) || null,
   };
@@ -198,6 +223,97 @@ router.get(
       res.json(body);
     } catch (err) {
       next(err);
+    }
+  },
+);
+
+/** A cached row has the fields the scorer needs; reject anything else. */
+function isCachedProduct(v: unknown): v is CachedProduct {
+  if (!v || typeof v !== 'object') return false;
+  const p = v as Record<string, unknown>;
+  return (
+    typeof p.product_name === 'string' &&
+    typeof p.is_beverage === 'boolean' &&
+    !!p.per_100g && typeof p.per_100g === 'object' &&
+    Array.isArray(p.ingredients)
+  );
+}
+
+/**
+ * Better swap: higher-scoring products from the same category.
+ *
+ * Alternatives only ever come from `barcode_cache`, which is to say from
+ * products someone using this app has already scanned. There is no bulk
+ * import from Open Food Facts, so a brand-new install may see no swap for a
+ * while; the list grows with use. Categories are the OFF tags stored on the
+ * cached product, most specific last; the search starts from the most
+ * specific tag and widens only when that aisle is too thin.
+ */
+router.get(
+  '/barcode/:code/alternatives',
+  authMiddleware,
+  async (req: Request, res: Response): Promise<void> => {
+    const code = String(req.params.code || '').trim();
+    try {
+      if (!isValidBarcode(code)) {
+        res.status(400).json({ error: 'invalid_barcode', message: 'That barcode doesn’t look right.' });
+        return;
+      }
+
+      const { data: cached, error: readErr } = await supabase
+        .from('barcode_cache')
+        .select('product')
+        .eq('barcode', code)
+        .maybeSingle();
+      if (readErr) throw readErr;
+
+      if (!cached?.product || !isCachedProduct(cached.product)) {
+        res.status(404).json({ error: 'not_found', message: 'This product isn’t in the database yet.' });
+        return;
+      }
+
+      const scanned = cached.product;
+      const scannedScore = computeHealthScore(scanned.per_100g, scanned.ingredients, scanned.is_beverage).score;
+
+      // Most specific first. No categories (a pre-categories row) means no swap.
+      const tags = [...(scanned.categories ?? [])].reverse().slice(0, MAX_CATEGORY_TRIES);
+
+      const seen = new Map<string, BarcodeAlternative>();
+      const qualifying = (): BarcodeAlternative[] =>
+        [...seen.values()]
+          .filter((a) => a.result.health.score >= scannedScore + MIN_SWAP_GAIN)
+          .sort((a, b) => b.result.health.score - a.result.health.score);
+
+      for (const tag of tags) {
+        // JSONB containment on the `product` column: the row's categories
+        // must include this tag, and drinks only ever compare with drinks.
+        const { data: rows, error: queryErr } = await supabase
+          .from('barcode_cache')
+          .select('barcode, product, image_url')
+          .contains('product', { categories: [tag], is_beverage: scanned.is_beverage })
+          .neq('barcode', code)
+          .limit(CANDIDATE_LIMIT);
+        if (queryErr) throw queryErr;
+
+        for (const row of rows ?? []) {
+          const barcode = String(row.barcode ?? '');
+          if (!barcode || barcode === code || seen.has(barcode)) continue;
+          if (!isCachedProduct(row.product)) continue;
+          seen.set(barcode, {
+            barcode,
+            result: withHealth(row.product),
+            image_url: typeof row.image_url === 'string' ? row.image_url : null,
+          });
+        }
+
+        if (qualifying().length >= MAX_ALTERNATIVES) break;
+      }
+
+      const body: AlternativesResponse = { alternatives: qualifying().slice(0, MAX_ALTERNATIVES) };
+      res.json(body);
+    } catch (err) {
+      console.warn('[barcode] alternatives failed', { code }, err instanceof Error ? err.message : err);
+      res.status(500).json({ error: 'alternatives_failed', message: 'Couldn’t look for a better swap right now.' });
     }
   },
 );

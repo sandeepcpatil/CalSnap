@@ -208,6 +208,8 @@ export interface LabelScanData {
   confidence: 'high' | 'medium' | 'low';
   notes: string;
   health: HealthScoreDetail;
+  /** Open Food Facts category tags, most specific last. Barcode lookups only. */
+  categories?: string[];
 }
 
 export async function analyzeLabel(
@@ -232,6 +234,32 @@ export async function lookupBarcode(
   signal?: AbortSignal,
 ): Promise<{ result: LabelScanData; image_url: string | null; cached: boolean }> {
   return apiFetch(`/api/barcode/${encodeURIComponent(code)}`, { method: 'GET' }, token, DEFAULT_TIMEOUT_MS, signal);
+}
+
+/** A higher-scoring product from the same category as a scanned barcode. */
+export interface BarcodeAlternative {
+  barcode: string;
+  result: LabelScanData;
+  image_url: string | null;
+}
+
+/**
+ * Better swaps for a scanned barcode: up to three products from the same
+ * category that score clearly higher. Only products this app has already
+ * cached are considered, so an empty list is normal and not an error.
+ */
+export async function getBarcodeAlternatives(
+  code: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ alternatives: BarcodeAlternative[] }> {
+  return apiFetch(
+    `/api/barcode/${encodeURIComponent(code)}/alternatives`,
+    { method: 'GET' },
+    token,
+    DEFAULT_TIMEOUT_MS,
+    signal,
+  );
 }
 
 /**

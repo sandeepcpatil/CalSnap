@@ -121,6 +121,12 @@ export interface LabelScanData {
   confidence: 'high' | 'medium' | 'low';
   notes: string;
   health: HealthScoreDetail;
+  /**
+   * Open Food Facts category tags, broadest first, most specific last (at most
+   * six). Only present on barcode lookups; label scans and rows cached before
+   * this field existed have none. Used to find a better swap in the same aisle.
+   */
+  categories?: string[];
 }
 
 export interface LabelScanResult {

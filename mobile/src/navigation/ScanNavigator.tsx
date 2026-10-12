@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ScanScreen } from '../screens/Scan/ScanScreen';
 import { ScanResultScreen } from '../screens/Scan/ScanResultScreen';
 import { LabelResultScreen } from '../screens/Scan/LabelResultScreen';
+import { CompareScreen } from '../screens/Scan/CompareScreen';
 import { FoodAnalysisResult, LabelScanData } from '../services/api';
 
 /** Which capture mode the scan screen opens in. */
@@ -35,7 +36,11 @@ export type ScanStackParamList = {
     imageUri: string;
     imageStorageUrl: string;
     result: LabelScanData;
+    /** Set for barcode lookups only; it is what the better-swap search keys on. */
+    barcode?: string;
   };
+  /** Side-by-side table of the products in the compare tray (in-memory store). */
+  Compare: undefined;
 };
 
 const Stack = createNativeStackNavigator<ScanStackParamList>();
@@ -57,6 +62,7 @@ export function ScanNavigator({ route }: Props) {
       </Stack.Screen>
       <Stack.Screen name="ScanResult" component={ScanResultScreen} />
       <Stack.Screen name="LabelResult" component={LabelResultScreen} />
+      <Stack.Screen name="Compare" component={CompareScreen} />
     </Stack.Navigator>
   );
 }

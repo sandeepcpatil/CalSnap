@@ -108,6 +108,58 @@ export interface FoodScanResult {
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+// ─── Label Scan (packaged food) ──────────────────────────────────────────────
+// Mirrors backend/src/types/shared.ts.
+
+/** Nutrition values normalised to per 100 g (or 100 ml for drinks). */
+export interface LabelNutrition {
+  energy_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  sugar_g: number;
+  total_fat_g: number;
+  sat_fat_g: number;
+  fiber_g: number;
+  sodium_mg: number;
+}
+
+/** Deterministic health assessment computed server-side (never by the AI). */
+export interface HealthScoreDetail {
+  /** 0–100, higher = healthier. */
+  score: number;
+  /** Nutri-Score style letter grade. */
+  grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  /** One-line, human-readable reason built from the biggest score drivers. */
+  summary: string;
+  positives: string[];
+  negatives: string[];
+}
+
+export interface LabelScanData {
+  product_name: string;
+  brand: string;
+  /** Stated serving size in grams; 0 when not printed on the pack. */
+  serving_g: number;
+  /** Drinks are scored on stricter Nutri-Score beverage thresholds. */
+  is_beverage: boolean;
+  per_100g: LabelNutrition;
+  ingredients: string[];
+  confidence: ConfidenceLevel;
+  notes: string;
+  health: HealthScoreDetail;
+  /**
+   * Open Food Facts category tags, broadest first, most specific last (at most
+   * six). Only present on barcode lookups; label scans and rows cached before
+   * this field existed have none. Used to find a better swap in the same aisle.
+   */
+  categories?: string[];
+}
+
+export interface LabelScanResult {
+  result: LabelScanData;
+  cached: boolean;
+}
+
 export interface ScanHistoryItem {
   id: string;
   user_id: string;

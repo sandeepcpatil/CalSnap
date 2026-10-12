@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,10 +16,11 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScanStackParamList } from '../../navigation/ScanNavigator';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
-import type { FoodItem } from '../../services/api';
+import { getBarcodeAlternatives, type BarcodeAlternative, type FoodItem } from '../../services/api';
 import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useFoodLogStore } from '../../store/foodLogStore';
+import { useCompareStore, isInCompare } from '../../store/compareStore';
 import { toast } from '../../store/toastStore';
 import { getMealTypeFromTime } from '../../utils/nutrition';
 import { rescaleItem } from '../../utils/foodItems';
@@ -30,6 +31,7 @@ import { ProGate } from '../../components/ProGate';
 import { MealTypePicker } from '../../components/MealTypePicker';
 import { PortionSheet } from '../../components/PortionSheet';
 import { useAndroidBack } from '../../hooks/useAndroidBack';
+import { ScoreChip } from '../../components/ScoreChip';
 import { T, scoreColor, type, spacing, radius, HIT_TARGET, tabularNums } from '../../theme';
 
 type Props = {
@@ -89,13 +91,65 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 export function LabelResultScreen({ navigation, route }: Props) {
-  const { imageUri, imageStorageUrl, result } = route.params;
+  const { imageUri, imageStorageUrl, result, barcode } = route.params;
   const { session, fetchProfile } = useAuthStore();
   const { addLog, removeLog } = useFoodLogStore();
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [isSaving, setIsSaving] = useState(false);
   const [mealType, setMealType] = useState<MealType>(getMealTypeFromTime());
   const [portionOpen, setPortionOpen] = useState(false);
+
+  // ── Better swap ────────────────────────────────────────────────────────────
+  // Barcode lookups only: a label scan has no category to search in. The
+  // request is silent; nothing renders unless there is something to show.
+  const [swaps, setSwaps] = useState<BarcodeAlternative[]>([]);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const accessToken = session?.access_token;
+  useEffect(() => {
+    if (!barcode || !accessToken) return;
+    const controller = new AbortController();
+    setSwapLoading(true);
+    getBarcodeAlternatives(barcode, accessToken, controller.signal)
+      .then((r) => {
+        if (controller.signal.aborted) return;
+        setSwaps(Array.isArray(r.alternatives) ? r.alternatives : []);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.warn('[label-result] alternatives failed', err?.code ?? err?.statusCode ?? 'unknown');
+        setSwaps([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSwapLoading(false);
+      });
+    return () => controller.abort();
+  }, [barcode, accessToken]);
+
+  // ── Compare tray ───────────────────────────────────────────────────────────
+  const compareItems = useCompareStore((s) => s.items);
+  const addToCompare = useCompareStore((s) => s.add);
+  const inCompare = isInCompare(compareItems, result, barcode);
+  const compareCount = compareItems.length;
+
+  const handleAddToCompare = () => {
+    const outcome = addToCompare({ barcode, result, imageUri });
+    if (outcome === 'added') {
+      Haptics.selectionAsync();
+      toast(compareItems.length + 1 >= 2 ? 'Added. Ready to compare.' : 'Added to compare. Scan one more.');
+    } else if (outcome === 'full') {
+      toast('Compare holds three products. Remove one first.');
+    }
+  };
+
+  const openSwap = (swap: BarcodeAlternative) => {
+    const img = swap.image_url ?? '';
+    navigation.push('LabelResult', {
+      imageUri: img,
+      imageStorageUrl: img,
+      result: swap.result,
+      barcode: swap.barcode,
+    });
+  };
 
   // Same nested-stack reason as ScanResult: handle back explicitly rather than
   // relying on it bubbling out of the inner navigator.
@@ -242,6 +296,27 @@ export function LabelResultScreen({ navigation, route }: Props) {
 
         {/* Score */}
         <View style={styles.scoreCard}>
+          <View style={styles.scoreCardHeader}>
+            <Text style={styles.scoreCardEyebrow}>CalVue score</Text>
+            <TouchableOpacity
+              onPress={handleAddToCompare}
+              disabled={inCompare}
+              style={[styles.compareBtn, inCompare && styles.compareBtnDone]}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={inCompare ? 'Already in compare' : 'Add this product to compare'}
+              accessibilityState={{ disabled: inCompare }}
+            >
+              <Ionicons
+                name={inCompare ? 'checkmark' : 'git-compare-outline'}
+                size={16}
+                color={inCompare ? T.textMuted : T.primary}
+              />
+              <Text style={[styles.compareBtnText, inCompare && styles.compareBtnTextDone]}>
+                {inCompare ? 'In compare' : 'Add to compare'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <ScoreRing score={health.score} grade={health.grade} />
           <Text style={styles.scoreCaption}>
             {health.score >= 76 ? 'A healthy choice'
@@ -272,6 +347,52 @@ export function LabelResultScreen({ navigation, route }: Props) {
             ))}
           </View>
         </View>
+
+        {/* Better swap: only for barcode lookups, and only when there is one. */}
+        {swapLoading && swaps.length === 0 && (
+          <Text style={styles.swapLoading} accessibilityLiveRegion="polite">Looking for a better swap</Text>
+        )}
+        {swaps.length > 0 && (
+          <View style={styles.swapCard}>
+            <Text style={styles.swapTitle}>Better swap</Text>
+            <Text style={styles.swapSub}>Same aisle, higher score.</Text>
+            {swaps.map((swap) => {
+              const gain = swap.result.health.score - health.score;
+              const name = swap.result.product_name;
+              return (
+                <TouchableOpacity
+                  key={swap.barcode}
+                  style={styles.swapRow}
+                  onPress={() => openSwap(swap)}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${swap.result.brand ? `${swap.result.brand} ` : ''}${name}, health score ${swap.result.health.score}, ${gain} points higher. Open`}
+                >
+                  {swap.image_url ? (
+                    <Image source={{ uri: swap.image_url }} style={styles.swapImg} accessibilityIgnoresInvertColors />
+                  ) : (
+                    <View style={[styles.swapImg, styles.productImgFallback]}>
+                      <Ionicons name="fast-food-outline" size={18} color={T.textMuted} />
+                    </View>
+                  )}
+                  <View style={styles.swapInfo}>
+                    <Text style={styles.swapName} numberOfLines={2}>{name}</Text>
+                    {!!swap.result.brand && (
+                      <Text style={styles.swapBrand} numberOfLines={1}>{swap.result.brand}</Text>
+                    )}
+                  </View>
+                  <View style={styles.swapScoreCol}>
+                    <ScoreChip score={swap.result.health.score} />
+                    <Text style={[styles.swapGain, { color: scoreColor(swap.result.health.score) }]}>
+                      {`+${gain} points`}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Breakdown: Pro feature */}
         <ProGate isSubscribed={isSubscribed} onUpgrade={showPaywall} label="Full health breakdown" borderRadius={radius.lg}>
@@ -320,11 +441,32 @@ export function LabelResultScreen({ navigation, route }: Props) {
           The CalVue score is computed from the label using Nutri-Score-based rules. It is general guidance, not medical advice.
         </Text>
 
-        <View style={styles.footerSpacer} />
+        <View style={[styles.footerSpacer, compareCount > 0 && styles.footerSpacerTall]} />
       </ScrollView>
 
       {/* Footer actions */}
       <View style={styles.footer}>
+        {/* Compare tray: a slim strip that becomes the way into the table. */}
+        {compareCount >= 2 ? (
+          <TouchableOpacity
+            style={styles.compareBar}
+            onPress={() => navigation.navigate('Compare')}
+            activeOpacity={0.8}
+            disabled={isSaving}
+            accessibilityRole="button"
+            accessibilityLabel={`Compare ${compareCount} products`}
+          >
+            <Ionicons name="git-compare-outline" size={18} color={T.primary} />
+            <Text style={styles.compareBarText}>{`Compare ${compareCount} products`}</Text>
+            <Ionicons name="chevron-forward" size={18} color={T.primary} />
+          </TouchableOpacity>
+        ) : compareCount === 1 ? (
+          <View style={styles.compareBar} accessible accessibilityLabel="One product in compare. Add one more to compare">
+            <Ionicons name="git-compare-outline" size={18} color={T.textMuted} />
+            <Text style={[styles.compareBarText, styles.compareBarTextMuted]}>Add one more to compare</Text>
+          </View>
+        ) : null}
+
         <Text style={styles.footerLabel}>Log to</Text>
         <MealTypePicker value={mealType} onChange={setMealType} />
         <View style={styles.footerRow}>
@@ -399,8 +541,40 @@ const styles = StyleSheet.create({
 
   scoreCard: {
     backgroundColor: T.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: T.border,
-    alignItems: 'center', paddingVertical: spacing['2xl'], paddingHorizontal: spacing.xl, gap: spacing.md,
+    alignItems: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.xl, gap: spacing.md,
   },
+  scoreCardHeader: {
+    alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  scoreCardEyebrow: { ...type.label, color: T.textMuted },
+  compareBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2,
+    minHeight: HIT_TARGET, paddingHorizontal: spacing.md,
+    borderRadius: radius.pill, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryTint,
+  },
+  compareBtnDone: { borderColor: T.border, backgroundColor: T.divider },
+  compareBtnText: { ...type.bodySm, fontWeight: '700', color: T.primary },
+  compareBtnTextDone: { color: T.textMuted },
+
+  swapLoading: { ...type.bodySm, color: T.textMuted, textAlign: 'center' },
+  swapCard: {
+    backgroundColor: T.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: T.border,
+    padding: spacing.lg + 2, gap: spacing.sm,
+  },
+  swapTitle: { ...type.titleSm, color: T.textPrimary },
+  swapSub: { ...type.bodySm, color: T.textSecondary, marginTop: -spacing.xs, marginBottom: spacing.xs },
+  swapRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    minHeight: HIT_TARGET + spacing.md, paddingVertical: spacing.sm,
+    borderTopWidth: 1, borderTopColor: T.divider,
+  },
+  swapImg: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: T.divider },
+  swapInfo: { flex: 1, gap: 2 },
+  swapName: { ...type.body, fontWeight: '700', color: T.textPrimary },
+  swapBrand: { ...type.bodySm, color: T.textSecondary },
+  swapScoreCol: { alignItems: 'flex-end', gap: 2 },
+  swapGain: { ...type.caption, fontSize: 12, lineHeight: 16, ...tabularNums },
   ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
   ringCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   ringScore: { ...type.display },
@@ -449,6 +623,7 @@ const styles = StyleSheet.create({
 
   disclaimer: { ...type.bodySm, color: T.textSecondary, textAlign: 'center', paddingHorizontal: spacing.md },
   footerSpacer: { height: 180 },
+  footerSpacerTall: { height: 180 + HIT_TARGET + spacing.sm },
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -457,6 +632,13 @@ const styles = StyleSheet.create({
     backgroundColor: T.bg,
     borderTopWidth: 1, borderTopColor: T.border,
   },
+  compareBar: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    minHeight: HIT_TARGET, paddingHorizontal: spacing.md,
+    borderRadius: radius.md, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+  },
+  compareBarText: { flex: 1, ...type.bodySm, fontWeight: '700', color: T.primary },
+  compareBarTextMuted: { color: T.textSecondary },
   footerLabel: { ...type.label, color: T.textMuted },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   doneBtn: { flex: 1 },

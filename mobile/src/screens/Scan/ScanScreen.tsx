@@ -489,7 +489,8 @@ export function ScanScreen({ navigation, route, requestedMode: requestedModeProp
     assertActive(signal);
     const img = image_url ?? '';
     // Reuse the label result screen: same shape, same log path (no scan used).
-    navigation.navigate('LabelResult', { imageUri: img, imageStorageUrl: img, result });
+    // The barcode goes along so the result screen can look for a better swap.
+    navigation.navigate('LabelResult', { imageUri: img, imageStorageUrl: img, result, barcode: code });
   }, () => lookup(code));
 
   const handleCapture = async () => {
