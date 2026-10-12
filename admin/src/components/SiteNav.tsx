@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { checkAdmin } from '../lib/adminApi';
 import { supabase } from '../lib/supabase';
 
+// Absolute hashes so the anchors still work from /data and other routes.
 const LINKS = [
-  { href: '#features', label: 'Features' },
-  { href: '#how', label: 'How it works' },
-  { href: '#pricing', label: 'Pricing' },
+  { href: '/#features', label: 'Features' },
+  { href: '/#how', label: 'How it works' },
+  { href: '/#pricing', label: 'Pricing' },
 ];
 
 /**
@@ -53,7 +54,7 @@ export function SiteNav() {
             </Link>
           )}
           <a
-            href="#download"
+            href="/#download"
             className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-brand-on transition hover:opacity-90"
           >
             Get the app
@@ -84,7 +85,7 @@ export function SiteNav() {
               <Link to="/admin" className="text-sm font-bold text-brand">Admin</Link>
             )}
             <a
-              href="#download"
+              href="/#download"
               onClick={() => setOpen(false)}
               className="mt-1 rounded-full bg-brand px-5 py-2 text-center text-sm font-extrabold text-brand-on"
             >

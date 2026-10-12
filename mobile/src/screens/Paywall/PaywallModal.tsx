@@ -293,7 +293,7 @@ export function PaywallModal({ visible, onDismiss }: Props) {
           <View style={styles.ctaBlock}>
             <View style={styles.assuranceRow}>
               <Ionicons name="shield-checkmark-outline" size={16} color={T.textMuted} />
-              <Text style={styles.assuranceText}>Cancel anytime</Text>
+              <Text style={styles.assuranceText}>No weekly plans. Cancel anytime.</Text>
             </View>
 
             <TouchableOpacity

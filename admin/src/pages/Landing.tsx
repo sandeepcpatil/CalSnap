@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { SiteNav } from '../components/SiteNav';
 
 const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.sanverse.calsnapapp';
@@ -172,12 +173,12 @@ export function Landing() {
       <section id="pricing" className="mx-auto max-w-5xl px-5 py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Simple pricing</h2>
-          <p className="mt-4 text-content-secondary">Start free. Upgrade only if it earns its place.</p>
+          <p className="mt-4 text-content-secondary">Free for two meals a day. No weekly plans.</p>
         </div>
 
         <div className="mt-14 grid gap-5 md:grid-cols-2">
           <div className="rounded-2xl border border-hairline bg-ink-surface p-8">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-content-muted">Free</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest text-content-muted">Free forever</h3>
             <p className="mt-3 text-4xl font-black">₹0</p>
             <ul className="mt-6 space-y-3 text-sm text-content-secondary">
               {['2 AI scans every day', 'Unlimited barcode scans', 'Water & weight tracking', 'Your last 7 days of history'].map((t) => (
@@ -248,6 +249,7 @@ export function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-content-secondary">
             <a href="/privacy.html" className="transition hover:text-brand">Privacy</a>
             <a href="/terms.html" className="transition hover:text-brand">Terms</a>
+            <Link to="/data" className="transition hover:text-brand">Your data</Link>
             <a href={`mailto:${SUPPORT_EMAIL}`} className="transition hover:text-brand">Support</a>
           </div>
         </div>

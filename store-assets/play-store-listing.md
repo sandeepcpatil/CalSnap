@@ -20,13 +20,13 @@ Alternatives:
 ## Short description (max 80 characters)
 
 ```
-Snap your food for instant calories, macros and packaged-food health scores.
+Free for two meals a day. Snap a photo for calories, macros and health scores.
 ```
-*(75 characters)*
+*(78 characters)*
 
 Alternatives:
+- `Snap your food for instant calories, macros and packaged-food health scores.` (75)
 - `AI calorie counter — scan meals & food labels, track macros effortlessly.` (72)
-- `Scan any meal or food label. Get calories, macros & a health score in secs.` (74)
 
 ---
 
@@ -60,16 +60,21 @@ Set daily reminders for each meal so logging becomes a habit, not a chore.
 • Clean, distraction-free design
 • Built for the way you actually eat, in the portions you actually use
 
+🆓 FREE FOREVER
+No card, no time limit. Every free account gets:
+• 2 AI meal scans a day
+• Unlimited barcode scans
+• Water and weight tracking
+• Your last 7 days of history
+
 🌟 CALVUE PRO
-Start with a 7-day free trial. Pro unlocks:
+No weekly plans. Monthly or yearly, cancel anytime. Start with a 7-day free trial. Pro unlocks:
 • Up to 20 AI scans a day
 • Full nutrition breakdown on every scan
 • Daily insights — personalised guidance from your own logs
 • 30 and 90-day history
 • Spreadsheet export of your complete nutrition log
 • Complete health breakdown for packaged foods
-
-Free accounts include 2 AI scans per day.
 
 Subscriptions are billed through your Google Play account and renew automatically unless cancelled at least 24 hours before the period ends. Manage or cancel anytime in your Play Store account settings.
 

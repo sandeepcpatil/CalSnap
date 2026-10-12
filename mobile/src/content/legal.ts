@@ -7,7 +7,7 @@ export interface LegalSection {
   body: string;
 }
 
-export const LEGAL_LAST_UPDATED = "12 July 2026";
+export const LEGAL_LAST_UPDATED = "12 October 2026";
 export const SUPPORT_EMAIL = "calsnap.support@gmail.com"; // TODO: replace with your real support email
 export const LEGAL_ENTITY = "CalVue"; // TODO: replace with your registered legal entity name
 
@@ -94,20 +94,27 @@ export const PRIVACY: LegalSection[] = [
     body: `We use your information to: provide food analysis and tracking, calculate your nutrition targets, manage your subscription and trial, provide support, keep the App secure, and improve the service.`,
   },
   {
-    title: "4. AI processing of your photos",
-    body: `To estimate nutrition, the food images you scan are sent to our AI provider, Google (Gemini API), for analysis. We send only what is needed for the estimate. Please review Google's applicable terms for how they handle API data. Images are deleted from our storage after 90 days.`,
+    title: "4. AI processing of your photos and voice clips",
+    body: `To estimate nutrition, the food images you scan are sent to our AI provider, Google (Gemini API), for analysis. If you describe a meal by voice, the clip is sent to Google Gemini to be transcribed. We send only what is needed for the estimate. Please review Google's applicable terms for how they handle API data. Images are deleted from our storage after 90 days.`,
   },
   {
     title: "5. How we share information",
-    body: `We do not sell your personal data. We share it only with service providers that help us run CalVue: Supabase (secure hosting and authentication), Google (sign-in and AI analysis), and RevenueCat (subscription management). We may disclose information if required by law.`,
+    body: `We do not sell your personal data. We share it only with service providers that help us run CalVue: Supabase (secure hosting and authentication), Google (sign-in and AI analysis via Gemini), RevenueCat and Google Play (subscription billing), and Open Food Facts (packaged-food lookups, which receive the barcode only). We may disclose information if required by law.`,
   },
   {
-    title: "6. Data retention",
-    body: `Food images are automatically deleted 90 days after upload. Your account and nutrition logs are retained until you delete your account. You can request deletion at any time.`,
+    title: "6. What we keep and for how long",
+    body: `• Meal photos: sent to Google Gemini to estimate your meal. Deleted from our storage 90 days after upload.
+• Voice clips: sent to Google Gemini to be transcribed into a meal entry. Not stored by us after the entry is created.
+• Nutrition logs: power your daily totals, history, insights and export. Kept until you delete the entry or your account.
+• Water and weight: power your hydration goal and weight trend. Kept until you delete the entry or your account.
+• Profile (height, weight, age, activity level, goal): sets your daily targets. Kept until you change it or delete your account.
+• Account (name, email and photo from Google sign-in): keeps your data tied to you. Kept until you delete your account.
+
+Deleting your account in the App (Profile, then Delete account) removes the account, all logs and all photos. This cannot be undone.`,
   },
   {
     title: "7. Your rights & choices",
-    body: `You can access and correct your profile in the App. You can delete your account and associated data by contacting us at ${SUPPORT_EMAIL} (or via the in-app delete option, where available). Depending on your location, you may have additional rights under applicable data protection laws.`,
+    body: `You can access and correct your profile in the App. You can delete your account and all associated data in the App (Profile, then Delete account) or by emailing us at ${SUPPORT_EMAIL}. Pro members can export their nutrition log as a spreadsheet from the App. For any other request about your data (access, correction, deletion or a copy of your data), email ${SUPPORT_EMAIL} from the address on your account and we will respond within a reasonable time. Depending on your location, you may have additional rights under applicable data protection laws.`,
   },
   {
     title: "8. Security",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -32,6 +32,7 @@ import { NotificationSettingsModal } from '../../components/NotificationSettings
 import { EditProfileModal } from '../../components/EditProfileModal';
 import { FeedbackModal } from '../../components/FeedbackModal';
 import { LegalModal, type LegalDoc } from '../../components/LegalModal';
+import { DataPrivacyScreen } from './DataPrivacyScreen';
 import { T, spacing, radius, HIT_TARGET, tabularNums } from '../../theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -103,8 +104,12 @@ export function ProfileScreen() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
+  const [showDataPrivacy, setShowDataPrivacy] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // "Delete everything" on the Your data screen lands on the Delete account row.
+  const scrollRef = useRef<ScrollView>(null);
+  const dangerGroupY = useRef(0);
 
   // Single source of truth for subscription/trial/scan state (same hook the
   // rest of the app uses — keeps Profile from drifting out of sync).
@@ -251,6 +256,11 @@ export function ProfileScreen() {
     ]);
   };
 
+  const handleJumpToDelete = () => {
+    setShowDataPrivacy(false);
+    scrollRef.current?.scrollTo({ y: Math.max(0, dangerGroupY.current - spacing.xl), animated: true });
+  };
+
   const accountRows: RowDef[] = [
     { key: 'edit', icon: 'person-outline', label: 'Edit profile', onPress: () => setShowEditProfile(true) },
     // Beta-gated: hidden entirely unless profiles.chat_beta is on.
@@ -266,6 +276,7 @@ export function ProfileScreen() {
     { key: 'contact', icon: 'chatbubble-ellipses-outline', label: 'Contact support', onPress: handleContactSupport },
   ];
   const aboutRows: RowDef[] = [
+    { key: 'data', icon: 'eye-outline', label: 'Your data', onPress: () => setShowDataPrivacy(true) },
     { key: 'privacy', icon: 'shield-checkmark-outline', label: 'Privacy policy', onPress: () => setLegalDoc('privacy') },
     { key: 'terms', icon: 'document-text-outline', label: 'Terms of service', onPress: () => setLegalDoc('terms') },
   ];
@@ -283,6 +294,7 @@ export function ProfileScreen() {
       </SafeAreaView>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -404,7 +416,9 @@ export function ProfileScreen() {
         <SettingsGroup title="Account" rows={accountRows} />
         <SettingsGroup title="Support" rows={supportRows} />
         <SettingsGroup title="About" rows={aboutRows} />
-        <SettingsGroup rows={dangerRows} />
+        <View onLayout={(e) => { dangerGroupY.current = e.nativeEvent.layout.y; }}>
+          <SettingsGroup rows={dangerRows} />
+        </View>
 
         <Text style={styles.versionText}>
           CalVue v{Constants.expoConfig?.version ?? '1.0.0'}
@@ -417,6 +431,11 @@ export function ProfileScreen() {
       <EditProfileModal visible={showEditProfile} onDismiss={() => setShowEditProfile(false)} />
       <FeedbackModal visible={showFeedback} onDismiss={() => setShowFeedback(false)} />
       <LegalModal visible={legalDoc !== null} doc={legalDoc ?? 'terms'} onClose={() => setLegalDoc(null)} />
+      <DataPrivacyScreen
+        visible={showDataPrivacy}
+        onClose={() => setShowDataPrivacy(false)}
+        onDeleteEverything={handleJumpToDelete}
+      />
     </View>
   );
 }

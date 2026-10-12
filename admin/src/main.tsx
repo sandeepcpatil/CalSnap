@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Landing } from './pages/Landing';
+import { DataPage } from './pages/DataPage';
 import { Dashboard } from './pages/Dashboard';
 import { UserDetail } from './pages/UserDetail';
 import { Login } from './pages/Login';
@@ -50,6 +51,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         {/* Public marketing site at the root; the admin panel lives under
             /admin and is gated server-side on every data call. */}
         <Route path="/" element={<Landing />} />
+        <Route path="/data" element={<DataPage />} />
         <Route path="/login" element={<Login />} />
         <Route
           path="/admin"
