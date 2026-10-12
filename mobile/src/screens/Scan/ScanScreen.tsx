@@ -34,6 +34,8 @@ import { T, withAlpha, type, spacing, radius, HIT_TARGET } from '../../theme';
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ScanCamera'>;
   route: { params?: { mode?: ScanMode } };
+  /** Live mode from the root route, supplied by ScanNavigator. */
+  requestedMode?: ScanMode;
 };
 
 const SCREEN_H = Dimensions.get('window').height;
@@ -335,13 +337,13 @@ interface ScanError {
   retry: () => void;
 }
 
-export function ScanScreen({ navigation, route }: Props) {
+export function ScanScreen({ navigation, route, requestedMode: requestedModeProp }: Props) {
   const { session } = useAuthStore();
   const { canScan, scansRemaining, isSubscribed, paywallVisible, showPaywall, dismissPaywall, consumeScan } = useSubscriptionGate();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
   const [torch, setTorch] = useState(false);
-  const requestedMode = route.params?.mode ?? 'meal';
+  const requestedMode: ScanMode = requestedModeProp ?? route.params?.mode ?? 'meal';
   const [scanMode, setScanMode] = useState<ScanMode>(requestedMode);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzingMode, setAnalyzingMode] = useState<ScanMode>('meal');

@@ -71,6 +71,11 @@ echo "────────────────────────�
 echo ""
 
 # ── Build ────────────────────────────────────────────────────────────────────
+# Native library fixes that must be in node_modules before Gradle compiles them
+# (also runs on `npm install` via postinstall; this covers a tree installed
+# before the patch existed).
+(cd "$MOBILE" && node scripts/patch-native.js)
+
 cd "$ANDROID_DIR"
 ./gradlew :app:bundleRelease --no-daemon
 

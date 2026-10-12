@@ -9,7 +9,8 @@
     "start": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start --web"
+    "web": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 expo start --web",
+    "postinstall": "node scripts/patch-native.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",

@@ -138,6 +138,17 @@ export const VoiceModePanel = forwardRef<VoiceModePanelHandle, Props>(function V
       setRecordedUri(null);
       await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
       recorder.record();
+      // `record()` cannot throw on Android: a recorder that failed to prepare,
+      // or a native no-op (see scripts/patch-native.js), just leaves the status
+      // unchanged. Check it so the user gets a message instead of silence.
+      await new Promise((res) => setTimeout(res, 150));
+      const status = recorder.getStatus();
+      if (!status.isRecording) {
+        console.warn('[voice] record() did not start', status);
+        try { await recorder.stop(); } catch { /* nothing to stop */ }
+        setError('Could not start recording on this device. Try typing it instead.');
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (err) {
       console.warn('[voice] start failed', err);

@@ -48,11 +48,13 @@ interface Props {
 export function ScanNavigator({ route }: Props) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen
-        name="ScanCamera"
-        component={ScanScreen}
-        initialParams={{ mode: route.params?.mode ?? 'meal' }}
-      />
+      {/* `initialParams` only applies the first time the route is created, so
+          a later navigate('Scan', { mode }) onto an existing stack would keep
+          the old mode. Passing the live value as a prop keeps the camera and
+          the hub in agreement every time. */}
+      <Stack.Screen name="ScanCamera">
+        {(props) => <ScanScreen {...props} requestedMode={route.params?.mode ?? 'meal'} />}
+      </Stack.Screen>
       <Stack.Screen name="ScanResult" component={ScanResultScreen} />
       <Stack.Screen name="LabelResult" component={LabelResultScreen} />
     </Stack.Navigator>
