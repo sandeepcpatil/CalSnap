@@ -243,7 +243,36 @@ $$;
 -- SELECT policy: (auth.uid()::text = (storage.foldername(name))[1])
 
 -- ---------------------------------------------------------------
--- 12. Incremental migrations
+-- 12. scan_feedback — "Was this estimate right?" verdicts (counts only)
+--     Mirrors migrations/010_scan_feedback.sql so a fresh install has it.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scan_feedback (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id       UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  mode          TEXT NOT NULL CHECK (mode IN ('meal', 'label', 'barcode', 'voice')),
+  confidence    TEXT,
+  verdict       TEXT NOT NULL CHECK (verdict IN ('right', 'close', 'wrong')),
+  items_total   INTEGER NOT NULL DEFAULT 0,
+  items_edited  INTEGER NOT NULL DEFAULT 0,
+  kcal_ai       INTEGER,
+  kcal_final    INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_feedback_created ON scan_feedback (created_at);
+
+ALTER TABLE scan_feedback ENABLE ROW LEVEL SECURITY;
+
+-- Insert and read own rows only; no update or delete. Aggregates are read
+-- by the service-role backend.
+DROP POLICY IF EXISTS "scan_feedback_insert_own" ON scan_feedback;
+CREATE POLICY "scan_feedback_insert_own" ON scan_feedback FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "scan_feedback_select_own" ON scan_feedback;
+CREATE POLICY "scan_feedback_select_own" ON scan_feedback FOR SELECT USING (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------
+-- 13. Incremental migrations
 -- ---------------------------------------------------------------
 -- Everything above is the base schema. Changes made after launch live
 -- in database/migrations/ and must be run in order on an existing
@@ -259,3 +288,4 @@ $$;
 --   007_chat.sql — chat_messages table + profiles.chat_beta (AI coach, beta)
 --   008_subscription_tier.sql — reconcile profiles.subscription_tier drift
 --   009_feedback.sql — feedback table (in-app user feedback)
+--   010_scan_feedback.sql — scan_feedback table (Right / Close / Wrong verdicts; also in section 12)

@@ -15,6 +15,11 @@ interface Props {
   heading?: string;
   /** Copy on the add button, for the same reason. */
   addLabel?: string;
+  /**
+   * Optional content rendered directly under an item's row (for example a
+   * "your usual portion" suggestion). Return null for rows that need nothing.
+   */
+  itemFooter?: (item: FoodItem, index: number) => React.ReactNode;
 }
 
 /** Long enough for the add sheet's slide-out to finish before another sheet opens. */
@@ -36,7 +41,7 @@ function portionLine(item: FoodItem): string {
  * Portion edits go through the shared `PortionSheet`, so a portion behaves the
  * same whether the food came from the camera, history or a saved meal.
  */
-export function ScanItemsEditor({ items, onChange, heading = 'Items detected', addLabel = 'Add anything we missed' }: Props) {
+export function ScanItemsEditor({ items, onChange, heading = 'Items detected', addLabel = 'Add anything we missed', itemFooter }: Props) {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const openEditTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,36 +64,38 @@ export function ScanItemsEditor({ items, onChange, heading = 'Items detected', a
       </View>
 
       {items.map((item, i) => (
-        <TouchableOpacity
-          key={`${item.name}-${i}`}
-          style={styles.row}
-          onPress={() => setEditIndex(i)}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel={`Adjust ${item.name}, ${portionLine(item)}, ${item.calories} kilocalories`}
-        >
-          <View style={styles.rowMain}>
-            <View style={styles.rowNameLine}>
-              <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-              {item.source === 'database' && (
-                <Ionicons name="checkmark-circle" size={13} color={T.success} />
-              )}
+        <View key={`${item.name}-${i}`} style={styles.rowWrap}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => setEditIndex(i)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Adjust ${item.name}, ${portionLine(item)}, ${item.calories} kilocalories`}
+          >
+            <View style={styles.rowMain}>
+              <View style={styles.rowNameLine}>
+                <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+                {item.source === 'database' && (
+                  <Ionicons name="checkmark-circle" size={13} color={T.success} />
+                )}
+              </View>
+              <Text style={styles.rowMeta}>{portionLine(item)}</Text>
+              <Text style={styles.rowMeta}>
+                {item.protein_g} g protein · {item.carbs_g} g carbs · {item.fat_g} g fat
+              </Text>
             </View>
-            <Text style={styles.rowMeta}>{portionLine(item)}</Text>
-            <Text style={styles.rowMeta}>
-              {item.protein_g} g protein · {item.carbs_g} g carbs · {item.fat_g} g fat
-            </Text>
-          </View>
-          <View style={styles.rowRight}>
-            <Text style={styles.rowKcal}>
-              {item.calories}<Text style={styles.rowKcalUnit}> kcal</Text>
-            </Text>
-            <View style={styles.adjust}>
-              <Text style={styles.adjustText}>Adjust</Text>
-              <Ionicons name="chevron-forward" size={14} color={T.primary} />
+            <View style={styles.rowRight}>
+              <Text style={styles.rowKcal}>
+                {item.calories}<Text style={styles.rowKcalUnit}> kcal</Text>
+              </Text>
+              <View style={styles.adjust}>
+                <Text style={styles.adjustText}>Adjust</Text>
+                <Ionicons name="chevron-forward" size={14} color={T.primary} />
+              </View>
             </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+          {itemFooter?.(item, i)}
+        </View>
       ))}
 
       {items.length === 0 && (
@@ -152,6 +159,7 @@ const styles = StyleSheet.create({
   head: { ...type.label, color: T.textMuted },
   headCount: { ...type.label, color: T.primary },
 
+  rowWrap: { gap: spacing.xs },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2,
     minHeight: HIT_TARGET,

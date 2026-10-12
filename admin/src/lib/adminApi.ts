@@ -120,6 +120,28 @@ export const getUserLogs = (userId: string, page = 1, limit = 20) =>
     `/api/admin/users/${userId}/logs?page=${page}&limit=${limit}`,
   );
 
+export interface AccuracyStats {
+  total: number;
+  right: number;
+  close: number;
+  wrong: number;
+  confirmed_pct: number;
+  window_days: number;
+}
+
+/**
+ * Public, parameter-free aggregate of "Was this estimate right?" verdicts.
+ * No token: the endpoint is unauthenticated by design and returns counts only.
+ */
+export async function getAccuracyStats(): Promise<AccuracyStats> {
+  if (!backendConfigured) {
+    throw new Error('VITE_BACKEND_URL is not set — the admin API cannot be reached.');
+  }
+  const res = await fetch(`${BASE_URL}/api/stats/accuracy`);
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return (await res.json()) as AccuracyStats;
+}
+
 /** Turn day-keyed buckets into the sorted label/data pair the charts expect. */
 export function toChartSeries(buckets: DayBuckets): { labels: string[]; data: number[] } {
   const sorted = Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b));

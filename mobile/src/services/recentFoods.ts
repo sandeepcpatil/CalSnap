@@ -180,3 +180,90 @@ export async function fetchLoggableFoods(userId: string): Promise<LoggableFoods>
 
   return { frequent, recent };
 }
+
+/** The portion a user most often logs for a food, with how often they logged it. */
+export interface UsualPortion {
+  quantity: number;
+  unit: string;
+  grams: number;
+  count: number;
+}
+
+/** How far back "your usual" looks. */
+const USUAL_WINDOW_DAYS = 90;
+
+/** Case-, space- and whitespace-insensitive key for a food name. */
+export function normaliseFoodName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+interface UsualRow {
+  food_name: string;
+  logged_item: unknown;
+}
+
+/**
+ * The most frequently logged (quantity, unit, grams) for each of `names`, from
+ * the user's own logs over the last 90 days. Keys are the normalised names.
+ *
+ * One query, scoped to the user and the window; the name match happens here
+ * rather than in the filter because food names are free text from the AI and
+ * PostgREST filter syntax has no safe case-insensitive `IN`. Only the stored
+ * `logged_item` is selected, not the whole AI payload, to keep the response
+ * small.
+ */
+export async function getUsualPortions(
+  userId: string,
+  names: string[],
+): Promise<Record<string, UsualPortion>> {
+  const wanted = new Set(names.map(normaliseFoodName).filter(Boolean));
+  if (wanted.size === 0) return {};
+
+  const since = new Date(Date.now() - USUAL_WINDOW_DAYS * 86_400_000).toISOString();
+  const { data, error } = await supabase
+    .from('food_logs')
+    .select('food_name, logged_item:raw_ai_response->logged_item')
+    .eq('user_id', userId)
+    .gte('logged_at', since)
+    .order('logged_at', { ascending: false })
+    .limit(1000);
+
+  if (error || !data) return {};
+
+  // name → portion key → tally. Rows arrive most recent first, so on a tie the
+  // more recent portion wins (it is inserted first and never overtaken).
+  const tallies = new Map<string, Map<string, UsualPortion>>();
+
+  for (const row of data as unknown as UsualRow[]) {
+    const stored = row.logged_item && typeof row.logged_item === 'object'
+      ? (row.logged_item as Partial<FoodItem>)
+      : null;
+    const key = normaliseFoodName(String(stored?.name ?? row.food_name ?? ''));
+    if (!key || !wanted.has(key)) continue;
+
+    const quantity = num(stored?.quantity);
+    const unit = typeof stored?.unit === 'string' && stored.unit ? stored.unit : '';
+    const grams = num(stored?.grams);
+    if (quantity <= 0 || !unit || grams <= 0) continue;
+
+    const portionKey = `${quantity}|${unit}|${grams}`;
+    let perName = tallies.get(key);
+    if (!perName) {
+      perName = new Map();
+      tallies.set(key, perName);
+    }
+    const existing = perName.get(portionKey);
+    if (existing) existing.count += 1;
+    else perName.set(portionKey, { quantity, unit, grams, count: 1 });
+  }
+
+  const out: Record<string, UsualPortion> = {};
+  for (const [key, perName] of tallies) {
+    let best: UsualPortion | null = null;
+    for (const p of perName.values()) {
+      if (!best || p.count > best.count) best = p;
+    }
+    if (best) out[key] = best;
+  }
+  return out;
+}

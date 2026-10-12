@@ -6,7 +6,7 @@ import {
   LineElement, Title, Tooltip, Legend,
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
-import { getStats, getSignups, getScans, getUsers, toChartSeries } from '../lib/adminApi';
+import { getStats, getSignups, getScans, getUsers, getAccuracyStats, toChartSeries, type AccuracyStats } from '../lib/adminApi';
 import { useAuth } from '../context/AuthContext';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend);
@@ -48,6 +48,7 @@ export function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [signupChart, setSignupChart] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] });
   const [scanChart, setScanChart] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] });
+  const [accuracy, setAccuracy] = useState<AccuracyStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -61,6 +62,7 @@ export function Dashboard() {
     fetchStats();
     fetchSignups();
     fetchScans();
+    fetchAccuracy();
   }, []);
 
   useEffect(() => {
@@ -97,6 +99,14 @@ export function Dashboard() {
       setScanChart(toChartSeries(scans));
     } catch {
       // See above.
+    }
+  };
+
+  const fetchAccuracy = async () => {
+    try {
+      setAccuracy(await getAccuracyStats());
+    } catch {
+      // Secondary tile; the main error banner already covers a dead backend.
     }
   };
 
@@ -167,7 +177,7 @@ export function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {/* KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
           <KpiCard label="Total Users" value={stats?.totalUsers.toLocaleString() ?? '—'} accent="linear-gradient(90deg,#01696f,#029aa3)" />
           <KpiCard label="Active Today" value={stats?.activeToday ?? '—'} accent="#4caf50" />
           <KpiCard label="Active This Week" value={stats?.activeThisWeek ?? '—'} accent="#ff9800" />
@@ -178,6 +188,12 @@ export function Dashboard() {
             value={`₹${(stats?.monthlyRevenuePaise ?? 0).toLocaleString('en-IN')}`}
             sub="estimated"
             accent="linear-gradient(90deg,#f59e0b,#ef5350)"
+          />
+          <KpiCard
+            label="Scan accuracy (90 d)"
+            value={accuracy ? `${accuracy.confirmed_pct}%` : '—'}
+            sub={accuracy ? `right or close, of ${accuracy.total.toLocaleString()} ratings` : 'no ratings yet'}
+            accent="#26a69a"
           />
         </div>
 

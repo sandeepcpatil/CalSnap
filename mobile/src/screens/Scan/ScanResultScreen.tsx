@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,7 +27,8 @@ import { ProGate } from '../../components/ProGate';
 import { ScanItemsEditor } from '../../components/ScanItemsEditor';
 import { MealTypePicker } from '../../components/MealTypePicker';
 import { formatDuration } from '../../components/VoiceModePanel';
-import { sumItems } from '../../utils/foodItems';
+import { rescaleItem, sumItems } from '../../utils/foodItems';
+import { getUsualPortions, normaliseFoodName, type UsualPortion } from '../../services/recentFoods';
 import { logFoodItems, type MealType } from '../../services/foodLogs';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useAndroidBack } from '../../hooks/useAndroidBack';
@@ -121,6 +122,33 @@ const CONFIDENCE: Record<string, ConfidenceStyle> = {
   low:       { label: 'Low confidence', bg: T.warningTint, fg: T.warning, icon: 'alert-circle' },
 };
 
+/** "Was this estimate right?" answers, in the order they are shown. */
+type Verdict = 'right' | 'close' | 'wrong';
+const VERDICTS: readonly { value: Verdict; label: string }[] = [
+  { value: 'right', label: 'Right' },
+  { value: 'close', label: 'Close' },
+  { value: 'wrong', label: 'Wrong' },
+];
+
+/** A usual portion is only worth suggesting when it is clearly different. */
+const USUAL_DIFF_THRESHOLD = 0.15;
+
+/** "1.5 katori (270 g)" or, for gram-based portions, "270 g". */
+function usualLabel(u: UsualPortion): string {
+  if (u.unit === 'g') return `${u.grams} g`;
+  return `${u.quantity} ${u.unit} (${u.grams} g)`;
+}
+
+/**
+ * How many of the final items differ from what the AI proposed, by name or
+ * portion. An item with no original of the same name and weight counts as
+ * edited, which also covers additions.
+ */
+function countEdited(original: readonly FoodItem[], final: readonly FoodItem[]): number {
+  const seen = new Set(original.map((it) => `${normaliseFoodName(it.name)}|${it.grams}`));
+  return final.filter((it) => !seen.has(`${normaliseFoodName(it.name)}|${it.grams}`)).length;
+}
+
 export function ScanResultScreen({ navigation, route }: Props) {
   const { imageUri, imageStorageUrl, result, voice } = route.params;
   const { session, fetchProfile } = useAuthStore();
@@ -128,6 +156,13 @@ export function ScanResultScreen({ navigation, route }: Props) {
   const { isSubscribed, paywallVisible, showPaywall, dismissPaywall } = useSubscriptionGate();
   const [selectedMeal, setSelectedMeal] = useState<MealType>(getMealTypeFromTime());
   const [isSaving, setIsSaving] = useState(false);
+  // "Was this estimate right?" Held locally and written with the save, never
+  // on its own, so an abandoned scan leaves no row.
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  // Portion memory: the user's most-logged portion per item name, and the
+  // names whose suggestion was used.
+  const [usualPortions, setUsualPortions] = useState<Record<string, UsualPortion>>({});
+  const [usualHidden, setUsualHidden] = useState<Set<string>>(() => new Set());
 
   // The AI proposes items; the user confirms them. Legacy cached scans have no
   // items array, so fall back to a single row built from the top-level totals.
@@ -149,6 +184,67 @@ export function ScanResultScreen({ navigation, route }: Props) {
           sat_fat_g: result.sat_fat_g ?? 0,
         }],
   );
+
+  // What the AI proposed, frozen, so the saved feedback can say how far the
+  // user moved from it.
+  const originalItems = useRef<readonly FoodItem[]>(items);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    const names = originalItems.current.map((it) => it.name);
+    if (!userId || names.length === 0) return;
+    let cancelled = false;
+    getUsualPortions(userId, names)
+      .then((found) => { if (!cancelled) setUsualPortions(found); })
+      .catch((err: unknown) => console.warn('[scan-result] usual portions failed', err instanceof Error ? err.message : err));
+    return () => { cancelled = true; };
+  }, [session?.user.id]);
+
+  /** The usual portion worth offering for an item, or null when none applies. */
+  const usualFor = (item: FoodItem): UsualPortion | null => {
+    const key = normaliseFoodName(item.name);
+    const usual = usualPortions[key];
+    if (!usual || usualHidden.has(key) || item.grams <= 0) return null;
+    const diff = Math.abs(usual.grams - item.grams) / item.grams;
+    return diff > USUAL_DIFF_THRESHOLD ? usual : null;
+  };
+
+  /** Apply a usual portion to one item: the same proportional rescale the portion sheet uses. */
+  const applyUsual = (index: number, usual: UsualPortion) => {
+    Haptics.selectionAsync();
+    setItems(items.map((it, i) => {
+      if (i !== index) return it;
+      // Scale to the exact weight shown on the chip, then keep the household
+      // unit it was logged in so the row reads "1.5 katori (270 g)".
+      const scaled = rescaleItem(it, usual.grams, 'g');
+      return { ...scaled, quantity: usual.quantity, unit: usual.unit };
+    }));
+    setUsualHidden((prev) => new Set(prev).add(normaliseFoodName(items[index].name)));
+  };
+
+  const chooseVerdict = (value: Verdict) => {
+    Haptics.selectionAsync();
+    setVerdict(value);
+  };
+
+  /**
+   * Record the verdict alongside the save. Counts only; a failure is logged
+   * and otherwise ignored, because feedback must never cost a meal.
+   */
+  const submitFeedback = async (userId: string, finalItems: readonly FoodItem[], chosen: Verdict) => {
+    const original = originalItems.current;
+    const { error } = await supabase.from('scan_feedback').insert({
+      user_id: userId,
+      mode: voice ? 'voice' : 'meal',
+      confidence: result.confidence ? String(result.confidence) : null,
+      verdict: chosen,
+      items_total: finalItems.length,
+      items_edited: countEdited(original, finalItems),
+      kcal_ai: sumItems(original).calories,
+      kcal_final: sumItems(finalItems).calories,
+    });
+    if (error) console.warn('[scan-result] feedback insert failed', error.message);
+  };
 
   // Explicit hardware-back handling. ScanResult sits inside a nested stack, and
   // relying on the press bubbling correctly is what let it fall through to
@@ -210,6 +306,11 @@ export function ScanResultScreen({ navigation, route }: Props) {
         imageUrl: imageStorageUrl,
         source: { ...result, edited: true },
       });
+
+      if (verdict) {
+        void submitFeedback(session.user.id, items, verdict).catch((err: unknown) =>
+          console.warn('[scan-result] feedback failed', err instanceof Error ? err.message : err));
+      }
 
       // Increment scan_count
       try {
@@ -312,7 +413,30 @@ export function ScanResultScreen({ navigation, route }: Props) {
           {!!result.notes && <Text style={styles.notesText}>{result.notes}</Text>}
 
           {/* Editable item list: AI proposes, user confirms */}
-          <ScanItemsEditor items={items} onChange={setItems} />
+          <ScanItemsEditor
+            items={items}
+            onChange={setItems}
+            itemFooter={(item, index) => {
+              const usual = usualFor(item);
+              if (!usual) return null;
+              const label = usualLabel(usual);
+              return (
+                <TouchableOpacity
+                  style={styles.usualChip}
+                  onPress={() => applyUsual(index, usual)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use your usual portion of ${label} for ${item.name}`}
+                >
+                  <Ionicons name="time-outline" size={14} color={T.primary} />
+                  <Text style={styles.usualText} numberOfLines={1}>
+                    Your usual: {label}
+                  </Text>
+                  <Text style={styles.usualAction}>· Use</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
           <Text style={styles.hint}>Tap any item to adjust the portion.</Text>
 
           <Text style={styles.sectionLabel}>Log to</Text>
@@ -330,6 +454,35 @@ export function ScanResultScreen({ navigation, route }: Props) {
               <NutrientRow label="Sodium"  value={totals.sodium_mg} color={T.warning} unit="mg" />
             </View>
           </ProGate>
+        </View>
+
+        {/* Accuracy feedback. Stays on this screen so saving is never
+            interrupted; the answer is written with the save. */}
+        <View style={styles.feedback} accessibilityLiveRegion="polite">
+          <Text style={styles.feedbackTitle}>
+            {verdict ? 'Thanks, that helps us improve.' : 'Was this estimate right?'}
+          </Text>
+          <View style={styles.feedbackChips}>
+            {VERDICTS.map(({ value, label }) => {
+              const selected = verdict === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.feedbackChip, selected && styles.feedbackChipSelected]}
+                  onPress={() => chooseVerdict(value)}
+                  disabled={isSaving}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${label}: the estimate was ${label.toLowerCase()}`}
+                >
+                  <Text style={[styles.feedbackChipText, selected && styles.feedbackChipTextSelected]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
 
@@ -488,6 +641,39 @@ const styles = StyleSheet.create({
   notesText: { ...type.bodySm, color: T.textMuted, fontStyle: 'italic', marginTop: -spacing.sm },
   hint: { ...type.bodySm, color: T.textMuted, textAlign: 'center', marginTop: -spacing.xs },
   sectionLabel: { ...type.label, color: T.textMuted, marginBottom: -spacing.sm },
+
+  usualChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: T.primaryTint,
+  },
+  usualText: { ...type.bodySm, fontWeight: '600', color: T.textPrimary, flexShrink: 1 },
+  usualAction: { ...type.bodySm, fontWeight: '700', color: T.primary },
+
+  feedback: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  feedbackTitle: { ...type.body, fontWeight: '600', color: T.textPrimary, textAlign: 'center' },
+  feedbackChips: { flexDirection: 'row', gap: spacing.sm },
+  feedbackChip: {
+    flex: 1,
+    minHeight: HIT_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  feedbackChipSelected: { backgroundColor: T.primary, borderColor: T.primary },
+  feedbackChipText: { ...type.body, fontWeight: '700', color: T.textSecondary },
+  feedbackChipTextSelected: { color: T.textOnPrimary },
 
   footer: {
     position: 'absolute',

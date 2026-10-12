@@ -18,6 +18,7 @@ import subscriptionRouter from './routes/subscription';
 import adminRouter from './routes/admin';
 import contentRouter from './routes/content';
 import accountRouter from './routes/account';
+import statsRouter from './routes/stats';
 
 const app: Application = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -60,6 +61,8 @@ app.use('/api', contentRouter);
 app.use('/api/subscription', subscriptionRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/account', accountRouter);
+// Public, parameter-free aggregate (counts only). See routes/stats.ts.
+app.use('/api/stats', statsRouter);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 
