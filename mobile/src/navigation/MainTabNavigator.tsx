@@ -89,8 +89,13 @@ export function MainTabNavigator() {
           tabBarStyle: {
             ...styles.tabBar,
             // Home-indicator phones get their inset; everything else a 12px floor.
+            // The height must be set explicitly: without it the navigator keeps
+            // its 49pt default and the padding squeezes the icon and label until
+            // they clip.
             paddingBottom: Math.max(insets.bottom, spacing.md),
+            height: TAB_CONTENT_HEIGHT + Math.max(insets.bottom, spacing.md),
           },
+          tabBarItemStyle: styles.tabItem,
           tabBarActiveTintColor:   T.primary,
           tabBarInactiveTintColor: T.textMuted,
           tabBarLabelStyle: styles.tabLabel,
@@ -152,6 +157,9 @@ export function MainTabNavigator() {
   );
 }
 
+/** Icon (24) + label (16) + gaps, plus the bar's own top padding. */
+const TAB_CONTENT_HEIGHT = 60;
+
 const styles = StyleSheet.create({
   tabBar: {
     paddingTop: spacing.sm,
@@ -159,7 +167,8 @@ const styles = StyleSheet.create({
     backgroundColor: T.surface,
     borderTopColor: T.border,
   },
-  tabLabel: { fontSize: 12, fontWeight: '600' },
+  tabLabel: { fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  tabItem: { paddingTop: 2, paddingBottom: 2 },
   scanButton: {
     top: -20,
     justifyContent: 'center',
