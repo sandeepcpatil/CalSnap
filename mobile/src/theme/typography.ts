@@ -15,8 +15,12 @@ import type { TextStyle } from 'react-native';
 export const tabularNums: TextStyle = { fontVariant: ['tabular-nums'] };
 
 export const type = {
-  /** 44/48 · 800 — calorie ring & health score only. */
-  display: { fontSize: 44, lineHeight: 48, fontWeight: '800', letterSpacing: -1, ...tabularNums },
+  /**
+   * 44/52 · 800 — calorie ring & health score only.
+   * Line height must be at least ~1.17× the size: Android clips the tops of
+   * digits when the line box is tighter than the font's ascent + descent.
+   */
+  display: { fontSize: 44, lineHeight: 52, fontWeight: '800', letterSpacing: -1, ...tabularNums },
   /** 28/34 · 800 — screen titles. */
   headline: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.5 },
   /** 20/26 · 700 — section heads. */

@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   svg: { position: 'absolute' },
   center: { alignItems: 'center', gap: 2 },
   heroLabel: { ...type.label, color: T.textMuted },
-  heroValue: { ...type.display, fontSize: 52, lineHeight: 60, letterSpacing: -2 },
+  heroValue: { ...type.display, fontSize: 52, lineHeight: 64, letterSpacing: -2 },
   heroUnit: { ...type.body, fontWeight: '600', color: T.textSecondary },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl, gap: 28 },
   statItem: { alignItems: 'center', gap: 2 },

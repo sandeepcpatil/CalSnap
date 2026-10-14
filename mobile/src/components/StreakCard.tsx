@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   streakBlock: { gap: 2 },
   flameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  streakNum: { ...type.display, fontSize: 40, lineHeight: 44, color: T.textPrimary },
+  streakNum: { ...type.display, fontSize: 40, lineHeight: 48, color: T.textPrimary },
   streakLabel: { ...type.label, color: T.textMuted },
 
   bestBlock: { alignItems: 'flex-end', gap: 2 },
