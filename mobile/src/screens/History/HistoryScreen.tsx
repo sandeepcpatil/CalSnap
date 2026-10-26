@@ -797,7 +797,7 @@ const styles = StyleSheet.create({
 
   dateBadge:    { width: 48, height: 48, borderRadius: 10, backgroundColor: T.divider, alignItems: 'center', justifyContent: 'center', gap: 1 },
   dateBadgeDow: { fontSize: 12, fontWeight: '700', color: T.textMuted },
-  dateBadgeNum: { fontSize: 20, fontWeight: '700', color: T.textPrimary, lineHeight: 22, ...tabularNums },
+  dateBadgeNum: { fontSize: 20, fontWeight: '700', color: T.textPrimary, lineHeight: 24, ...tabularNums },
 
   dayInfo:      { flex: 1, gap: 3 },
   dayDateLabel: { fontSize: 15, fontWeight: '600', color: T.textPrimary },

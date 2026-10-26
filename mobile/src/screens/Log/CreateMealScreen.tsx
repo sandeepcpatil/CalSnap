@@ -199,9 +199,10 @@ export function CreateMealScreen({ navigation, route }: Props) {
 
         <View style={styles.footer}>
           <View style={styles.totalsRow}>
-            <View>
+            <View style={styles.totalsKcalBlock}>
               <Text style={styles.totalsLabel}>This meal</Text>
-              <Text style={styles.totalsKcal}>
+              {/* A big meal plus decimal macros overflows a narrow phone: shrink the total, never crop it. */}
+              <Text style={styles.totalsKcal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                 {totals.calories}<Text style={styles.totalsKcalUnit}> kcal</Text>
               </Text>
             </View>
@@ -300,11 +301,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 14,
   },
-  totalsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  totalsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md },
+  totalsKcalBlock: { flexShrink: 1, minWidth: 0 },
   totalsLabel: { ...type.label, color: T.textMuted },
   totalsKcal: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: T.textPrimary, letterSpacing: -1, ...tabularNums },
   totalsKcalUnit: { ...type.body, fontWeight: '600', color: T.textSecondary, letterSpacing: 0 },
-  macroRow: { flexDirection: 'row', gap: spacing.lg },
+  macroRow: { flexDirection: 'row', gap: spacing.md, flexShrink: 0 },
   macro: { alignItems: 'flex-end', gap: 1 },
   macroValue: { ...type.body, fontWeight: '800', ...tabularNums },
   macroLabel: { ...type.label, color: T.textMuted },

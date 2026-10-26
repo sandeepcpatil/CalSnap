@@ -13,12 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
   useAudioRecorder,
-  useAudioRecorderState,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   RecordingPresets,
   IOSOutputFormat,
   AudioQuality,
+  type AudioRecorder,
+  type RecorderState,
   type RecordingOptions,
 } from 'expo-audio';
 import { T, type, spacing, radius, HIT_TARGET, tabularNums } from '../theme';
@@ -82,6 +83,34 @@ export function formatDuration(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const IDLE_STATE: RecorderState = {
+  canRecord: false, isRecording: false, durationMillis: 0, mediaServicesDidReset: false, url: null,
+};
+
+/**
+ * Stand-in for expo-audio's `useAudioRecorderState`, which polls `getStatus()`
+ * with no guard. On Android (expo-audio 0.3.x) `stop()` runs on a background
+ * thread and releases the MediaRecorder while a poll can still read its
+ * amplitude; the native IllegalStateException surfaces as an uncaught error
+ * inside setInterval and kills the app. Skip polls while a stop is in flight
+ * and swallow any that still throw.
+ */
+function useSafeRecorderState(recorder: AudioRecorder, interval: number, pausedRef: React.MutableRefObject<boolean>) {
+  const [state, setState] = useState<RecorderState>(IDLE_STATE);
+  useEffect(() => {
+    const int = setInterval(() => {
+      if (pausedRef.current) return;
+      try {
+        setState(recorder.getStatus());
+      } catch (err) {
+        console.warn('[voice] status poll failed', err);
+      }
+    }, interval);
+    return () => clearInterval(int);
+  }, [recorder, interval, pausedRef]);
+  return state;
+}
+
 /**
  * Describe mode: the "I forgot to photograph it" path, by voice or by typing.
  *
@@ -94,7 +123,9 @@ export const VoiceModePanel = forwardRef<VoiceModePanelHandle, Props>(function V
   ref,
 ) {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
-  const state = useAudioRecorderState(recorder, 100);
+  // Set for the whole of a stop/cancel; also pauses status polling (see useSafeRecorderState).
+  const stoppingRef = useRef(false);
+  const state = useSafeRecorderState(recorder, 100, stoppingRef);
 
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [recordedMs, setRecordedMs] = useState(0);
@@ -105,8 +136,6 @@ export const VoiceModePanel = forwardRef<VoiceModePanelHandle, Props>(function V
   // the same analyse path, so nothing downstream changes.
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState('');
-
-  const stoppingRef = useRef(false);
 
   useEffect(() => { onListeningChange?.(state.isRecording); }, [state.isRecording, onListeningChange]);
 

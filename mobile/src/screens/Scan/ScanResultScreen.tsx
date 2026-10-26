@@ -105,7 +105,10 @@ const rowStyles = StyleSheet.create({
   macroLabel: { ...type.body, fontWeight: '600', color: T.textPrimary },
   gdaLabel: { ...type.bodySm, color: T.textMuted },
   amount:   { fontSize: 20, fontWeight: '800', lineHeight: 24, color: T.textPrimary, ...tabularNums },
-  unit:     { ...type.bodySm, color: T.textSecondary },
+  // The unit is nested inside `amount`. On Android a nested Text with a
+  // smaller lineHeight shrinks the whole line box and clips the digits, so
+  // it must share the parent line height.
+  unit:     { ...type.bodySm, lineHeight: 24, color: T.textSecondary },
 });
 
 // Honest confidence: a label and a colour, no fabricated percentages.

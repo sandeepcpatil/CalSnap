@@ -32,7 +32,14 @@ export function MealTypePicker({ value, onChange }: Props) {
             accessibilityLabel={m.label}
             accessibilityState={{ selected: active }}
           >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
+            <Text
+              style={[styles.chipText, active && styles.chipTextActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {m.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -46,7 +53,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: HIT_TARGET,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    // Four chips share one row; "Breakfast" needs every pixel on 360pt screens.
+    paddingHorizontal: 2,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
