@@ -45,3 +45,4 @@ projects type-checked clean, no secrets in the repo).
 - Restore Purchases on a second device.
 - A sandbox cancellation eventually flips `is_subscribed` to false via the webhook.
 - Old images gone after 90 days (test with a shorter interval), logs intact.
+- In-app update: install an older build from the internal testing track, publish a newer one, reopen the app. "A new version of CalVue is available" appears, Update downloads in the background and the app restarts into the new version. Sideloaded and dev builds never show it.

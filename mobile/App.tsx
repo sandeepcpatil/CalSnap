@@ -18,6 +18,7 @@ import { RootNavigator, type RootStackParamList } from './src/navigation/RootNav
 import { receiveDeepLink } from './src/store/deepLinkStore';
 import { useTheme } from './src/hooks/useTheme';
 import { configurePurchases, identifyUser } from './src/services/purchases';
+import { checkForAppUpdate } from './src/services/appUpdates';
 import { ToastHost } from './src/components/ToastHost';
 import { T } from './src/theme';
 import './src/store/themeStore';
@@ -131,7 +132,11 @@ function AppContent() {
   // Re-arm reminders whenever the app comes to the foreground: this rolls the
   // runway forward, fixes the day boundary, and reflects logs made elsewhere.
   useEffect(() => {
-    const sync = () => { void useNotificationStore.getState().syncReminders(); };
+    // The Play update check rides the same trigger; it throttles itself.
+    const sync = () => {
+      void useNotificationStore.getState().syncReminders();
+      void checkForAppUpdate();
+    };
     sync();
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') sync();

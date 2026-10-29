@@ -149,10 +149,10 @@ export const VoiceModePanel = forwardRef<VoiceModePanelHandle, Props>(function V
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.metering, state.durationMillis, state.isRecording]);
 
-  // Stop a recording still running if the panel unmounts (e.g. mode switch).
-  useEffect(() => {
-    return () => { if (recorder.isRecording) recorder.stop().catch(() => {}); };
-  }, [recorder]);
+  // No unmount cleanup here on purpose. `useAudioRecorder` releases the native
+  // recorder in its own cleanup, which runs first; that release already stops a
+  // recording in progress. Touching `recorder` afterwards throws on Android and
+  // crashed the app on every switch out of voice mode.
 
   const startRecording = async () => {
     setError(null);
@@ -193,7 +193,10 @@ export const VoiceModePanel = forwardRef<VoiceModePanelHandle, Props>(function V
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await recorder.stop();
-      const uri = recorder.uri;
+      // Android (expo-audio 0.3.x) returns a bare path; expo-file-system only
+      // reads locations with a scheme, so the upload failed before it was sent.
+      const raw = recorder.uri;
+      const uri = raw && !raw.includes('://') ? `file://${raw}` : raw;
       if (tooShort) {
         setError('That was too short. Hold on a moment longer.');
       } else if (uri) {
